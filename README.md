@@ -35,7 +35,7 @@
 
 ## 开发
 
-11 月 18 日的产品开发已新增 [桌面集成包与 ARM64 隔离验证](docs/PLATFORM-BUILD.md)、[GPU 故障假设表](docs/GPU-INVESTIGATION.md) 和 [硬件／传感器来源映射](docs/HARDWARE-MAP.md)。平台包已可构建，30 个修复包有独立哈希锁；这仍不等于完整镜像可复现或新配置通过实机验收。
+11 月 18 日的产品开发已新增 [桌面集成包与 ARM64 隔离验证](docs/PLATFORM-BUILD.md)、[GPU 故障假设表](docs/GPU-INVESTIGATION.md) 和 [硬件／传感器来源映射](docs/HARDWARE-MAP.md)。[962 个包的基础系统](docs/DEBIAN-SNAPSHOT.md) 已从经签名元数据验证的软件包全新构建，随后整合 30 个修复包与平台包，通过 ARM64 用户空间检查。该历史快照仍需刷新安全更新，完整启动镜像和新配置的实机验收尚未完成。
 
 Python 使用 `uv` 管理。Windows 用于设备连接与仓库管理，Linux/WSL 用于 ARM64 构建。先阅读 [AGENTS.md](AGENTS.md)、[状态表](docs/STATUS.md) 和 [产品计划](docs/PRODUCT.md)。
 

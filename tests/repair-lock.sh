@@ -26,4 +26,7 @@ cp "$first" "$temp/unexpected.deb"
 if verify > "$temp/extra.log" 2>&1; then
     echo 'Extra archive was accepted' >&2; exit 1
 fi
-echo 'PASS: tampered, missing and extra repair archives rejected.'
+rm -- "$temp/unexpected.deb"
+mv "$first" "$temp/by-hash.deb"
+verify
+echo 'PASS: tampered, missing and extra archives rejected; renamed identical archive accepted.'

@@ -16,10 +16,14 @@ install -Dm755 "$repo/src/session/y700-display" "$stage/usr/bin/y700-display"
 install -Dm644 "$repo/config/chromium/99-y700-software-rendering" "$stage/etc/chromium.d/99-y700-software-rendering"
 find "$stage/usr/libexec" -type f -exec chmod 755 {} +
 find "$stage/etc" -type f | sed "s|^$stage||" | LC_ALL=C sort > "$stage/DEBIAN/conffiles"
-export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1794960000}
+export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$repo" log -1 --format=%ct)}
+[[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]
+(( SOURCE_DATE_EPOCH <= $(date -u +%s) )) || { echo 'Build epoch must not be in the future.' >&2; exit 1; }
 install -d "$stage/usr/lib/y700"
 printf '%s\n' "$SOURCE_DATE_EPOCH" > "$stage/usr/lib/y700/build-epoch"
 find "$stage" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
-dpkg-deb --root-owner-group --uniform-compression -Zxz -z6 --build "$stage" "$out/y700-platform_0.1.0~dev1_all.deb"
+version=$(sed -n 's/^Version: //p' "$repo/packaging/control")
+package="y700-platform_${version}_all.deb"
+dpkg-deb --root-owner-group --uniform-compression -Zxz -z6 --build "$stage" "$out/$package"
 cd "$out"
-sha256sum y700-platform_0.1.0~dev1_all.deb > SHA256SUMS
+sha256sum "$package" > SHA256SUMS

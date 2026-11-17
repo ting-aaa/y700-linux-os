@@ -5,6 +5,7 @@ repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 root=$(realpath -e "${1:?disposable integrated rootfs}")
 test "$(id -u)" -eq 0
 test "$root" != / && test -f "$root/.y700-disposable-build-root"
+chroot "$root" getent passwd y700 >/dev/null
 for path in etc/y700/maintenance.env etc/y700/maintenance-sshd.conf \
     etc/y700/maintenance-authorized-keys etc/NetworkManager/conf.d/20-y700-maintenance.conf; do
     test ! -e "$root/$path" && test ! -L "$root/$path"

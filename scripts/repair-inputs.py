@@ -37,6 +37,10 @@ if __name__ == '__main__':
             json.dump({'format': 1, 'scope': 'desktop-repair-only-not-full-rootfs',
                        'packages': actual}, output, indent=2)
             output.write('\n')
-    elif actual != json.loads(args.lock.read_text())['packages']:
-        raise SystemExit('Repair archive set differs from lock (name/version/architecture/size/hash)')
+    else:
+        def content(items):
+            return sorted(({key: value for key, value in item.items() if key != 'filename'}
+                           for item in items), key=lambda item: item['package'])
+        if content(actual) != content(json.loads(args.lock.read_text())['packages']):
+            raise SystemExit('Repair archive set differs from lock (package/version/architecture/size/hash)')
     print(f'{args.operation}: {len(actual)} repair packages')

@@ -10,7 +10,7 @@ bash tests/platform-package.sh
 uv run --python 3.13 --no-project python -m unittest discover -s tests -v
 ```
 
-Requirements: Bash, GNU coreutils, findutils, dpkg-deb, xz and uv. The package is architecture-independent shell/configuration; its dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. This only establishes determinism of this package on the tested builder.
+Requirements: Bash, GNU coreutils, findutils, dpkg-deb, xz and uv. The package is architecture-independent shell/configuration; its dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp; future epochs are rejected so a local calendar date cannot move the early-boot clock ahead. Source archives without Git metadata must supply an explicit valid epoch. This only establishes determinism of this package on the tested builder.
 
 The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, a USB ACM/NCM service and a dedicated SSH service. No maintainer script starts or enables a service. `y700-onboard.desktop` has its own name to avoid replacing Debian's Onboard-owned autostart file. The session defaults are applied once per user; touch alignment still starts if settings initialization fails.
 
@@ -22,10 +22,10 @@ The USB descriptor class and function combination follow the repaired prototype.
 
 ```sh
 uv run --python 3.13 --no-project python scripts/repair-inputs.py verify /build/repair-debs config/desktop-repair.lock.json
-# /build/candidate must be a new, private copy of the declared base rootfs.
-touch /build/candidate/.y700-disposable-build-root
+# Build and configure /build/candidate using DEBIAN-SNAPSHOT.md first.
+# That builder writes the disposable-root marker after checking all packages.
 sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
-  /build/candidate /build/repair-debs out/packages/y700-platform_0.1.0~dev1_all.deb
+  /build/candidate /build/repair-debs out/packages/y700-platform_0.1.0~dev2_all.deb
 sudo env UV_BIN=/path/to/uv bash tests/arm64-rootfs.sh /build/candidate
 ```
 
@@ -49,7 +49,7 @@ The documentation addresses above are examples. Choose a dedicated USB subnet th
 
 | Input or behavior | Current boundary |
 | --- | --- |
-| Debian base root | Existing local experimental base reused; full signed snapshot/package closure and root content lock still needed |
+| Debian base root | Fresh 962-package build and 993-package integrated root verified; historical signed snapshot needs security refresh, filesystem content is not claimed bit-identical |
 | Kernel/DT/initramfs | Historical pinned recipe; no new kernel/image rebuilt by this milestone |
 | Board firmware | Local provenance retained; missing sensor firmware and redistribution review remain |
 | Boot-success marking | Existing board lifecycle is not modified by this package; no new slot-success writer is introduced |
@@ -58,4 +58,4 @@ The documentation addresses above are examples. Choose a dedicated USB subnet th
 | Saved rotation | Current left rotation was physically accepted; package follows chosen Xfce rotation and does not force a direction |
 | Runtime | New login/cold boot, Onboard auto-show, newly provisioned USB identity and actual SSH authentication require attended tests |
 
-In particular, the candidate directory still contains historical base state and build-generated files. It is private test material, **not a distributable image**. The old `reference/` image packager remains historical and must not be used to bypass these gates.
+The fresh candidate still contains build-generated state requiring finalization. Earlier copied-root candidates also contain historical base state. These are private test materials, **not distributable images**. The old `reference/` image packager remains historical and must not be used to bypass these gates.

@@ -5,7 +5,7 @@ temp=$(mktemp -d)
 trap 'rm -rf -- "$temp"' EXIT
 bash "$repo/scripts/build-platform.sh" "$temp/one"
 bash "$repo/scripts/build-platform.sh" "$temp/two"
-package=y700-platform_0.1.0~dev1_all.deb
+package="y700-platform_$(sed -n 's/^Version: //p' "$repo/packaging/control")_all.deb"
 cmp "$temp/one/$package" "$temp/two/$package"
 dpkg-deb -x "$temp/one/$package" "$temp/root"
 test -z "$(find "$temp/root" -perm /0022 -print)"
@@ -16,4 +16,8 @@ test ! -e "$temp/root/etc/xdg/autostart/onboard-autostart.desktop"
 test -e "$temp/root/etc/xdg/autostart/y700-onboard.desktop"
 test ! -e "$temp/root/etc/y700/maintenance.env"
 test ! -e "$temp/root/etc/systemd/system/multi-user.target.wants"
+if SOURCE_DATE_EPOCH=9999999999 bash "$repo/scripts/build-platform.sh" "$temp/future" > "$temp/future.log" 2>&1; then
+    echo 'Future early-boot clock seed was accepted' >&2; exit 1
+fi
+test ! -e "$temp/future/$package"
 echo 'PASS: deterministic package, safe file modes, no shared identity or automatic service activation.'

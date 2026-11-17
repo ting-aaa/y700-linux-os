@@ -25,3 +25,5 @@ The current display helper follows a display rotation chosen in Xfce; it is not 
 PC development on 2026-11-18: the new platform package installs into a disposable ARM64 root and passes dependency, SSH configuration, unit and keyboard-setting checks. Sensor registry builds match across two runs; an opt-in observation-first X11 rotation bridge passes policy tests. None has been deployed to this tablet. Fresh read-only sensor inspection found SLPI offline and its firmware/SSC stack missing; exact IMU identity remains unconfirmed. See [platform build](PLATFORM-BUILD.md), [GPU investigation](GPU-INVESTIGATION.md) and [component map](HARDWARE-MAP.md).
 
 No claim of complete hardware support, maximum performance, all-day battery life, production readiness or universal Y700 compatibility is made.
+
+The [authenticated Debian snapshot stage](DEBIAN-SNAPSHOT.md) now builds a fresh 962-package ARM64 base without copying the historical root. Integration with 30 repair packages and platform dev2 produced 993 packages and passed the same userspace checks. This historical snapshot requires a security refresh; kernel/image assembly and physical acceptance remain open.
