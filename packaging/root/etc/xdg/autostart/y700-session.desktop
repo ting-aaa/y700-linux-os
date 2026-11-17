@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Y700 touch desktop
+Exec=/usr/libexec/y700-session
+OnlyShowIn=XFCE;
+Terminal=false

@@ -2,6 +2,8 @@
 
 The owner explicitly requests open-source Snapdragon graphics drivers as the GPU reference, community research for other peripherals, and REA analysis/reconstruction where source information is missing. This is a development requirement, not a completed investigation.
 
+The first concrete investigation is recorded in [GPU-INVESTIGATION.md](GPU-INVESTIGATION.md) and [HARDWARE-MAP.md](HARDWARE-MAP.md), with exact local-source/firmware hashes, open hypotheses, sensor integration gaps and executable PC-side registry/rotation work.
+
 ## Graphics
 
 Start from Linux DRM/MSM and Mesa Freedreno/Turnip, matching Adreno 730 / SM8475 and the actual firmware, DT, kernel, Mesa and compositor versions. Do not treat an Android emulator driver ZIP as a Debian native replacement.

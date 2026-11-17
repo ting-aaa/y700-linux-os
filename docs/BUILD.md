@@ -2,6 +2,8 @@
 
 The initial import preserves selected source recipes from the local experimental work. It is not yet a clean-checkout product image builder, and no binary release is included.
 
+The first implemented stage is now [the desktop platform package and offline ARM64 integration](PLATFORM-BUILD.md). It has a 30-archive repair lock, deterministic package checks, private identity generation and actual ARM64 userspace verification. The full base/kernel/firmware/image pipeline remains separate. [Sensor defaults](HARDWARE-MAP.md) can also be generated from the exact pinned source without enabling hardware.
+
 ## Layout and upstream
 
 `reference/y700-linux/asphalt-debian/` contains kernel/PRC DT, U-Boot, initramfs, EFI and QEMU recipes. `reference/y700-linux/scripts/` and `rootfs-overlay/` contain the Debian base-root builder inputs. Their relative layout is preserved. Host-specific home-directory prefixes are normalized to `/home/builder`; these normalized copies have not rebuilt the physical images.

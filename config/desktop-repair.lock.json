@@ -1,0 +1,246 @@
+{
+  "format": 1,
+  "scope": "desktop-repair-only-not-full-rootfs",
+  "packages": [
+    {
+      "filename": "accountsservice_23.13.9-7_arm64.deb",
+      "package": "accountsservice",
+      "version": "23.13.9-7",
+      "architecture": "arm64",
+      "size": 86684,
+      "sha256": "9f29eb30ef167b5dc3043d72a1b8d4f822a15298a00bace29f04012079c70416"
+    },
+    {
+      "filename": "at-spi2-core_2.56.2-1+deb13u2_arm64.deb",
+      "package": "at-spi2-core",
+      "version": "2.56.2-1+deb13u2",
+      "architecture": "arm64",
+      "size": 59916,
+      "sha256": "6e84fd4f30b220cc925e52e8b0b4e3dccf70c4aa7093e4d7d64015dee6711d02"
+    },
+    {
+      "filename": "gir1.2-atspi-2.0_2.56.2-1+deb13u2_arm64.deb",
+      "package": "gir1.2-atspi-2.0",
+      "version": "2.56.2-1+deb13u2",
+      "architecture": "arm64",
+      "size": 23892,
+      "sha256": "c1352a3d4d78db55922cdf9c3d93c322b130cff4c3055b015ae8fcdd1461cedc"
+    },
+    {
+      "filename": "libaccountsservice0_23.13.9-7_arm64.deb",
+      "package": "libaccountsservice0",
+      "version": "23.13.9-7",
+      "architecture": "arm64",
+      "size": 53152,
+      "sha256": "f34991751e1a47132cef6540ae36e32042287ce02c7338bde0bab9a7c0d3b539"
+    },
+    {
+      "filename": "libayatana-appindicator3-1_0.5.94-1_arm64.deb",
+      "package": "libayatana-appindicator3-1",
+      "version": "0.5.94-1",
+      "architecture": "arm64",
+      "size": 24200,
+      "sha256": "65057e5820cfdad8a8a3f0a1108c48e0aedf2e588392d8546b59ea83ae782568"
+    },
+    {
+      "filename": "libgck-2-2_4.4.0.1-3_arm64.deb",
+      "package": "libgck-2-2",
+      "version": "4.4.0.1-3",
+      "architecture": "arm64",
+      "size": 68524,
+      "sha256": "898d263d06d5686dc99ad08f641670b50e9d782044bb8712b71b06b36be37d55"
+    },
+    {
+      "filename": "libgcr-4-4_4.4.0.1-3_arm64.deb",
+      "package": "libgcr-4-4",
+      "version": "4.4.0.1-3",
+      "architecture": "arm64",
+      "size": 188292,
+      "sha256": "a3428c1d1e6aa73a6f8f6d4c67002d031b587fc7497b49a56af261236a977d06"
+    },
+    {
+      "filename": "libglib2.0-bin_2.84.4-3~deb13u5_arm64.deb",
+      "package": "libglib2.0-bin",
+      "version": "2.84.4-3~deb13u5",
+      "architecture": "arm64",
+      "size": 128488,
+      "sha256": "abc9841d2f924604510ca255fb069add0417023b593bfc9552b0d4ab1fa5fffb"
+    },
+    {
+      "filename": "libglib2.0-data_2.84.4-3~deb13u5_all.deb",
+      "package": "libglib2.0-data",
+      "version": "2.84.4-3~deb13u5",
+      "architecture": "all",
+      "size": 1286548,
+      "sha256": "11c671d0a21dd99215bc62fc0219a1fcbb1482f36329ab6b85732e09ddff9e1c"
+    },
+    {
+      "filename": "libnma-common_1.10.6-5_all.deb",
+      "package": "libnma-common",
+      "version": "1.10.6-5",
+      "architecture": "all",
+      "size": 136092,
+      "sha256": "67e260a3c26be7cd07acd5478c2aff1087593f42136ff3201e243b3165eedc16"
+    },
+    {
+      "filename": "libnma0_1.10.6-5_arm64.deb",
+      "package": "libnma0",
+      "version": "1.10.6-5",
+      "architecture": "arm64",
+      "size": 82352,
+      "sha256": "4655abcb9f396377d0d527f9cd4d651861a7d873420e1c89491eb4a8572fb23b"
+    },
+    {
+      "filename": "libtext-charwidth-perl_0.04-11+b4_arm64.deb",
+      "package": "libtext-charwidth-perl",
+      "version": "0.04-11+b4",
+      "architecture": "arm64",
+      "size": 9652,
+      "sha256": "72a9c2131b8dc3a124b778d1e7a606201388bf20203f12b571f4ea58ee362880"
+    },
+    {
+      "filename": "libtext-wrapi18n-perl_0.06-10_all.deb",
+      "package": "libtext-wrapi18n-perl",
+      "version": "0.06-10",
+      "architecture": "all",
+      "size": 8808,
+      "sha256": "17f98c7c09af8ac3bdbfd5a5dad32f3f51c71b02cdfc411366f49092a395de85"
+    },
+    {
+      "filename": "libutempter0_1.2.1-4_arm64.deb",
+      "package": "libutempter0",
+      "version": "1.2.1-4",
+      "architecture": "arm64",
+      "size": 9216,
+      "sha256": "1dbc471adf3af0cfd95dddeecbeb5978382071caffa31c9337bc65f62b591def"
+    },
+    {
+      "filename": "libvte-2.91-0_0.80.1-1_arm64.deb",
+      "package": "libvte-2.91-0",
+      "version": "0.80.1-1",
+      "architecture": "arm64",
+      "size": 269820,
+      "sha256": "a294a48a15fce5994b7c07584c306929903f82d07619d29f2ce5bba62d2aa705"
+    },
+    {
+      "filename": "libvte-2.91-common_0.80.1-1_arm64.deb",
+      "package": "libvte-2.91-common",
+      "version": "0.80.1-1",
+      "architecture": "arm64",
+      "size": 58880,
+      "sha256": "acc2454b43a42e82a2d468a53c36588c9434ab0adeb97b3cb04399fa8a11eb31"
+    },
+    {
+      "filename": "libwrap0_7.6.q-36_arm64.deb",
+      "package": "libwrap0",
+      "version": "7.6.q-36",
+      "architecture": "arm64",
+      "size": 55028,
+      "sha256": "fd2e54582a07fba9c8a6f78c68dcc6d3c8cf1c70632a68124394bde4dccf52ea"
+    },
+    {
+      "filename": "libwtmpdb0_0.73.0-3+deb13u1_arm64.deb",
+      "package": "libwtmpdb0",
+      "version": "0.73.0-3+deb13u1",
+      "architecture": "arm64",
+      "size": 12816,
+      "sha256": "6c1e8bcf1192048b0c4d4fcff83debda41b609a0917017aa3faeb47401b1a62e"
+    },
+    {
+      "filename": "mate-polkit-common_1.26.1-4_all.deb",
+      "package": "mate-polkit-common",
+      "version": "1.26.1-4",
+      "architecture": "all",
+      "size": 43052,
+      "sha256": "b4fdc049dada4944224e9611f15ac0140db13ccc5e2750c3e1e924eb1f784641"
+    },
+    {
+      "filename": "mate-polkit_1.26.1-4+b2_arm64.deb",
+      "package": "mate-polkit",
+      "version": "1.26.1-4+b2",
+      "architecture": "arm64",
+      "size": 18972,
+      "sha256": "4b2ac7b2f055f152bd6c43cffc057e22b803fb009fb632cad008d0045c00ac25"
+    },
+    {
+      "filename": "network-manager-applet_1.36.0-3_arm64.deb",
+      "package": "network-manager-applet",
+      "version": "1.36.0-3",
+      "architecture": "arm64",
+      "size": 74864,
+      "sha256": "12bfc45fb08339cf6632e90602c939d79b22dfe200b2df4ed7fb88d4cc2f4f24"
+    },
+    {
+      "filename": "nm-connection-editor_1.36.0-3_arm64.deb",
+      "package": "nm-connection-editor",
+      "version": "1.36.0-3",
+      "architecture": "arm64",
+      "size": 805076,
+      "sha256": "49d454ed3381df3932e481555ea8540469b5567b3b734a03e0de85191ba4db9e"
+    },
+    {
+      "filename": "openssh-server_1%3a10.0p1-7+deb13u4_arm64.deb",
+      "package": "openssh-server",
+      "version": "1:10.0p1-7+deb13u4",
+      "architecture": "arm64",
+      "size": 555388,
+      "sha256": "6da10564d3747e5f8fcca9595e154d863fdef786c3384ccd24e518c1fc45e41d"
+    },
+    {
+      "filename": "openssh-sftp-server_1%3a10.0p1-7+deb13u4_arm64.deb",
+      "package": "openssh-sftp-server",
+      "version": "1:10.0p1-7+deb13u4",
+      "architecture": "arm64",
+      "size": 60604,
+      "sha256": "c949831340f9af9e70a6dab740fc9cdff6dd0b249bf9d7d640f6486036476e05"
+    },
+    {
+      "filename": "runit-helper_2.16.4_all.deb",
+      "package": "runit-helper",
+      "version": "2.16.4",
+      "architecture": "all",
+      "size": 7296,
+      "sha256": "8a5866d3036a1645a1cff2bfe7dcf5b62e8d2c30ec31a115d4ccd2486645a54e"
+    },
+    {
+      "filename": "sensible-utils_0.0.25_all.deb",
+      "package": "sensible-utils",
+      "version": "0.0.25",
+      "architecture": "all",
+      "size": 24992,
+      "sha256": "873a9b73c3478cc3148cdbf5cc2084949a0a8e4fa16131d1cbc895d2f1f3470e"
+    },
+    {
+      "filename": "systemd-timesyncd_257.13-1~deb13u1_arm64.deb",
+      "package": "systemd-timesyncd",
+      "version": "257.13-1~deb13u1",
+      "architecture": "arm64",
+      "size": 91460,
+      "sha256": "5c00488c8cdbcebf2f39705d4e3554c532a87edf661f22101b181510e15e6b57"
+    },
+    {
+      "filename": "ucf_3.0052_all.deb",
+      "package": "ucf",
+      "version": "3.0052",
+      "architecture": "all",
+      "size": 43296,
+      "sha256": "ab5a6d5a621ad07034ce29d0c2587e6e267ecd2975458b2c8a7d0ada77dcb95b"
+    },
+    {
+      "filename": "xfce4-terminal_1.1.4-1_arm64.deb",
+      "package": "xfce4-terminal",
+      "version": "1.1.4-1",
+      "architecture": "arm64",
+      "size": 409272,
+      "sha256": "b0fe0388a71231b5ce591a963939c095b34e2c52ce02e01e5973726e88412ef8"
+    },
+    {
+      "filename": "xinput_1.6.4-1+b2_arm64.deb",
+      "package": "xinput",
+      "version": "1.6.4-1+b2",
+      "architecture": "arm64",
+      "size": 51776,
+      "sha256": "0e3191d88c407888c85f5ce51dbb7102dc77564041f48da27d1e635c7874f6ac"
+    }
+  ]
+}

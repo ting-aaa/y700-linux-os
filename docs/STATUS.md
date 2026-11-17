@@ -22,4 +22,6 @@ Baseline date: 2026-11-18. Scope: one TB320FC_PRC, 16 GiB RAM, 512 GB storage, o
 
 The current display helper follows a display rotation chosen in Xfce; it is not accelerometer-based autorotation. Its autostart and saved landscape profile were configured but not re-tested across a new login/reboot in the baseline session.
 
+PC development on 2026-11-18: the new platform package installs into a disposable ARM64 root and passes dependency, SSH configuration, unit and keyboard-setting checks. Sensor registry builds match across two runs; an opt-in observation-first X11 rotation bridge passes policy tests. None has been deployed to this tablet. Fresh read-only sensor inspection found SLPI offline and its firmware/SSC stack missing; exact IMU identity remains unconfirmed. See [platform build](PLATFORM-BUILD.md), [GPU investigation](GPU-INVESTIGATION.md) and [component map](HARDWARE-MAP.md).
+
 No claim of complete hardware support, maximum performance, all-day battery life, production readiness or universal Y700 compatibility is made.

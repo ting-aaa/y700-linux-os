@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+install -d -m700 /var/lib/y700/ssh
+key=/var/lib/y700/ssh/ssh_host_ed25519_key
+if [[ ! -e "$key" ]]; then
+    ssh-keygen -q -t ed25519 -N '' -f "$key"
+fi
+test -s "$key" && test -s "$key.pub"

@@ -1,5 +1,6 @@
 {
   "format": 1,
+  "baseline_commit": "c8ca7b46134322a529c9df2867e4257dc161da0b",
   "files": [
     {
       "source_relative": "y700-linux/asphalt-debian/build-kernel.sh",

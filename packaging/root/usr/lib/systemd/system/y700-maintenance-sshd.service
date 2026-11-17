@@ -1,0 +1,17 @@
+[Unit]
+Description=Y700 key-only USB maintenance SSH
+Requires=y700-usb-maintenance.service
+After=y700-usb-maintenance.service
+ConditionPathExists=/etc/y700/maintenance-sshd.conf
+
+[Service]
+Type=simple
+RuntimeDirectory=sshd
+ExecStartPre=/usr/libexec/y700-maintenance-hostkey
+ExecStartPre=/usr/sbin/sshd -t -f /etc/y700/maintenance-sshd.conf
+ExecStart=/usr/sbin/sshd -D -e -f /etc/y700/maintenance-sshd.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

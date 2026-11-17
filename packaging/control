@@ -1,0 +1,10 @@
+Package: y700-platform
+Version: 0.1.0~dev1
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
+Section: admin
+Priority: optional
+Depends: bash, coreutils, util-linux, iproute2, kmod, udev, openssh-server, systemd-timesyncd, xfce4, xfce4-terminal, network-manager-applet, mate-polkit, xinput, x11-xserver-utils, onboard, at-spi2-core, gir1.2-atspi-2.0, libglib2.0-bin
+Description: Y700 experimental desktop and isolated USB maintenance integration
+ Built for offline candidate images. Installation does not enable services.
+ Hardware regression and image lifecycle acceptance remain outstanding.

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Onboard screen keyboard
+Name[zh_CN]=屏幕键盘
+Exec=onboard --startup-delay=2.0
+Icon=onboard
+OnlyShowIn=XFCE;

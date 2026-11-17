@@ -47,10 +47,14 @@ for name in names:
 manifest = json.loads((root / 'docs/import-manifest.json').read_text())
 import hashlib
 for item in manifest['files']:
-    if hashlib.sha256((root / item['public_path']).read_bytes()).hexdigest() != item['public_sha256']:
+    # The import manifest describes the original import, not later development.
+    # Keep those immutable hashes verifiable without freezing product sources.
+    baseline = subprocess.check_output(
+        ['git', 'show', f"{manifest['baseline_commit']}:{item['public_path']}"], cwd=root)
+    if hashlib.sha256(baseline).hexdigest() != item['public_sha256']:
         errors.append(f"{item['public_path']}: import manifest hash drift")
 if errors:
     print('\n'.join(errors)); raise SystemExit(1)
-print(f'PASS: {checks} indexed UTF-8 files; Python/JSON valid; import hashes match; basic publication scan clean.')
+print(f'PASS: {checks} indexed UTF-8 files; Python/JSON valid; original import hashes match; basic publication scan clean.')
 print('Shell syntax: ' + ('checked with Bash' if bash else 'not checked here; rerun in Linux/WSL'))
 print('This is not a build, hardware test, license audit, or complete secret detector.')

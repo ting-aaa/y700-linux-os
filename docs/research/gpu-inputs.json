@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-18",
+  "asphalt_commit": "8dcb481fc2ce91794fd294630e06f15a52ec7513",
+  "kernel_release": "7.3.4-asphalt-prc",
+  "mesa_debian_version": "25.0.7-2+deb13u1",
+  "libdrm_debian_version": "2.4.124-2",
+  "read_only_msm_enable_preemption": -1,
+  "local_kernel_build_input_sha256": {
+    ".config": "a20e5eb808bce84a3f5beaea7f02a2182a5d21c6a8e937787b886963aea5aa56",
+    "drivers/gpu/drm/msm/adreno/a6xx_gmu.c": "5944b93f6efcf9905423c1a40ac12315d16cefcb092cf133d572766b1d8ee634",
+    "drivers/gpu/drm/msm/adreno/a6xx_gpu.c": "e440b51ff9a2bf3cdb106c96a1bd528265b3e110b2266ab7c904137bdfc9f7c9",
+    "drivers/gpu/drm/msm/adreno/a6xx_catalog.c": "17eb678609709a0c90f109e510036c4a71cc24408e92e44eabad728ce7d9d6d0",
+    "arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dts": "40f48c21a90bb04b40d045d5d89f28e81e935a8876f6a29734f3b205463e2139"
+  },
+  "installed_firmware_sha256": {
+    "qcom/a730_sqe.fw": "e67d1829f57fc8326d806234b932dc3b78e28a9940df34c70752f17d5f38b7aa",
+    "qcom/gmu_gen70000.bin": "b2d3f0e2a98fd6259ab9ffef16df63265542e6cc9a970d53d476e823d432042a"
+  },
+  "limits": ["Source hashes describe local build input, not measured running code", "No GPU workload run", "ZAP and complete firmware comparison pending"]
+}
