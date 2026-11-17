@@ -1,0 +1,129 @@
+{
+  "nodes": [
+    {
+      "path": "/memory",
+      "compatible": [],
+      "status": null,
+      "absent_status_default_available": true,
+      "non_ok_status_in_ancestry": [],
+      "phandle": null,
+      "reg": {
+        "present": true,
+        "parent_cells": {
+          "node": "/",
+          "address_cells": 2,
+          "size_cells": 2,
+          "address_cells_source": "EXPLICIT",
+          "size_cells_source": "EXPLICIT"
+        },
+        "ranges": [
+          {
+            "address_cells_raw": [
+              0,
+              2147483648
+            ],
+            "size_cells_raw": [
+              0,
+              1778384896
+            ],
+            "address_hex": "0x80000000",
+            "size_bytes": 1778384896,
+            "end_exclusive_hex": "0xea000000",
+            "u64_extent_valid": true,
+            "root_translation": {
+              "status": "TRANSLATED_TO_ROOT_ADDRESS_SPACE",
+              "address_hex": "0x80000000",
+              "size_bytes": 1778384896,
+              "end_exclusive_hex": "0xea000000",
+              "trace": []
+            }
+          },
+          {
+            "address_cells_raw": [
+              0,
+              3985637376
+            ],
+            "size_cells_raw": [
+              0,
+              309329920
+            ],
+            "address_hex": "0xed900000",
+            "size_bytes": 309329920,
+            "end_exclusive_hex": "0x100000000",
+            "u64_extent_valid": true,
+            "root_translation": {
+              "status": "TRANSLATED_TO_ROOT_ADDRESS_SPACE",
+              "address_hex": "0xed900000",
+              "size_bytes": 309329920,
+              "end_exclusive_hex": "0x100000000",
+              "trace": []
+            }
+          },
+          {
+            "address_cells_raw": [
+              8,
+              0
+            ],
+            "size_cells_raw": [
+              0,
+              942669824
+            ],
+            "address_hex": "0x800000000",
+            "size_bytes": 942669824,
+            "end_exclusive_hex": "0x838300000",
+            "u64_extent_valid": true,
+            "root_translation": {
+              "status": "TRANSLATED_TO_ROOT_ADDRESS_SPACE",
+              "address_hex": "0x800000000",
+              "size_bytes": 942669824,
+              "end_exclusive_hex": "0x838300000",
+              "trace": []
+            }
+          },
+          {
+            "address_cells_raw": [
+              9,
+              2147483648
+            ],
+            "size_cells_raw": [
+              2,
+              0
+            ],
+            "address_hex": "0x980000000",
+            "size_bytes": 8589934592,
+            "end_exclusive_hex": "0xb80000000",
+            "u64_extent_valid": true,
+            "root_translation": {
+              "status": "TRANSLATED_TO_ROOT_ADDRESS_SPACE",
+              "address_hex": "0x980000000",
+              "size_bytes": 8589934592,
+              "end_exclusive_hex": "0xb80000000",
+              "trace": []
+            }
+          },
+          {
+            "address_cells_raw": [
+              8,
+              1073741824
+            ],
+            "size_cells_raw": [
+              1,
+              1073741824
+            ],
+            "address_hex": "0x840000000",
+            "size_bytes": 5368709120,
+            "end_exclusive_hex": "0x980000000",
+            "u64_extent_valid": true,
+            "root_translation": {
+              "status": "TRANSLATED_TO_ROOT_ADDRESS_SPACE",
+              "address_hex": "0x840000000",
+              "size_bytes": 5368709120,
+              "end_exclusive_hex": "0x980000000",
+              "trace": []
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Emit local boot status to the USB host; this function accepts no commands.
+set -eu
+udc=a600000.usb
+g=/sys/kernel/config/usb_gadget/asphalt-status
+while [ ! -e "/sys/class/udc/$udc" ]; do sleep 2; done
+mkdir -p "$g"
+if [ -z "$(cat "$g/UDC")" ]; then
+    echo 0x1d6b > "$g/idVendor"
+    echo 0x0104 > "$g/idProduct"
+    mkdir -p "$g/strings/0x409" "$g/configs/c.1" "$g/functions/acm.status"
+    echo 'Asphalt Debian' > "$g/strings/0x409/manufacturer"
+    echo 'Y700 Debian boot status' > "$g/strings/0x409/product"
+    [ -L "$g/configs/c.1/acm.status" ] || ln -s "$g/functions/acm.status" "$g/configs/c.1/acm.status"
+    echo "$udc" > "$g/UDC"
+fi
+port=$(cat "$g/functions/acm.status/port_num")
+while :; do
+    # ttyGS writes may block until a host opens the COM port.
+    printf 'image=%s kernel=%s pid1=%s root=%s lightdm=%s xfce_session=%s\r\n' \
+      "$(cat /etc/y700/image-id)" "$(uname -r)" "$(cat /proc/1/comm)" \
+      "$(findmnt -nro SOURCE /)" "$(systemctl is-active lightdm || :)" \
+      "$(pgrep -x xfce4-session >/dev/null && echo running || echo absent)" > "/dev/ttyGS$port" || :
+    sleep 5
+done

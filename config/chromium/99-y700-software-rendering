@@ -1,0 +1,2 @@
+# Temporary mitigation for the measured GMU/Adreno hang. Keep sandbox enabled.
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --disable-gpu"

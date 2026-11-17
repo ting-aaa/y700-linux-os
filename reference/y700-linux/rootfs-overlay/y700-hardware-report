@@ -1,0 +1,13 @@
+#!/bin/sh
+# Read-only local observations; does not test or change peripheral state.
+set -u
+printf '=== OS ===\n'; cat /etc/os-release; uname -a
+printf '\n=== Memory ===\n'; head -n 8 /proc/meminfo; cat /proc/iomem
+printf '\n=== Command line ===\n'; cat /proc/cmdline
+printf '\n=== Device tree ===\n'; tr '\000' '\n' < /sys/firmware/devicetree/base/compatible
+printf '\n=== Modules ===\n'; lsmod
+printf '\n=== Display / input ===\n'; ls -l /sys/class/drm; cat /proc/bus/input/devices
+printf '\n=== Network / Bluetooth ===\n'; ip -brief link; rfkill list
+printf '\n=== Storage (read only) ===\n'; lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+printf '\n=== Power / thermal ===\n'; ls -l /sys/class/power_supply /sys/class/thermal
+printf '\n=== Kernel warnings ===\n'; dmesg --level=err,warn

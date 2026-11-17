@@ -1,0 +1,50 @@
+#!/bin/busybox sh
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+mount -t proc proc /proc || exit 1
+mount -t sysfs sysfs /sys || exit 1
+mount -t tmpfs tmpfs /run || exit 1
+exec </dev/console >/dev/console 2>&1
+failure() { echo "asphalt-debian: $*"; exec /bin/sh; }
+media=/run/y700-media
+mkdir -p "$media"
+root_uuid=ef30676423154235879669e2c9b61946
+expected_id=asphalt-prc-debian13-xfce-7.3.4-v1
+image="$media/Y700-Debian/asphalt-debian.ext4"
+uuid_matches() {
+    [ "$(dd if="$1" bs=1 skip=1128 count=16 2>/dev/null | hexdump -ve '1/1 "%02x"')" = "$root_uuid" ]
+}
+inspect_root() {
+    mount -t ext4 -o ro,noload "$1" /newroot || return 1
+    id=$(cat /newroot/etc/y700/image-id 2>/dev/null)
+    umount /newroot || failure 'Cannot release inspected filesystem'
+    [ "$id" = "$expected_id" ]
+}
+# The VM test uses a virtio disk. On the tablet, consider only SD block devices.
+vm_disk=
+if tr '\000' '\n' </proc/device-tree/compatible | grep -qx 'linux,dummy-virt'; then vm_disk=/dev/vda; fi
+for n in $(seq 1 60); do
+    for dev in /dev/mmcblk[0-9]p[0-9]* /dev/mmcblk[0-9] $vm_disk; do
+        [ -b "$dev" ] || continue
+        if uuid_matches "$dev" && inspect_root "$dev"; then rootdev=$dev; break 2; fi
+        mount -t exfat -o ro,nosuid,nodev,noexec "$dev" "$media" 2>/dev/null || continue
+        if [ -f "$image" ] && uuid_matches "$image"; then
+            loop=$(losetup -f) || failure 'No available loop device'
+            losetup -r "$loop" "$image" || failure 'Cannot attach image for inspection'
+            inspect_root "$loop" || failure 'Unexpected Debian image identity'
+            losetup -d "$loop" || failure 'Cannot release inspection loop device'
+            mount -t exfat -o remount,rw,nosuid,nodev,noexec "$dev" "$media" || failure 'SD card is read-only'
+            losetup "$loop" "$image" || failure 'Cannot attach writable image'
+            rootdev=$loop
+            break 2
+        fi
+        umount "$media" || failure 'Cannot release SD card'
+    done
+    sleep 1
+done
+[ -b "${rootdev:-}" ] || failure 'Debian root was not found on microSD'
+mount -t ext4 -o rw "$rootdev" /newroot || failure 'Cannot mount Debian root'
+for f in dev proc sys run; do mount --move "/$f" "/newroot/$f" || failure "Cannot move $f"; done
+echo 'asphalt-debian: starting Debian systemd'
+exec switch_root /newroot /sbin/init

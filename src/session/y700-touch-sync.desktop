@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Y700 touchscreen alignment
+Comment=Keep touch aligned with the current screen rotation
+Exec=/home/y700/.local/bin/y700-display --watch
+Terminal=false
+OnlyShowIn=XFCE;
+X-GNOME-Autostart-enabled=true
+X-Y700-Touch-Sync-Managed=true

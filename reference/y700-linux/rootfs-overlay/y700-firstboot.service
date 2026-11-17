@@ -1,0 +1,21 @@
+[Unit]
+Description=Set the Y700 local user password on first boot
+ConditionPathExists=!/etc/y700/user-configured
+After=systemd-user-sessions.service systemd-udev-trigger.service
+Before=display-manager.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/y700-firstboot
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+RemainAfterExit=yes
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=graphical.target

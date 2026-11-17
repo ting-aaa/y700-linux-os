@@ -1,0 +1,42 @@
+#!/bin/busybox sh
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+mount -t proc proc /proc || exit 1
+mount -t sysfs sysfs /sys || exit 1
+mount -t tmpfs tmpfs /run || exit 1
+exec </dev/console >/dev/console 2>&1
+failure() { echo "asphalt-ufs: $*"; exec /bin/sh; }
+compatible=$(tr '\000' '\n' </proc/device-tree/compatible)
+case "$compatible" in
+    *lenovo,asphalt*) prefix=sd ;;
+    linux,dummy-virt) prefix=vd ;;
+    *) failure 'Unknown board' ;;
+esac
+for n in $(seq 1 60); do
+    for block in /sys/class/block/"$prefix"*; do
+        [ -f "$block/partition" ] || continue
+        if [ "$prefix" = sd ]; then
+            case "$(readlink -f "$block")" in */1d84000.ufshc/*) ;; *) continue ;; esac
+        fi
+        grep -qx 'PARTNAME=linux' "$block/uevent" || continue
+        dev=/dev/${block##*/}
+        [ -b "$dev" ] || continue
+        uuid=$(dd if="$dev" bs=1 skip=1128 count=16 2>/dev/null | hexdump -ve '1/1 "%02x"')
+        [ "$uuid" = ef30676423154235879669e2c9b61946 ] || continue
+        [ -z "${rootdev:-}" ] || failure 'Ambiguous linux partition'
+        rootdev=$dev
+    done
+    [ -z "${rootdev:-}" ] || break
+    sleep 1
+done
+[ -b "${rootdev:-}" ] || failure 'Debian linux partition unavailable'
+freq=/sys/class/devfreq/1d84000.ufshc/max_freq
+if [ -w "$freq" ]; then echo 75000000 > "$freq" || echo 'Cannot limit UFS frequency'; fi
+mount -t ext4 -o ro,noload "$rootdev" /newroot || failure 'Cannot inspect Debian root'
+[ "$(cat /newroot/etc/y700/image-id)" = asphalt-prc-debian13-xfce-7.3.4-v1 ] || failure 'Unexpected image identity'
+umount /newroot || failure 'Cannot release read-only mount'
+mount -t ext4 -o rw "$rootdev" /newroot || failure 'Cannot mount Debian root'
+echo "asphalt-ufs: Debian on $rootdev (GPT linux)"
+for fs in dev proc sys run; do mount --move "/$fs" "/newroot/$fs" || failure "Cannot move $fs"; done
+exec switch_root /newroot /sbin/init

@@ -1,0 +1,13 @@
+[Unit]
+Description=Report Debian boot and desktop status on USB serial
+After=sys-kernel-config.mount
+Requires=sys-kernel-config.mount
+ConditionPathExists=/proc/device-tree/region_country
+
+[Service]
+ExecStart=/usr/local/sbin/asphalt-usb-status
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Y700 USB serial and private maintenance network
+Requires=sys-kernel-config.mount
+After=sys-kernel-config.mount
+Before=NetworkManager.service ssh.service serial-getty@ttyGS0.service
+ConditionPathExists=/etc/y700/image-id
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/asphalt-usb-maintenance start
+ExecStop=/usr/local/sbin/asphalt-usb-maintenance stop
+TimeoutStartSec=50
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1371 @@
+{
+  "rows": [
+    {
+      "path": "/reserved-memory/hyp_region@80000000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 587,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80000000",
+          "size_bytes": 6291456,
+          "end_exclusive_hex": "0x80600000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/xbl_dtlog_region@80600000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 588,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80600000",
+          "size_bytes": 262144,
+          "end_exclusive_hex": "0x80640000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/xbl_ramdump_region@80640000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 589,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80640000",
+          "size_bytes": 1835008,
+          "end_exclusive_hex": "0x80800000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/aop_image_region@80800000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 590,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80800000",
+          "size_bytes": 393216,
+          "end_exclusive_hex": "0x80860000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/aop_cmd_db_region@80860000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [
+        "qcom,cmd-db"
+      ],
+      "status": null,
+      "phandle": 591,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80860000",
+          "size_bytes": 131072,
+          "end_exclusive_hex": "0x80880000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/aop_config_region@80880000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 592,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80880000",
+          "size_bytes": 131072,
+          "end_exclusive_hex": "0x808a0000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/tme_crash_dump_region@808a0000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 593,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x808a0000",
+          "size_bytes": 262144,
+          "end_exclusive_hex": "0x808e0000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/tme_log_region@808e0000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 594,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x808e0000",
+          "size_bytes": 16384,
+          "end_exclusive_hex": "0x808e4000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/uefi_log_region@808e4000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 595,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x808e4000",
+          "size_bytes": 65536,
+          "end_exclusive_hex": "0x808f4000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/smem_region@80900000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 172,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80900000",
+          "size_bytes": 2097152,
+          "end_exclusive_hex": "0x80b00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,smem",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/cpucp_fw_region@80b00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 596,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80b00000",
+          "size_bytes": 1048576,
+          "end_exclusive_hex": "0x80c00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/cdsp_secure_heap_region@80c00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 541,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x80c00000",
+          "size_bytes": 73400320,
+          "end_exclusive_hex": "0x85200000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,secure_cdsp",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/video_region@85700000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 597,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x85700000",
+          "size_bytes": 7340032,
+          "end_exclusive_hex": "0x85e00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,vidc@aa00000",
+          "reference_index": 14
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/adsp_region@85e00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 149,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x85e00000",
+          "size_bytes": 34603008,
+          "end_exclusive_hex": "0x87f00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-adsp@03000000",
+          "reference_index": 5
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/slpi_region@88000000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 177,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x88000000",
+          "size_bytes": 26214400,
+          "end_exclusive_hex": "0x89900000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-slpi@02400000",
+          "reference_index": 5
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/cdsp_region@89900000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 152,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x89900000",
+          "size_bytes": 33554432,
+          "end_exclusive_hex": "0x8b900000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-cdsp@32300000",
+          "reference_index": 2
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/ipa_fw_region@8b900000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 598,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8b900000",
+          "size_bytes": 65536,
+          "end_exclusive_hex": "0x8b910000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/ipa_gsi_region@8b910000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 181,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8b910000",
+          "size_bytes": 40960,
+          "end_exclusive_hex": "0x8b91a000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/gpu_microcode_region@8b91a000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 549,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8b91a000",
+          "size_bytes": 8192,
+          "end_exclusive_hex": "0x8b91c000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,kgsl-3d0@3d00000/zap-shader",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/spss_region_region@8ba00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 161,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8ba00000",
+          "size_bytes": 1572864,
+          "end_exclusive_hex": "0x8bb80000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-spss@1880000",
+          "reference_index": 2
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/spu_tz_shared_mem@8bb80000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 545,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8bb80000",
+          "size_bytes": 393216,
+          "end_exclusive_hex": "0x8bbe0000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,secure_sp_tz",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/spu_modem_shared_mem@8bbe0000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 544,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8bbe0000",
+          "size_bytes": 131072,
+          "end_exclusive_hex": "0x8bc00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,secure_sp_modem",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/mpss_region@8bc00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 157,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x8bc00000",
+          "size_bytes": 320864256,
+          "end_exclusive_hex": "0x9ee00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-mss@04080000",
+          "reference_index": 7
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/cvp_region@9ee00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 583,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x9ee00000",
+          "size_bytes": 7340032,
+          "end_exclusive_hex": "0x9f500000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,cvp@ab00000",
+          "reference_index": 8
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/camera_region@9f500000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 599,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0x9f500000",
+          "size_bytes": 8388608,
+          "end_exclusive_hex": "0x9fd00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,lx7",
+          "reference_index": 4
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/xbl_sc_region@a6e00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 600,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xa6e00000",
+          "size_bytes": 262144,
+          "end_exclusive_hex": "0xa6e40000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/global_sync_region@a6f00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 601,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xa6f00000",
+          "size_bytes": 1048576,
+          "end_exclusive_hex": "0xa7000000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/qheebsp_reserved_region@e0000000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 602,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe0000000",
+          "size_bytes": 6291456,
+          "end_exclusive_hex": "0xe0600000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/cpusys_vm_region@e0600000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 185,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe0600000",
+          "size_bytes": 4194304,
+          "end_exclusive_hex": "0xe0a00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,gh_vm_loader_sec@e0600000",
+          "reference_index": 0
+        },
+        {
+          "path": "/soc/qcom,guestvm_loader@e0600000",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/hyp_reserved_region@e0a00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 603,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe0a00000",
+          "size_bytes": 1048576,
+          "end_exclusive_hex": "0xe0b00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/trust_ui_vm_region@e0b00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 184,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe0b00000",
+          "size_bytes": 78589952,
+          "end_exclusive_hex": "0xe55f3000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,gh_vm_loader_sec@e0b00000",
+          "reference_index": 0
+        },
+        {
+          "path": "/soc/qcom,guestvm_loader@e0b00000",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/trust_ui_vm_qrtr@e55f3000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 83,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe55f3000",
+          "size_bytes": 36864,
+          "end_exclusive_hex": "0xe55fc000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/trust_ui_vm_vblk0_ring@e55fc000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 84,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe55fc000",
+          "size_bytes": 16384,
+          "end_exclusive_hex": "0xe5600000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/trust_ui_vm_swiotlb@e5600000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 85,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe5600000",
+          "size_bytes": 1048576,
+          "end_exclusive_hex": "0xe5700000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/tz_stat_region@e8800000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 604,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe8800000",
+          "size_bytes": 1048576,
+          "end_exclusive_hex": "0xe8900000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/tags_region@e8900000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 605,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe8900000",
+          "size_bytes": 18874368,
+          "end_exclusive_hex": "0xe9b00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/qtee_region@e9b00000",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 606,
+      "no_map": true,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xe9b00000",
+          "size_bytes": 5242880,
+          "end_exclusive_hex": "0xea000000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/sp_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 543,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 16777216,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,sp_hlos",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/linux,cma",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 158,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 33554432,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/remoteproc-mss@04080000",
+          "reference_index": 8
+        },
+        {
+          "path": "/soc/dma_dev@0x0",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/va_md_mem_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 170,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 16777216,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x100000000",
+          "size_bytes": 18446744069414584319,
+          "end_exclusive_hex": "0xffffffffffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/va_mini_dump",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/user_contig_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 89,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 16777216,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,user_contig",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/qseecom_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 87,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 20971520,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qseecom@c1700000",
+          "reference_index": 0
+        },
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,qseecom",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/non_secure_display_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 546,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 171966464,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,display",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/demura_heap_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 547,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 41943040,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x100000000",
+          "size_bytes": 18446744069414584319,
+          "end_exclusive_hex": "0xffffffffffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,demura",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/qseecom_ta_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 88,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 16777216,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,qseecom_ta",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/cnss_wlan_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 569,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 33554432,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,pcie@1c00000/pcie0_rp/cnss_pci",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/audio_cma_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 548,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 29360128,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,audio_ml",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/adsp_heap_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 187,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 12582912,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,msm-adsprpc-mem",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/sdsp_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 542,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 8388608,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,dma-heaps/qcom,adsp",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/cdsp_eva_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 584,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 4194304,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 4294967295,
+          "end_exclusive_hex": "0xffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/qcom,cvp@ab00000/qcom,msm-cvp,mem_cdsp",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/ramoops_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "ramoops"
+      ],
+      "status": null,
+      "phandle": 607,
+      "no_map": false,
+      "reusable": false,
+      "fixed_reg": [],
+      "size_request_bytes": 2097152,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x0",
+          "size_bytes": 18446744073709551615,
+          "end_exclusive_hex": "0xffffffffffffffff"
+        }
+      ],
+      "memory_region_referrers": []
+    },
+    {
+      "path": "/reserved-memory/mem_dump_region",
+      "allocation_kind": "DYNAMIC_SIZE_REQUEST",
+      "compatible": [
+        "shared-dma-pool"
+      ],
+      "status": null,
+      "phandle": 538,
+      "no_map": false,
+      "reusable": true,
+      "fixed_reg": [],
+      "size_request_bytes": 50331648,
+      "alignment_bytes": 4194304,
+      "allowed_allocation_windows": [
+        {
+          "address_hex": "0x100000000",
+          "size_bytes": 18446744069414584319,
+          "end_exclusive_hex": "0xffffffffffffffff"
+        }
+      ],
+      "memory_region_referrers": [
+        {
+          "path": "/soc/mem_dump",
+          "reference_index": 0
+        }
+      ]
+    },
+    {
+      "path": "/reserved-memory/splash_region",
+      "allocation_kind": "FIXED_REG_DECLARATION",
+      "compatible": [],
+      "status": null,
+      "phandle": 1530,
+      "no_map": false,
+      "reusable": false,
+      "fixed_reg": [
+        {
+          "address_hex": "0xb8000000",
+          "size_bytes": 45088768,
+          "end_exclusive_hex": "0xbab00000",
+          "in_memory_banks": [
+            "/memory:reg0"
+          ]
+        }
+      ],
+      "size_request_bytes": null,
+      "alignment_bytes": null,
+      "allowed_allocation_windows": [],
+      "memory_region_referrers": []
+    }
+  ]
+}

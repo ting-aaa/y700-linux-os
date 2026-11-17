@@ -1,0 +1,46 @@
+#!/bin/bash
+# Stable USB identity shared with the verified RAM maintenance environment.
+set -euo pipefail
+g=/sys/kernel/config/usb_gadget/asphalt-maintenance
+udc=a600000.usb
+if [[ ${1:-start} == stop ]]; then
+    [[ ! -e "$g/UDC" ]] || printf '\n' > "$g/UDC"
+    exit 0
+fi
+modprobe libcomposite
+for ((i=0; i<30; i++)); do
+    [[ ! -e /sys/class/udc/$udc ]] || break
+    sleep 1
+done
+test -e /sys/class/udc/$udc
+for other in /sys/kernel/config/usb_gadget/*/UDC; do
+    [[ ! -f "$other" || "$other" == "$g/UDC" ]] || test -z "$(cat "$other")"
+done
+mkdir -p "$g"
+if [[ -z $(cat "$g/UDC") ]]; then
+    echo 0x18d1 > "$g/idVendor"
+    echo 0x4e11 > "$g/idProduct"
+    echo 0x0703 > "$g/bcdDevice"
+    echo 0x0210 > "$g/bcdUSB"
+    echo 0xef > "$g/bDeviceClass"
+    echo 0x02 > "$g/bDeviceSubClass"
+    echo 0x01 > "$g/bDeviceProtocol"
+    mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409"
+    echo 'Asphalt Debian' > "$g/strings/0x409/manufacturer"
+    echo 'Y700 Debian maintenance' > "$g/strings/0x409/product"
+    echo 'RECOVERY_ASPHALT' > "$g/strings/0x409/serialnumber"
+    echo 'USB maintenance' > "$g/configs/c.1/strings/0x409/configuration"
+    mkdir -p "$g/functions/acm.console" "$g/functions/ncm.usb0"
+    echo '02:b8:6b:c1:2c:3c' > "$g/functions/ncm.usb0/dev_addr"
+    echo '06:b8:6b:c1:2c:3c' > "$g/functions/ncm.usb0/host_addr"
+    [[ -L "$g/configs/c.1/acm" ]] || ln -s "$g/functions/acm.console" "$g/configs/c.1/acm"
+    [[ -L "$g/configs/c.1/ncm" ]] || ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm"
+    echo "$udc" > "$g/UDC"
+fi
+udevadm settle --timeout=10
+iface=$(tr -d '\000\n' < "$g/functions/ncm.usb0/ifname")
+[[ "$iface" =~ ^[a-zA-Z0-9_.:-]+$ ]]
+test "$(cat "/sys/class/net/$iface/address")" = 02:b8:6b:c1:2c:3c
+ip address replace 172.16.43.1/24 dev "$iface"
+ip link set "$iface" up
+printf 'USB maintenance interface=%s address=172.16.43.1\n' "$iface"

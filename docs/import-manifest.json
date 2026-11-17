@@ -1,0 +1,285 @@
+{
+  "format": 1,
+  "files": [
+    {
+      "source_relative": "y700-linux/asphalt-debian/build-kernel.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/build-kernel.sh",
+      "source_sha256": "8c99d09c9661c732976b3e36a729e9572c6bdd5794d308708cd363d89f71c092",
+      "public_sha256": "8c99d09c9661c732976b3e36a729e9572c6bdd5794d308708cd363d89f71c092",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/prepare-kernel.py",
+      "public_path": "reference/y700-linux/asphalt-debian/prepare-kernel.py",
+      "source_sha256": "cd6aa1f8cdda358e87f4119353f3cb0c57be61331c0933e9aa04dadc7e2dfee5",
+      "public_sha256": "cd6aa1f8cdda358e87f4119353f3cb0c57be61331c0933e9aa04dadc7e2dfee5",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/verify-dtb.py",
+      "public_path": "reference/y700-linux/asphalt-debian/verify-dtb.py",
+      "source_sha256": "c34eb6442a46b6ca75b16d00a8e432d1cc939edd34bbcdeacfa7389fbb8b28a8",
+      "public_sha256": "c34eb6442a46b6ca75b16d00a8e432d1cc939edd34bbcdeacfa7389fbb8b28a8",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/board-config.nix",
+      "public_path": "reference/y700-linux/asphalt-debian/board-config.nix",
+      "source_sha256": "f80f8741ba037a6a66388df175f41398e21fe709891a44a83d298040739eb4c1",
+      "public_sha256": "f80f8741ba037a6a66388df175f41398e21fe709891a44a83d298040739eb4c1",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/build-uboot.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/build-uboot.sh",
+      "source_sha256": "76cff1f04e9e5b9171a564a040aa2b5735fa4374197a718abb72ded22f46f8ce",
+      "public_sha256": "76cff1f04e9e5b9171a564a040aa2b5735fa4374197a718abb72ded22f46f8ce",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/uboot-board.nix",
+      "public_path": "reference/y700-linux/asphalt-debian/uboot-board.nix",
+      "source_sha256": "ffa05fd50aa94641ee15fde57b906a16775fafaea997a7c48948ca9d5554b5bf",
+      "public_sha256": "ffa05fd50aa94641ee15fde57b906a16775fafaea997a7c48948ca9d5554b5bf",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/efi-files.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/efi-files.sh",
+      "source_sha256": "083a17002210ec642c3814a2dcc90dd2b1281fffaa5da2abede3429daddc6e65",
+      "public_sha256": "083a17002210ec642c3814a2dcc90dd2b1281fffaa5da2abede3429daddc6e65",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/efi-rootfs.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/efi-rootfs.sh",
+      "source_sha256": "f347e8a3f4e4ed3431584c53cb93d40becde7437fbdc46e865d6282ef8bd8808",
+      "public_sha256": "f347e8a3f4e4ed3431584c53cb93d40becde7437fbdc46e865d6282ef8bd8808",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/init",
+      "public_path": "reference/y700-linux/asphalt-debian/init",
+      "source_sha256": "6ae15af9e6e76b69b81c92c4b0fab45c356a646e558650f6d7b2c931aad91324",
+      "public_sha256": "6ae15af9e6e76b69b81c92c4b0fab45c356a646e558650f6d7b2c931aad91324",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/init-ufs",
+      "public_path": "reference/y700-linux/asphalt-debian/init-ufs",
+      "source_sha256": "374e4e9db87ac03f1a6da432cfe75276f2b9abdf3be806c30e7cf338dabae103",
+      "public_sha256": "374e4e9db87ac03f1a6da432cfe75276f2b9abdf3be806c30e7cf338dabae103",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/charger-init",
+      "public_path": "reference/y700-linux/asphalt-debian/charger-init",
+      "source_sha256": "19a62ee2238a786deb619974ad20d4451a512d754b5e222d12f098b2021f1d50",
+      "public_sha256": "19a62ee2238a786deb619974ad20d4451a512d754b5e222d12f098b2021f1d50",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/package.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/package.sh",
+      "source_sha256": "ec3e38ee7d4641ebe8249bc89d632cbe51dd5c9ed6bad14e1d62a02f2543502d",
+      "public_sha256": "ec3e38ee7d4641ebe8249bc89d632cbe51dd5c9ed6bad14e1d62a02f2543502d",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/package-ufs.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/package-ufs.sh",
+      "source_sha256": "c6f6a0814ac1e5867d1ef9fd1e4c9f18493bfde672b950cd900297cd7801226e",
+      "public_sha256": "c6f6a0814ac1e5867d1ef9fd1e4c9f18493bfde672b950cd900297cd7801226e",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/test-efi.py",
+      "public_path": "reference/y700-linux/asphalt-debian/test-efi.py",
+      "source_sha256": "48e0f2ad3a45df2d554814cd71c15115b6ede7f1e3e69a202f926d4a4ece4ad6",
+      "public_sha256": "48e0f2ad3a45df2d554814cd71c15115b6ede7f1e3e69a202f926d4a4ece4ad6",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/test-efi.sh",
+      "public_path": "reference/y700-linux/asphalt-debian/test-efi.sh",
+      "source_sha256": "ba31b41e2e13ef015f4262399a669c8613ebe61f0f003160f6772b28fc48f009",
+      "public_sha256": "ba31b41e2e13ef015f4262399a669c8613ebe61f0f003160f6772b28fc48f009",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/test-vm.py",
+      "public_path": "reference/y700-linux/asphalt-debian/test-vm.py",
+      "source_sha256": "69bdb980992ee9c36ca65444fcf98983900665c3d95a4bfd9ec3a20b499c6bf3",
+      "public_sha256": "69bdb980992ee9c36ca65444fcf98983900665c3d95a4bfd9ec3a20b499c6bf3",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/usb-status",
+      "public_path": "reference/y700-linux/asphalt-debian/usb-status",
+      "source_sha256": "4f0e20509d0c9c42d12c88213f10c68f86834516cb6ea8cc7ecf0f798cd43f97",
+      "public_sha256": "4f0e20509d0c9c42d12c88213f10c68f86834516cb6ea8cc7ecf0f798cd43f97",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/asphalt-usb-status.service",
+      "public_path": "reference/y700-linux/asphalt-debian/asphalt-usb-status.service",
+      "source_sha256": "665e7a64a258104a03a231fee90c4f278bb2b01b7bc0ce1199d6dc3a19bc83a4",
+      "public_sha256": "665e7a64a258104a03a231fee90c4f278bb2b01b7bc0ce1199d6dc3a19bc83a4",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/uboot-prc/build.py",
+      "public_path": "reference/y700-linux/asphalt-debian/uboot-prc/build.py",
+      "source_sha256": "7095510918912df49da4313c80877549a0b29fa0e964628efc773a68fb824372",
+      "public_sha256": "e5cf5061ac2a6745013476641ba3bdd96769f254467d20adc1adb6442a1ea259",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/build-rootfs.sh",
+      "public_path": "reference/y700-linux/scripts/build-rootfs.sh",
+      "source_sha256": "0722a7ae1bf0c11adb0eac00841e66ed978d6e297663da2d328cec6361950d59",
+      "public_sha256": "7c345becc06fca309c5530de4a3f80c5c3ae80bc69ad87ac962ee0d1c7ee7948",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/configure-rootfs.sh",
+      "public_path": "reference/y700-linux/scripts/configure-rootfs.sh",
+      "source_sha256": "e6d622ecb49ca5cd9f782aa288fb4e31a347cb95ded84ebd8c61839179af212f",
+      "public_sha256": "8868683803a894483bacb92718e49a5a9b6f14d9f0bd2e63351f717bac2592c2",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/build-rootfs-image.sh",
+      "public_path": "reference/y700-linux/scripts/build-rootfs-image.sh",
+      "source_sha256": "6a030024f3d7b5f0d06a70dc12651993f3ac4d4b9aebcd2ab3d675dbd03b96d1",
+      "public_sha256": "a54a26bef127777e346690d171954b063243fa2831d3835dd1364d82b6090aa5",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/seed-package-cache.sh",
+      "public_path": "reference/y700-linux/scripts/seed-package-cache.sh",
+      "source_sha256": "8157a4e761d78dc75de4d2d383683a090bb9e3574dd89163bf2e6a07a8544814",
+      "public_sha256": "8157a4e761d78dc75de4d2d383683a090bb9e3574dd89163bf2e6a07a8544814",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/verify-rootfs-integration.sh",
+      "public_path": "reference/y700-linux/scripts/verify-rootfs-integration.sh",
+      "source_sha256": "70e2714dce677045f615400e4734c40b0869192bbfb7b25c6785ffeadff7fa99",
+      "public_sha256": "70e2714dce677045f615400e4734c40b0869192bbfb7b25c6785ffeadff7fa99",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/finalize-rootfs-inventory.sh",
+      "public_path": "reference/y700-linux/scripts/finalize-rootfs-inventory.sh",
+      "source_sha256": "cc8d3dcbcbde870bf1d877a70a666d4b733b367e2b34aeaf81512084a48ab04d",
+      "public_sha256": "1cc782a1e8709384456d4ae8e1503b955b5374f0f8bdb78f9b71e785b5ee7531",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/scripts/test-rootfs-gate.sh",
+      "public_path": "reference/y700-linux/scripts/test-rootfs-gate.sh",
+      "source_sha256": "f1fbb242d8341a4442113a9da17c12c578e030af6ac07cde4728f889eaef909f",
+      "public_sha256": "f1fbb242d8341a4442113a9da17c12c578e030af6ac07cde4728f889eaef909f",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/rootfs-overlay/y700-firstboot",
+      "public_path": "reference/y700-linux/rootfs-overlay/y700-firstboot",
+      "source_sha256": "46a43d95fd26d61688a520bb999df1803afd01c279e9d2a56fbca1d7e2915bf5",
+      "public_sha256": "46a43d95fd26d61688a520bb999df1803afd01c279e9d2a56fbca1d7e2915bf5",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/rootfs-overlay/y700-firstboot.service",
+      "public_path": "reference/y700-linux/rootfs-overlay/y700-firstboot.service",
+      "source_sha256": "5444ba2fc441058ebfdec90c5f67da40ea433b82cbf02f7dfb17d98e29ddf812",
+      "public_sha256": "5444ba2fc441058ebfdec90c5f67da40ea433b82cbf02f7dfb17d98e29ddf812",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/rootfs-overlay/y700-hardware-report",
+      "public_path": "reference/y700-linux/rootfs-overlay/y700-hardware-report",
+      "source_sha256": "dd6c734ed6057a191192b0ea920d01ced227ccf9e55fce6fe4037a142ea0531b",
+      "public_sha256": "dd6c734ed6057a191192b0ea920d01ced227ccf9e55fce6fe4037a142ea0531b",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/rootfs-overlay/y700-userspace-smoke",
+      "public_path": "reference/y700-linux/rootfs-overlay/y700-userspace-smoke",
+      "source_sha256": "a62fc1a14b4247b54ae71d02c4d4ffa394089669e2b809c7c61be5445d6c6b8c",
+      "public_sha256": "a62fc1a14b4247b54ae71d02c4d4ffa394089669e2b809c7c61be5445d6c6b8c",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/config/rootfs-packages.txt",
+      "public_path": "config/desktop-packages.txt",
+      "source_sha256": "4fea445157914e64048168ff33f3f025eb400c9de4d118c7dea91069260adb4c",
+      "public_sha256": "4fea445157914e64048168ff33f3f025eb400c9de4d118c7dea91069260adb4c",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/config/rootfs-packages.txt",
+      "public_path": "reference/y700-linux/config/rootfs-packages.txt",
+      "source_sha256": "4fea445157914e64048168ff33f3f025eb400c9de4d118c7dea91069260adb4c",
+      "public_sha256": "4fea445157914e64048168ff33f3f025eb400c9de4d118c7dea91069260adb4c",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/desktop/y700-display",
+      "public_path": "src/session/y700-display",
+      "source_sha256": "21727b77f6e6409eb1dae764f02ab3fe0660c2f9e308f4bac41abed870ff492b",
+      "public_sha256": "21727b77f6e6409eb1dae764f02ab3fe0660c2f9e308f4bac41abed870ff492b",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/desktop/y700-touch-sync.desktop",
+      "public_path": "src/session/y700-touch-sync.desktop",
+      "source_sha256": "766ffe23ff5191cf435054a4b80c11a947d6a60c55c8f6f7cb421ce2643a8fbe",
+      "public_sha256": "766ffe23ff5191cf435054a4b80c11a947d6a60c55c8f6f7cb421ce2643a8fbe",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/desktop/install-touch-sync.sh",
+      "public_path": "src/session/install-touch-sync.sh",
+      "source_sha256": "970006e853e25cfe8254604e670c0411a79e194f14d5ff670187059ed84b9b2a",
+      "public_sha256": "970006e853e25cfe8254604e670c0411a79e194f14d5ff670187059ed84b9b2a",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/desktop/asphalt-usb-maintenance",
+      "public_path": "src/usb/asphalt-usb-maintenance",
+      "source_sha256": "0a4cb322fceb793bbd1856fbf380ee48e2447baf738e475f37fa27faf22b2604",
+      "public_sha256": "0a4cb322fceb793bbd1856fbf380ee48e2447baf738e475f37fa27faf22b2604",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-debian/desktop/asphalt-usb-maintenance.service",
+      "public_path": "src/usb/asphalt-usb-maintenance.service",
+      "source_sha256": "aeef08dc824127f13d1597636b163aa8936dae7a15c5cebdadc197c862937f2b",
+      "public_sha256": "aeef08dc824127f13d1597636b163aa8936dae7a15c5cebdadc197c862937f2b",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/asphalt-upstream/LICENSE",
+      "public_path": "licenses/asphalt-upstream-MIT.txt",
+      "source_sha256": "fa4bb3bc6b8391f264c694a20a0174a2f1222aac678e627c40253ea6c486558e",
+      "public_sha256": "fa4bb3bc6b8391f264c694a20a0174a2f1222aac678e627c40253ea6c486558e",
+      "transform": "UTF-8/LF and generic build-home normalization"
+    },
+    {
+      "source_relative": "y700-linux/vendor-build-20261025/runtime-fdt-memory-semantics-v1/memory.json",
+      "public_path": "reference/y700-linux/vendor-build-20261025/runtime-fdt-memory-semantics-v1/memory.json",
+      "source_sha256": "f60262d4a57fe19a38d2ed0eaf7529863de6abd110aabac7d2f090d4aa2cac08",
+      "public_sha256": "76e843e80b8ffc334a901905e352b7b188b70abefafe78393554707c58f2c4d2",
+      "transform": "Only board memory/reservation structure; discard top-level capture metadata"
+    },
+    {
+      "source_relative": "y700-linux/vendor-build-20261025/runtime-fdt-memory-semantics-v1/reserved-memory-compact.json",
+      "public_path": "reference/y700-linux/vendor-build-20261025/runtime-fdt-memory-semantics-v1/reserved-memory-compact.json",
+      "source_sha256": "1381d2739df86eb55f46866b7677c216d7f22335705c02666c4ece967b42f6a9",
+      "public_sha256": "4b3c03a532eaa567a11c0df80e82f42d4ce94bc9c64fa043eeba0dbe63383ddc",
+      "transform": "Only board memory/reservation structure; discard top-level capture metadata"
+    }
+  ]
+}

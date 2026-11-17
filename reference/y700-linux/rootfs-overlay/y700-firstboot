@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+printf '\nY700 Linux - first boot\n\nCreate the local password for user y700.\nNo remote login service is enabled.\n\n'
+until passwd y700; do
+  printf '\nPassword was not set. Please retry.\n'
+done
+install -d -m 0755 /etc/y700
+touch /etc/y700/user-configured
+printf '\nAccount ready. Starting the desktop.\n'

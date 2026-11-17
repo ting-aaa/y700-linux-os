@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Y700_TOUCH_SYNC_MANAGED_V1
+# Keep the X11 touchscreen mapped to the current DSI display transformation.
+set -euo pipefail
+export LC_ALL=C
+touch='NT36523N Capacitive Touchscreen'
+output='DSI-1'
+mode=${1:---sync}
+case "$mode" in
+    --sync|--watch) test "$#" -le 1 ;;
+    --rotate)
+        test "$#" -eq 2
+        case "$2" in normal|left|right|inverted) ;; *) exit 2;; esac
+        ;;
+    *) echo 'Usage: y700-display [--sync | --watch | --rotate normal|left|right|inverted]' >&2; exit 2;;
+esac
+test -n "${DISPLAY:-}" || { echo 'Run inside the tablet Xfce session.' >&2; exit 1; }
+test "${XDG_SESSION_TYPE:-x11}" = x11 || { echo 'This helper requires X11.' >&2; exit 1; }
+for tool in xinput xrandr flock; do
+    command -v "$tool" >/dev/null || { echo "Missing command: $tool" >&2; exit 1; }
+done
+
+read_state() {
+    id=$(xinput list --id-only "$touch") || return 1
+    [[ "$id" =~ ^[0-9]+$ ]] || return 1
+    listing=$(xrandr --query) || return 1
+    line=$(awk -v name="$output" '$1 == name && $2 == "connected" && $0 ~ /[0-9]+x[0-9]+[+][0-9]+[+][0-9]+/ {print}' <<< "$listing")
+    test -n "$line"
+}
+
+if [[ "$mode" == --rotate ]]; then
+    read_state || { echo 'Expected one NT36523N touchscreen and an active DSI-1 display.' >&2; exit 1; }
+    # The capability list in parentheses also contains all rotation names.
+    # Inspect only the active-state prefix when remembering the old direction.
+    prefix=${line%% (*}
+    previous=normal
+    for word in $prefix; do
+        case "$word" in normal|left|right|inverted) previous=$word;; esac
+    done
+    xrandr --output "$output" --rotate "$2"
+    if ! xinput map-to-output "$id" "$output"; then
+        echo 'Touch mapping failed; restoring the previous display direction.' >&2
+        xrandr --output "$output" --rotate "$previous"
+        xinput map-to-output "$id" "$output" || :
+        exit 1
+    fi
+    echo "Display and touch mapped together: $2"
+    exit 0
+fi
+
+if [[ "$mode" == --sync ]]; then
+    read_state || { echo 'Expected one NT36523N touchscreen and an active DSI-1 display.' >&2; exit 1; }
+    exec xinput map-to-output "$id" "$output"
+fi
+
+# Only one watcher per login user. No root service, calibration change or
+# forced display orientation is installed. Mapping follows Xfce settings.
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+test -d "$runtime"
+test -O "$runtime"
+exec 9>"$runtime/y700-touch-sync.lock"
+flock -n 9 || exit 0
+last=''
+while :; do
+    if read_state; then
+        current="$id $line"
+        if [[ "$current" != "$last" ]]; then
+            if xinput map-to-output "$id" "$output"; then
+                last=$current
+            fi
+        fi
+    else
+        # Device/display re-creation during a session is retried safely.
+        last=''
+    fi
+    sleep 2
+done
