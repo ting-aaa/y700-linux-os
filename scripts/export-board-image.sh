@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Export the exact tested files to a new private, portable directory.
 set -euo pipefail
+repo=$(cd "$(dirname "$0")/.." && pwd)
 candidate=$(realpath -e "${1:?candidate directory}")
 dest=$(realpath -m "${2:?new export directory}")
 if (( $# == 4 )); then
@@ -20,6 +21,8 @@ for image in root.ext4 linux-boot.fat; do
 done
 cd "$dest"
 sha256sum asphalt-prc-u-boot.img root.ext4.zst linux-boot.fat.zst > TRANSPORT-SHA256SUMS
+install -m644 "$repo/tests/verify-physical-boot.sh" verify-physical-boot.sh
+sha256sum identity.txt verify-physical-boot.sh > PROBE-SHA256SUMS
 if [[ -n ${card:-} ]]; then
     (cd "$card" && sha256sum -c SHA256SUMS)
     (cd "$entry" && sha256sum -c SHA256SUMS)
