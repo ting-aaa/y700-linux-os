@@ -1,0 +1,52 @@
+#!/bin/busybox sh
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+mount -t proc proc /proc || exit 1
+mount -t sysfs sysfs /sys || exit 1
+mount -t tmpfs tmpfs /run || exit 1
+exec </dev/console >/dev/console 2>&1
+fail() { echo "y700-init: $*"; while :; do sleep 3600; done; }
+label=linux
+case " $(cat /proc/cmdline) " in
+    *' y700.media=sd '*) label=y700-test-root ;;
+esac
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+case "$compat" in
+    *lenovo,asphalt*) if [ "$label" = linux ]; then prefix=sd; else prefix=mmcblk; fi ;;
+    linux,dummy-virt) prefix=vd ;;
+    *) fail 'Unrecognized board' ;;
+esac
+rootdev=
+for tick in $(seq 1 60); do
+    for block in /sys/class/block/"$prefix"*; do
+        [ -f "$block/partition" ] || continue
+        case "$prefix" in
+            sd) case "$(readlink -f "$block")" in */1d84000.ufshc/*) ;; *) continue ;; esac ;;
+            mmcblk)
+                parent=$(dirname "$(readlink -f "$block")")
+                [ "$(cat "$parent/device/type" 2>/dev/null)" = SD ] || continue
+                case "$parent" in */8804000.mmc/*|*/8804000.sdhci/*|*/8804000.*/*) ;; *) continue ;; esac ;;
+        esac
+        grep -qx "PARTNAME=$label" "$block/uevent" || continue
+        dev=/dev/${block##*/}
+        [ -b "$dev" ] || continue
+        id=$(dd if="$dev" bs=1 skip=1128 count=16 2>/dev/null | hexdump -ve '1/1 "%02x"')
+        [ "$id" = @UUIDHEX@ ] || continue
+        [ -z "$rootdev" ] || fail 'Ambiguous matching root'
+        rootdev=$dev
+    done
+    [ -z "$rootdev" ] || break
+    sleep 1
+done
+[ -b "$rootdev" ] || fail "Matching $label partition unavailable"
+if [ "$prefix" = sd ] && [ -w /sys/class/devfreq/1d84000.ufshc/max_freq ]; then
+    echo 75000000 > /sys/class/devfreq/1d84000.ufshc/max_freq || fail 'UFS frequency limit failed'
+fi
+mount -t ext4 -o ro,noload "$rootdev" /newroot || fail 'Read-only root check failed'
+[ "$(cat /newroot/etc/y700/image-id)" = @IMAGEID@ ] || fail 'Unexpected image identity'
+umount /newroot || fail 'Cannot release read-only mount'
+mount -t ext4 -o rw "$rootdev" /newroot || fail 'Cannot mount root read-write'
+echo "y700-init: verified @IMAGEID@ on $rootdev ($label)"
+for fs in dev proc sys run; do mount --move "/$fs" "/newroot/$fs" || fail "Cannot move $fs"; done
+exec switch_root /newroot /sbin/init

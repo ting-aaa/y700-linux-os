@@ -27,6 +27,12 @@ Two shortcuts are rejected from the actual source:
 
 The Asphalt queue already contains five GMU sync-state patches. Do not reapply a similarly titled patch without checking the actual source. Upstream itself records an unexplained GMU timeout and partial GLES support in its [pinned hardware status](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/docs/asphalt/status.md); that is corroborating context, not this tablet's diagnosis.
 
+## CN350 comparison and fault ordering
+
+The retained kernel journal records two GPU_SET acknowledgement timeouts at 1096.661720 and 1097.301541 seconds on its monotonic clock. The ring 2 fault appears at 1097.589702, recovery starts at 1097.590109, and the logged CP read translation fault at address zero appears at 1097.597279. Preemption times out at 1106.912716. The first logged translation fault in this sequence follows the first logged OOB error by about 936 ms. Asynchronous fault reporting and recovery prevent inferring the order of the underlying hardware events solely from these lines.
+
+The candidate SQE, GMU and four ZAP components matched all six corresponding files independently extracted from the CN350 vendor image. A simple mismatch against these stock files is therefore a weaker explanation. Kernel/firmware interface behavior and power sequencing remain open. For a future attended capture, correlate the first runtime-PM transition with OOB and IOMMU events before enabling any second workload. [Per-file comparison](research/cn350-firmware-comparison.json)
+
 ## Attended experiment contract
 
 Before testing, preserve the currently working boot entry/root state, verify USB recovery independently, and record kernel/DT/module/firmware/Mesa hashes plus the exact command/environment. Run baseline and one changed candidate, with a stop condition on the first GPU fault or maintenance-channel loss. Restore the baseline before trying another factor. Define sustained workload duration and repeat cycles before collecting release evidence. No candidate in this document is accepted as a fix.

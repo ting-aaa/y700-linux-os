@@ -1,0 +1,282 @@
+{
+  "stock_images": {
+    "dsp.img": "9b001ed2155f85142e2d29b25d24d0dbfce593c7bcbc55b6e95c0868e2b142d6",
+    "modem.img": "c20e8d45b5aff099e28c44751a5f2d6dd6b4e58048c408d34ec0b052615acb77",
+    "vendor.img": "589dbd163ae9f9d8f8e2f806640e4196cb3b090ab24de14a10217a15487b12ef"
+  },
+  "files": [
+    {
+      "image": "vendor.img",
+      "path": "/firmware/a730_sqe.fw",
+      "stock_sha256": "e67d1829f57fc8326d806234b932dc3b78e28a9940df34c70752f17d5f38b7aa",
+      "reference_sha256": "e67d1829f57fc8326d806234b932dc3b78e28a9940df34c70752f17d5f38b7aa",
+      "identical": true
+    },
+    {
+      "image": "vendor.img",
+      "path": "/firmware/gmu_gen70000.bin",
+      "stock_sha256": "b2d3f0e2a98fd6259ab9ffef16df63265542e6cc9a970d53d476e823d432042a",
+      "reference_sha256": "b2d3f0e2a98fd6259ab9ffef16df63265542e6cc9a970d53d476e823d432042a",
+      "identical": true
+    },
+    {
+      "image": "vendor.img",
+      "path": "/firmware/a730_zap.mdt",
+      "stock_sha256": "db649b03d2e01e2b74972e23fec2a8b1e21864db3709d86829607165f6e6398f",
+      "reference_sha256": "db649b03d2e01e2b74972e23fec2a8b1e21864db3709d86829607165f6e6398f",
+      "identical": true
+    },
+    {
+      "image": "vendor.img",
+      "path": "/firmware/a730_zap.b00",
+      "stock_sha256": "9cd65a08fa2ce72c05a52aad95951f749f52fc310613a2857e270b463a641a7f",
+      "reference_sha256": "9cd65a08fa2ce72c05a52aad95951f749f52fc310613a2857e270b463a641a7f",
+      "identical": true
+    },
+    {
+      "image": "vendor.img",
+      "path": "/firmware/a730_zap.b01",
+      "stock_sha256": "1fc98f97cf354b9704b20d0848f7b2739638539a57d88ecf5cc71ca1c5c4e6b9",
+      "reference_sha256": "1fc98f97cf354b9704b20d0848f7b2739638539a57d88ecf5cc71ca1c5c4e6b9",
+      "identical": true
+    },
+    {
+      "image": "vendor.img",
+      "path": "/firmware/a730_zap.b02",
+      "stock_sha256": "9317cd671606006bfa1cec27fd6a6fb151ba250f7df1a72819a5c0d0b8f0043c",
+      "reference_sha256": "9317cd671606006bfa1cec27fd6a6fb151ba250f7df1a72819a5c0d0b8f0043c",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b00",
+      "stock_sha256": "582b43fab8b4b6db702f9a41fcc05712e60adf09932f095226d5c615b8eabdf0",
+      "reference_sha256": "625bf7e5d5773690b8bb753e21d711a4396a0223d7c1274ecf0510457ec02d65",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b01",
+      "stock_sha256": "61246a82e365cc413f85f767a76150a1b871c5a008dd2e08327b27d64134c36c",
+      "reference_sha256": "61246a82e365cc413f85f767a76150a1b871c5a008dd2e08327b27d64134c36c",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b02",
+      "stock_sha256": "8c167bfb1598cc93bb0ad72d91aa946b88313774f9ac8c56b98a742ab6074d44",
+      "reference_sha256": "8c167bfb1598cc93bb0ad72d91aa946b88313774f9ac8c56b98a742ab6074d44",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b03",
+      "stock_sha256": "8d780c60ff2c6df12105c7ccf16d99c07a3f7cc286aa70c305df41c4c9af3475",
+      "reference_sha256": "8d780c60ff2c6df12105c7ccf16d99c07a3f7cc286aa70c305df41c4c9af3475",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b04",
+      "stock_sha256": "fe0e63e2b8a6628b6b870c8fdb915efde92e0146786cbfc2fa92756291e9463f",
+      "reference_sha256": "fe0e63e2b8a6628b6b870c8fdb915efde92e0146786cbfc2fa92756291e9463f",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b05",
+      "stock_sha256": "3de0e1f5115ca59b952493296b5aaf488f9f60e0adcce34d967fead821d57e35",
+      "reference_sha256": "78c471b336789b96e4c699096ec8757133bcbb0121c23a5717406b751d2ba513",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b06",
+      "stock_sha256": "24422ba2b402f791c90f6cda398dc7208dfc1c7162ab10032983e02f000ed25b",
+      "reference_sha256": "24422ba2b402f791c90f6cda398dc7208dfc1c7162ab10032983e02f000ed25b",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b07",
+      "stock_sha256": "305a9fb1f9fb85d8d4f98d2dd8cfcd9b17c13128b121346a2c2afb47954f9d68",
+      "reference_sha256": "305a9fb1f9fb85d8d4f98d2dd8cfcd9b17c13128b121346a2c2afb47954f9d68",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b08",
+      "stock_sha256": "3c824f380bba454a2fe497923a4f84cbfe2427e6761297006d9cdbcea0c4f8cf",
+      "reference_sha256": "cab813ec3ec287d5d50cdc105c12261f9f7101994c683a8868fc6c75bbf23112",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b09",
+      "stock_sha256": "398c13e8cff483cdc086dafc7d4fdeaa0509409af62318d1f76415b25dabf8b8",
+      "reference_sha256": "398c13e8cff483cdc086dafc7d4fdeaa0509409af62318d1f76415b25dabf8b8",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b10",
+      "stock_sha256": "c94e144ae05dc484bb6969ddc02119ac1f594c061623d798af0b508d04a9e1ea",
+      "reference_sha256": "c94e144ae05dc484bb6969ddc02119ac1f594c061623d798af0b508d04a9e1ea",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b11",
+      "stock_sha256": "db225fcafc62db01b93bb936a80dc041f857e223340ab0df44ec5c8cf2a4112a",
+      "reference_sha256": "db225fcafc62db01b93bb936a80dc041f857e223340ab0df44ec5c8cf2a4112a",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b12",
+      "stock_sha256": "4d42307077fc4566e27548883dc613c219d3bf3a5b02e724529fa7cb55c02b88",
+      "reference_sha256": "4d42307077fc4566e27548883dc613c219d3bf3a5b02e724529fa7cb55c02b88",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b13",
+      "stock_sha256": "65fa1289465e07856dd964e2f08dd078a3a05de64890eb6012f6087222546cb5",
+      "reference_sha256": "78fb7bc1bf86c97e538af01e21d00b09ccf6c9c0c727f9d949f09fc7002266eb",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b14",
+      "stock_sha256": "205013b045f767d6c0cd0cf0a86d8f32f5c0b1542f5777141251d150311bd124",
+      "reference_sha256": "71d33b879af03831b097c6b745fb6176eacb054881becae4acb4f8267675ad8d",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b15",
+      "stock_sha256": "55f6089d40aaa58202cc7872cb4dfd74b44a30d8e95b764085650390f5d6bf81",
+      "reference_sha256": "55f6089d40aaa58202cc7872cb4dfd74b44a30d8e95b764085650390f5d6bf81",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b16",
+      "stock_sha256": "2100da054c14c1f4cc678edc229bbdf0d6d8347d62e54ffe5a45e00a572fba68",
+      "reference_sha256": "2100da054c14c1f4cc678edc229bbdf0d6d8347d62e54ffe5a45e00a572fba68",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b17",
+      "stock_sha256": "a96bfa384eb30479f5a13ac50a90f243f9612ff47c2b9d163cc3a7d2e1015fb3",
+      "reference_sha256": "b9fe2913a4853ea07bf3a0402721d5d78a91dcffd9a7686942b8159b5f25399c",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b18",
+      "stock_sha256": "5a4237b6b3de01a2466a891fb20b551729b2294ec0804a8f38e2df0167764042",
+      "reference_sha256": "04b449eedd2952ad421a492de09bcedd33cd45ca5fa44574446a10bc6eee7cdd",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b19",
+      "stock_sha256": "cc0fbba72cff3dde5aace3447e01a523a2396cff02867c4c86bb12c2fadc94b5",
+      "reference_sha256": "cc0fbba72cff3dde5aace3447e01a523a2396cff02867c4c86bb12c2fadc94b5",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b20",
+      "stock_sha256": "d87195a6c557ee11413101b968aec934dc47da9488f1a7d8365bb004d46271a0",
+      "reference_sha256": "d87195a6c557ee11413101b968aec934dc47da9488f1a7d8365bb004d46271a0",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b21",
+      "stock_sha256": "5e4149b6ccaebca54dba25473487fd66143c15570c3991337c3bc1ffeeec3c1b",
+      "reference_sha256": "5e4149b6ccaebca54dba25473487fd66143c15570c3991337c3bc1ffeeec3c1b",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.b23",
+      "stock_sha256": "503951e84ecdeb9a31513a4883fdbde4589ac3c6428fe544ae8cdfecb96bc3e5",
+      "reference_sha256": "235d8468e0ec60a4c9995376993026c594227da4bdcf94b99cae532e12b631b3",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpi.mdt",
+      "stock_sha256": "d590b6848bd53e75db7983430f08d44f3ed280b7978f547f6b74d49f5d14ebf8",
+      "reference_sha256": "14953b8c1fc3f73d1e8782c9ed8a33c195694d129205640c5d8b7e9a83045b27",
+      "identical": false
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpir.jsn",
+      "stock_sha256": "5e64b59f4fd8428b797ddef315a2b9358a74b11caa62efb5140862ac5525b1c6",
+      "reference_sha256": "5e64b59f4fd8428b797ddef315a2b9358a74b11caa62efb5140862ac5525b1c6",
+      "identical": true
+    },
+    {
+      "image": "modem.img",
+      "path": "/image/slpius.jsn",
+      "stock_sha256": "6a268046f75e29fa5e6723c5d8b1eafc4d2b4254b37f38677f17031fe97f1f72",
+      "reference_sha256": "6a268046f75e29fa5e6723c5d8b1eafc4d2b4254b37f38677f17031fe97f1f72",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/fastrpc_shell_2",
+      "stock_sha256": "e1f9ed34bc34cdb9debb4d28bfe0e9c8f3915f05c890c931e34aaba30a94d04f",
+      "reference_sha256": "e1f9ed34bc34cdb9debb4d28bfe0e9c8f3915f05c890c931e34aaba30a94d04f",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libsns_device_mode_skel.so",
+      "stock_sha256": "e99d8ebe133e85084b4e772443c7838b1f3bca8067fecfcb8381fa7fcc85f307",
+      "reference_sha256": "e99d8ebe133e85084b4e772443c7838b1f3bca8067fecfcb8381fa7fcc85f307",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libsns_direct_channel_skel.so",
+      "stock_sha256": "75e577544e8df5701c0fe3880acadd44033bfeeba2218a7535e5c6e1386fbedb",
+      "reference_sha256": "75e577544e8df5701c0fe3880acadd44033bfeeba2218a7535e5c6e1386fbedb",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libstabilitydomain_skel.so",
+      "stock_sha256": "796fd6ea2d2cabd38e5dc365fa0efa2519c8b293684c10214add010c8e6191f3",
+      "reference_sha256": "796fd6ea2d2cabd38e5dc365fa0efa2519c8b293684c10214add010c8e6191f3",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libsysmon_skel.so",
+      "stock_sha256": "b38870f5a8a18277b6dc46e89a345dfd0f9663933b1ab28261d485aa0e6be3ee",
+      "reference_sha256": "b38870f5a8a18277b6dc46e89a345dfd0f9663933b1ab28261d485aa0e6be3ee",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libsysmondomain_skel.so",
+      "stock_sha256": "1149386a06db8561998fe7f868d77f1d7b68b635e6137fa2b59ee2968244305f",
+      "reference_sha256": "1149386a06db8561998fe7f868d77f1d7b68b635e6137fa2b59ee2968244305f",
+      "identical": true
+    },
+    {
+      "image": "dsp.img",
+      "path": "/sdsp/libsysmonquery_skel.so",
+      "stock_sha256": "fca8d71d9f0523318414cb591c7fb998b433e5958ad01a6c0e99bca3e2012be9",
+      "reference_sha256": "fca8d71d9f0523318414cb591c7fb998b433e5958ad01a6c0e99bca3e2012be9",
+      "identical": true
+    }
+  ]
+}

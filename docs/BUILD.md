@@ -6,6 +6,8 @@ Implemented stages now include [the authenticated 962-package Debian base builde
 
 ## Layout and upstream
 
+[Candidate 03](BOARD-IMAGE.md) assembles the fresh root, initramfs, EFI filesystem and optional test-card image using pinned prebuilt board inputs. QEMU verification covers both the UFS layout and a simulated internal EFI entry loading the root from a second disk. Recompilation of the pinned board components and the actual tablet boot remain separate steps.
+
 `reference/y700-linux/asphalt-debian/` contains kernel/PRC DT, U-Boot, initramfs, EFI and QEMU recipes. `reference/y700-linux/scripts/` and `rootfs-overlay/` contain the Debian base-root builder inputs. Their relative layout is preserved. Host-specific home-directory prefixes are normalized to `/home/builder`; these normalized copies have not rebuilt the physical images.
 
 The pinned Asphalt source belongs at `reference/y700-linux/asphalt-upstream`. `upstream.lock.json` records the URL and exact commit. Fetch it with `bash scripts/fetch-upstream.sh` on a Linux build host; this does not access a tablet. Never silently update the pin.

@@ -26,4 +26,6 @@ PC development on 2026-11-18: the new platform package installs into a disposabl
 
 No claim of complete hardware support, maximum performance, all-day battery life, production readiness or universal Y700 compatibility is made.
 
+Candidate 03 now boots to systemd in the PC EFI tests. The trial entry and test card exercise the same kernel, initramfs and root in a two-disk simulation. The device currently runs the previous baseline. See the [candidate receipts and attended trial](BOARD-IMAGE.md).
+
 The [authenticated Debian snapshot stage](DEBIAN-SNAPSHOT.md) now builds a fresh 962-package ARM64 base without copying the historical root. Integration with 30 repair packages and platform dev2 produced 993 packages and passed the same userspace checks. This historical snapshot requires a security refresh; kernel/image assembly and physical acceptance remain open.

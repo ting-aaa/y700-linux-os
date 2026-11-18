@@ -1,0 +1,43 @@
+# TB320FC_PRC candidate 03
+
+Candidate 03 combines the fresh 993-package Debian ARM64 root with the previously built PRC kernel 7.3.4-asphalt-prc, modules, board DTB, firmware and EFI components. PC verification reached systemd PID 1. Physical candidate acceptance is pending. This build uses pinned prebuilt board components. Rebuilding the kernel and U-Boot from source in a clean environment remains a separate release task.
+
+## Build on a Linux host
+
+Use a native Linux filesystem for the build directories. Install the tools used by the [Debian snapshot build](DEBIAN-SNAPSHOT.md), plus rsync, kmod, cpio, gzip, e2fsprogs, dosfstools, mtools, util-linux (sfdisk with selectable sector size), device-tree-compiler and zstd. Obtain the pinned [Asphalt checkout](PROVENANCE.md), the integrated Debian root, and the private board components described below. Run as root on the build host with uv configured for an installed Python 3.12 or 3.13. Each output directory must be new.
+
+```sh
+bash scripts/build-board-image.sh "$ROOT" "$BOARD" "$PRC_UBOOT" "$BUILD/images"
+bash scripts/build-test-card.sh "$BUILD/images" "$BUILD/card"
+bash scripts/build-trial-entry.sh "$BUILD/card" "$BUILD/entry"
+bash tests/board-image-vm.sh "$BUILD/images" "$BOARD" "$QEMU" "$BUILD/vm-ufs"
+bash tests/board-image-vm.sh "$BUILD/images" "$BOARD" "$QEMU" "$BUILD/vm-split" "$BUILD/card" "$BUILD/entry"
+bash scripts/export-board-image.sh "$BUILD/images" "$BUILD/export" "$BUILD/card" "$BUILD/entry"
+```
+
+`ROOT` is the configured, integrated root produced by the snapshot instructions. `BOARD` contains the original Linux build, modules, BusyBox, board firmware and reviewed loader files. [Board file pins](../config/board-components.sha256) give exact relative paths. The builder also checks the recursive regular-file hash for modules and board firmware, the firmware symlink and the pinned upstream commit for the two ALSA profiles. `PRC_UBOOT` is the 41,406,464-byte PRC Android boot container in the table below. `QEMU` is the extracted x86-64 QEMU system bundle with usr/bin, usr/lib and usr/share. The VM test requires the pinned QEMU-virt U-Boot binary and virtual device tree under `BOARD/efi`. The build uses a fresh filesystem identity each time. The hashes below identify one specific build.
+
+The image builder stages a separate root, omits build SSH keys and runtime state, installs the module/firmware tree, and creates an ext4 image. The generated initramfs validates the board, storage path, requested partition label, ext4 UUID and image identity before switching root. Local development accounts retain the existing console first-boot setup. Private maintenance credentials are provisioned separately. The package snapshot still needs its security refresh before release.
+
+## Candidate files and verification
+
+| Raw artifact | SHA-256 |
+| --- | --- |
+| PRC U-Boot Android container | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
+| UFS EFI FAT image | `c07e112287f56a8b7648365effa8338a9b46731a482b179e7e4a45f0bd2ad382` |
+| 6 GiB ext4 root | `be0c44fcbc1ab22b57ce236e8b23b91b7074b95b70af4f8858edab9e73df280b` |
+| 512-byte-sector GPT test-card image | `1050d221448f16f7e6ac005e885813789df2da07437237b7c2bf073acfeca593` |
+| Candidate initramfs in both entries | `efa0a86d17a1759e4c246fdce596fddd9d4a28ca2fd914f4568873be8c112cb6` |
+
+The packaged Linux DTB matched the PRC identifiers, five measured RAM banks and 38 fixed reservations. ext4 and FAT filesystem checks passed. The FAT readback matched the staged files. Reading the root partition range out of the card image reproduced every byte of the checked ext4 filesystem. The export includes raw-image and compressed-transport manifests. The vendor firmware, roots and images remain local.
+
+The UFS-layout VM used 4096-byte sectors and reached the candidate root on `/dev/vda2`. The two-disk VM started the bootloader from the simulated internal ESP, followed the supplementary EFI entry and mounted `/dev/vdb2` as root and `/dev/vdb1` at `/boot`. Its card copy had the fallback EFI loader removed to exclude booting the wrong disk. Guest checks matched the exact filesystem UUID, candidate identity, ARM64 kernel release, 993 installed packages, clean dpkg audit and systemd PID 1. The test harness changes the virtual DT, serial/diagnostic boot options and test ESP contents on private copies. The root filesystem, Linux kernel and candidate initramfs are the delivered bytes. This covers EFI and Debian userspace in QEMU; the Qualcomm UFS/SD hardware, ABL handoff and real desktop require the tablet.
+
+## Attended tablet gate
+
+The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
+
+1. With the owner present, identify a **separately authorized expendable card** of at least 7,519,338,496 bytes (7171 MiB) and confirm the intended reader and card. Prepare that card on the PC and verify the written image range against the raw SHA-256. Arrange local input for the console password setup and a known recovery route before restarting.
+2. Review the four files listed in the trial-entry manifest and check available ESP space, the existing default, and destination collisions again. During the authorized trial, add the three payloads under `EFI/y700-test/` and one `loader/entries/y700-test.conf` on the internal ESP. Read back all four hashes. Keep the original boot entries, U-Boot container and slot selection. The test kernel will use the uniquely identified card root and mount its corresponding FAT partition at `/boot`.
+3. During the approved reboot select **Y700 candidate (microSD)** manually for this boot. Record the entry actually selected, local display, time to first console and desktop. On the tablet run `sh verify-physical-boot.sh UUID` from [the verification script](../tests/verify-physical-boot.sh) with the UUID in the export's `identity.txt`. Retain the PASS line, kernel, root and ESP evidence. Then exercise basic input and maintenance only as separately provisioned. Record any failures and the recovery result.
+4. Return through the known internal Debian entry under supervision and verify the original image identity and maintenance channel. Remove only the four trial files after their identity is confirmed. An inability to select the trial, a black screen or loss of access ends the trial pending recovery. Candidate acceptance requires actual boot evidence and successful return to the working baseline.

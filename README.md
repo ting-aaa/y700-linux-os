@@ -39,6 +39,8 @@
 
 Python 使用 `uv` 管理。Windows 用于设备连接与仓库管理，Linux/WSL 用于 ARM64 构建。先阅读 [AGENTS.md](AGENTS.md)、[状态表](docs/STATUS.md) 和 [产品计划](docs/PRODUCT.md)。
 
+[候选镜像 03](docs/BOARD-IMAGE.md) 已在电脑上从 EFI 启动到 systemd，核对了实际挂载的根分区和全部 993 个软件包。独立测试卡和临时 EFI 入口已通过双盘模拟。候选镜像仍须在 TB320FC_PRC 实机启动并验证能回到原系统。
+
 ```sh
 uv run --python 3.13 --no-project python scripts/check-public-tree.py
 ```
