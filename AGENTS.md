@@ -7,6 +7,7 @@
 - Treat the reference build recipes as historical experimental inputs. Integrate and validate them before using them as a release pipeline.
 - Keep secrets, raw device captures, serials, personal network details, user backups and proprietary firmware blobs out of commits and public issues. Publish reduced evidence, provenance, checksums and source instructions instead.
 - Prefer reusable configuration/packages and reversible updates over one-off commands. Every device modification needs a rollback path and versioned evidence.
+- For package-only work, apply the reviewed package directly to the connected Debian tablet, verify the affected package and running services there, and keep image inputs in sync. A separate image boot or image regression run is not a gate for package-only changes.
 - Do not change GPT, Android boot partitions, bootloader, kernel/initramfs or default boot selection without a verified recovery path and an appropriate attended test window. Do not auto-reboot when the owner cannot operate the tablet.
 - While the owner is away, prioritize PC builds, static analysis, QEMU, read-only remote diagnostics and reversible userspace fixes that preserve the known working USB channel. A disconnected device is a reason to continue PC work, not to keep interrupting the owner.
 - Do not enable the known failing GPU workload unattended. Software rendering is a workaround, not GPU acceptance.

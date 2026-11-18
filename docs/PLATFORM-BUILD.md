@@ -1,6 +1,12 @@
 # Repaired desktop integration milestone
 
-This builds an experimental Debian integration package and applies it to a **disposable ARM64 root directory on a Linux build host**. It does not deploy to a tablet, produce a bootable release, or finalize credentials. Do not install this development package over the currently working tablet.
+The offline integration procedure below targets a disposable ARM64 root directory. For package-only changes, install the reviewed package on the connected Debian tablet and carry the same package into the image inputs. The physical package check is sufficient for that change; building or booting the whole image is a separate task.
+
+## Connected tablet package check, 2026-11-18
+
+The installed tablet matched all 30 repair package versions. An APT simulation selected only `y700-platform 0.1.0~dev2`. The installed archive matched the candidate 03 package SHA-256, `25519c8c72ed762e68765378372c127b9252f04eaf30d20b3281a09b490f6972`. Before installation we checked package file ownership, archived the existing Chromium policy and the two known user autostart entries, and prepared an uninstall-and-restore script under `/var/backups/y700-platform-live/`. The package provides matching keyboard and touch startup entries for the next login. Chromium kept the same GPU option.
+
+On the tablet, package integrity, dpkg audit and APT dependency checks passed. A fresh SSH connection succeeded. The boot ID and existing SSH, USB and LightDM service invocations matched their pre-install values. The live Xfce session reported a 64-pixel panel, 40-pixel icons, compositing disabled, one Onboard process with automatic show enabled and portrait/landscape dock heights of 520/420. X11 recognized the touchscreen. The existing maintenance configuration continued to serve the connection. These observations cover the running session; the new autostart entries take effect on a future login.
 
 ## Package build and checks
 

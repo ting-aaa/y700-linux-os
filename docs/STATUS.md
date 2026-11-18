@@ -22,10 +22,12 @@ Baseline date: 2026-11-18. Scope: one TB320FC_PRC, 16 GiB RAM, 512 GB storage, o
 
 The current display helper follows a display rotation chosen in Xfce; it is not accelerometer-based autorotation. Its autostart and saved landscape profile were configured but not re-tested across a new login/reboot in the baseline session.
 
-PC development on 2026-11-18: the new platform package installs into a disposable ARM64 root and passes dependency, SSH configuration, unit and keyboard-setting checks. Sensor registry builds match across two runs; an opt-in observation-first X11 rotation bridge passes policy tests. None has been deployed to this tablet. Fresh read-only sensor inspection found SLPI offline and its firmware/SSC stack missing; exact IMU identity remains unconfirmed. See [platform build](PLATFORM-BUILD.md), [GPU investigation](GPU-INVESTIGATION.md) and [component map](HARDWARE-MAP.md).
+PC development on 2026-11-18: the platform package passed dependency, SSH configuration, unit and keyboard-setting checks in a disposable ARM64 root. Sensor registry builds matched across two runs; an opt-in X11 rotation bridge passed policy tests. Both sensor components remain PC-only. Read-only sensor inspection found SLPI offline and its firmware/SSC stack missing; exact IMU identity remains unconfirmed. See [platform build](PLATFORM-BUILD.md), [GPU investigation](GPU-INVESTIGATION.md) and [component map](HARDWARE-MAP.md).
 
 No claim of complete hardware support, maximum performance, all-day battery life, production readiness or universal Y700 compatibility is made.
 
 Candidate 03 now boots to systemd in the PC EFI tests. The trial entry and test card exercise the same kernel, initramfs and root in a two-disk simulation. The device currently runs the previous baseline. See the [candidate receipts and attended trial](BOARD-IMAGE.md).
+
+The existing tablet installation now also has the candidate's `y700-platform 0.1.0~dev2`. All 30 repair package versions already matched the image inputs. The [online installation receipt](PLATFORM-BUILD.md#connected-tablet-package-check-2026-11-18) records exact package and live session checks. Future package changes use this device-level check with image inputs following the package.
 
 The [authenticated Debian snapshot stage](DEBIAN-SNAPSHOT.md) now builds a fresh 962-package ARM64 base without copying the historical root. Integration with 30 repair packages and platform dev2 produced 993 packages and passed the same userspace checks. This historical snapshot requires a security refresh; kernel/image assembly and physical acceptance remain open.
