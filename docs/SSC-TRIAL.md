@@ -1,10 +1,16 @@
-# Attended first SLPI trial
+# Bounded SLPI trials
 
 `trial-ssc.sh` defaults to read-only preflight. It targets the original `7.3.4-asphalt-prc` kernel and the PRC Y700 device tree. An offline SLPI, a running ADSP, inactive SSC services and a board firmware directory without SLPI firmware are required. Plan the first start when the owner can operate the tablet. The owner can also explicitly authorize a remote start while accepting that recovery may later require local intervention. Wait for one of those decisions before issuing `--trial`. Keep the usual USB recovery route available.
 
-## Recorded physical attempt
+## First physical start
 
 One authorized start on the test tablet brought SLPI online, bound the Qualcomm FastRPC RPMSG channel over GLINK and exposed `/dev/fastrpc-sdsp`. `sdsprpcd` then logged an internal domain-2 retry at 100 ms, opened the listener and read the board sensor configuration and private registry. This retry was inside the listener process. The kernel saw one SLPI power-on and one stop. The original coordinator reported no accepted accelerometer sample about 0.29 seconds after SLPI came up, while registry opens were still in progress. The original collector output and return code were lost during runtime cleanup, so the exact failure at the QMI or sensor layer is unknown. The controller released SLPI, ADSP stayed running and the original boot, USB SSH, service invocations and persistent firmware search path were verified. That authorization covered the recorded start only.
+
+## Second physical start
+
+On November 19, the owner authorized a second single activation of the same PRC tablet. The QRTR baseline contained no sensor service. Relative to the kernel power-up message, SLPI reported up after 273 ms, the protection domain reported UP after 318 ms, and the coordinator observed service 400, instance 1, after 573 ms. Debian's installed `ssccli` opened the accelerometer, returned 78 finite three-axis readings, disabled its subscription and exited successfully. The first vector was (−3.201345, 0.311545, 9.086595) m/s², with magnitude 9.6391 m/s². The trial included no calibration reference or orientation changes.
+
+The kernel recorded one power-up and one stop 3.880 seconds apart. PID 1 finished cleanup. A fresh USB SSH connection verified the original boot and SSH, LightDM and Bluetooth service invocations, ADSP running, SLPI offline, no SDSP device and no temporary mounts. The persistent SLPI firmware path was absent. The remaining sensor channels, desktop rotation and suspend/resume await physical qualification.
 
 ## Prepare and inspect
 
@@ -42,4 +48,4 @@ A Qualcomm firmware fault can interrupt the kernel or USB transport. A postmarke
 
 ## Host checks
 
-`bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. In the ARM64 QRTR guest, the nameservice gate rejected a missing or already-present service and admitted a delayed mock registration. The installed `ssccli 0.4.4` registered an SSC client, subscribed, emitted finite UTF-8 accelerometer rows and requested unsubscription. Reproduce with the existing native libssc test payload, placing the scripts in `/opt/ssc-test/scripts` and `/opt/ssc-test/tests`, and running `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture`. The revised coordinator still needs a separately authorized physical sample check.
+`bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. In the ARM64 QRTR guest, the nameservice gate rejected a missing or already-present service and admitted a delayed mock registration. The installed `ssccli 0.4.4` registered an SSC client, subscribed, emitted finite UTF-8 accelerometer rows and requested unsubscription. Reproduce with the existing native libssc test payload, placing the scripts in `/opt/ssc-test/scripts` and `/opt/ssc-test/tests`, and running `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture`.
