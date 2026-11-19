@@ -37,6 +37,7 @@ done
 printf 'Synthetic qcam fixture\n' > "$bundle/$qcam"
 printf 'Synthetic Blueman fixture\n' > "$bundle/$blueman"
 printf 'Synthetic offline IME fixture\n' > "$bundle/chinese-ime.tar"
+printf 'Synthetic Xorg DSI fixture\n' > "$bundle/xorg-dsi.tar"
 printf 'Synthetic bootloader fixture\n' > "$base/asphalt-prc-u-boot.img.zst"
 printf 'Synthetic ESP fixture\n' > "$base/linux-boot.fat.zst"
 printf 'Synthetic identity fixture\n' > "$bundle/identity.txt"
@@ -84,6 +85,14 @@ reject() {
     check_rolled_back
 }
 
+manifest dev10 "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
+unpack --verify >/dev/null
+printf 'Corrupt panel archive\n' >> "$bundle/xorg-dsi.tar"
+reject 'xorg-dsi.tar: FAILED' --verify
+manifest dev10 "$qcam" "$blueman" xorg-dsi.tar
+reject 'Unsupported update manifest' --verify
+manifest dev9 "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
+reject 'Unsupported update manifest' --verify
 manifest dev10 "$qcam" "$blueman" chinese-ime.tar
 unpack --verify >/dev/null
 manifest dev10 "$qcam" "$blueman"
@@ -210,4 +219,4 @@ debugfs -w -R 'symlink /etc/y700 /lost+found' "$base/root.ext4.zst" >> "$work/de
 manifest dev9 "$qcam"
 reject 'Unexpected directory metadata' --bluetooth-address "$seed" "$work/rejected"
 unpack --verify >/dev/null
-echo 'Personalized ext4, rollback, and all six portable manifest layouts passed'
+echo 'Personalized ext4, rollback, and all seven portable manifest layouts passed'
