@@ -190,6 +190,19 @@ An isolated ARM64 QEMU guest booted a disposable snapshot of the verified root. 
 
 With framebuffer emulation disabled and `/dev/fb0` absent, the packaged KMS first-boot screen accepted virtual touchscreen input. Mismatched password entries kept the account locked. Matching entries enrolled `y700`, and PAM accepted the enrolled password and rejected an incorrect one. Touch input through the Arctica login keyboard opened an active X11 Xfce session under LightDM. The guest reached `graphical.target`, returned to the greeter after a touch logout, then powered off cleanly. The private logs and checksums are in `out/dev9-qcam2-efi-verified/`. The exact image still awaits a physical tablet boot.
 
+### Dev9 image with the Bluetooth keyboard fix
+
+The private `out/combined-kms-dev9-bluetooth` bundle adds Blueman `2.4.4-1+y7001` to the dev9/qcam y7002 image. A native ARM64 transaction updated just that package. It retained the locked initial account, empty per-unit Bluetooth identity and SSC state. The build verifies the original Debian package version, the local replacement archive and all 1,096 installed tuples. The exact generic root booted through ARM64 EFI, completed touchscreen password enrollment and normal LightDM login into Xfce, returned to the greeter on logout, and shut down. Physical boot of this complete image remains open. [Blueman fix and UI checks](BLUEMAN-PAIRING.md) · [Bluetooth input and reconnect](BLUETOOTH-VIRTUAL.md)
+
+| Dev9 Bluetooth build | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `1cfb405a35e6d8f35e01e024fe2c3ec61fda92e6349eed2e84b93cb15c24ad71` |
+| Portable `dev9.qcow2`, 57,868,288 bytes | `27f5744161089dfd289acafd07f800e70c6a96cd75798623a4bcc50ff51b7973` |
+| Generic 6 GiB `root.ext4` | `1a8e1e59784c6a49af077734f6faf4b650fee946528829b97d3acdd5f912d74a` |
+| Installed package tuples | `30d7528eec91092312056cc02170fdf74b009749291827e3e767d3427be8f1c5` |
+
+Use the included `prepare-bluetooth-identity.py` and `unpack.sh --bluetooth-address PRIVATE_FILE NEW_DIRECTORY` to provision one tablet while extracting the image. To rebuild this package layer, provide only the reviewed local Blueman archive in a directory and run `bash scripts/add-board-layer.sh blueman "$root" "$blueman_archives"` in the disposable ARM64 build environment. The public source lock identifies the authenticated Debian parent and versioned replacement. [Prepare the address](PERIPHERALS.md#prepare-a-fresh-installation) · [Package lock](../config/blueman.lock.json)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

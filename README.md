@@ -27,10 +27,10 @@
 - **锁定屏幕方向**　「设置 → 平板屏幕旋转」可保存当前用户的偏好，默认锁定当前方向。实机在一次 5.018 秒的传感器 DSP 启停中读到了加速度、角速度、磁场、环境光、接近、罗盘和保护套霍尔。四个方向的自动旋转、触点对齐和开合盖响应仍待实测。[七通道读数](docs/SSC-TRIAL.md#seven-channel-physical-survey) · [桌面旋转](docs/CAMERA-SENSORS.md#xfce-screen-rotation)
 - **保留本机传感器校准**　SSC 0.1.1 首次初始化时，从这台平板的内部 UFS 只读导入出厂校准。本机实测合并得到 375 组配置，重复初始化保留了已有状态。通用镜像随附板级默认值，每台平板在本地完成导入。[校准来源与验证](docs/SSC-CALIBRATION.md)
 - **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。实机普通用户的菜单里显示了当前网络和另外 6 个可用网络。「Network Connections」（网络连接）列出 2 个已保存配置。实机测试保留了当前连接，独立 ARM64 测试通过菜单选择网络并取得 DHCP 地址。[选网验证](docs/WIFI-CHOOSER.md)
-- **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 管理器选择设备。实机已通过无线链路连上电脑模拟的标准蓝牙键鼠，识别了两种输入报告，并进入数字确认。实际按键、指针、滚轮和绑定后重连仍待真实配件验证。[实机配对记录](docs/BLUETOOTH-HID-RADIO.md)
+- **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 管理器选择设备。键盘要求输入配对码时，在键盘上键入平板显示的六位数字。Blueman y7001 已修复输完最后一位时界面报错的问题。实机已识别无线键鼠报告，隔离桌面验证了码值显示及确认按钮。低功耗和经典蓝牙的键鼠输入与重连通过了原生 ARM64 虚拟设备测试，实际配件仍待上手验证。[实机无线](docs/BLUETOOTH-HID-RADIO.md) · [配对界面](docs/BLUEMAN-PAIRING.md) · [输入与重连](docs/BLUETOOTH-VIRTUAL.md)
 - **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
-最新国行 KMS 开发镜像使用 Debian 13 ARM64、dev9 平板组件和 qcam y7002，包含 1,096 个软件包。组合镜像集成首次设密屏幕键盘、三摄 PipeWire 接口、Chromium 摄像头授权、SSC 0.1.1 本机校准导入，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。开发包已离线解包并核验根分区、EFI 和 U-Boot。现有平板已单独升级桌面与相机应用，整个新镜像仍待上板启动。新设备需单独配置蓝牙地址。[镜像组成与校验值](docs/BOARD-IMAGE.md#dev9-image-with-the-scaled-qcam-chooser) · [屏幕键盘验证](docs/PLATFORM-BUILD.md) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
+最新国行 KMS 开发镜像使用 Debian 13 ARM64、dev9 平板组件、qcam y7002 和 Blueman y7001，包含 1,096 个软件包。组合镜像集成首次设密屏幕键盘、三摄 PipeWire 接口、Chromium 摄像头授权、SSC 0.1.1 本机校准导入，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。现有平板已单独升级桌面、相机及蓝牙应用，整个新镜像仍待上板启动。[镜像组成与校验值](docs/BOARD-IMAGE.md#dev9-image-with-the-bluetooth-keyboard-fix) · [屏幕键盘验证](docs/PLATFORM-BUILD.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
 ## 仓库内容
 
