@@ -34,3 +34,11 @@ sudo bash tests/blueman-pairing/run-arm64.sh \
 ```
 
 The fixture isolates the desktop agent from host hardware and uses synthetic pairing requests and pointer clicks. The passkey flow now has an ARM64 userspace regression test. The tablet's digitizer, Bluetooth bonding and reconnect with a physical keyboard or mouse need their own checks. [Physical radio evidence](BLUETOOTH-HID-RADIO.md)
+
+## Installed tablet software check
+
+On 2026-11-19 the installed `2.4.4-1+y7001` package passed the same test through USB SSH on the TB320FC_PRC. The test ran the packaged applet as `y700` inside private mount, network and PID namespaces. It used a read-only view of the installed system, private display and D-Bus sessions, and a synthetic BlueZ service. The test could only see its temporary home and Bluetooth state. The active desktop kept running.
+
+At 200% Xfce scaling on the private 2560×1600 display, the built-in GTK dialog's Confirm and Deny buttons measured 708×84 and 706×84 pixels. Both pointer clicks returned the expected replies. The applet registered `KeyboardDisplay`, displayed the matching code at 0, 3 and 6 digits entered, and dismissed the final dialog on `Cancel`. The installed package file check was clean.
+
+The boot, Bluetooth, SSH and LightDM service invocations, active seat, desktop processes and host mounts matched before and after. No test process or staging directory remained. This establishes the installed ARM64 software path with synthetic events. Glass input, over-the-air pairing and input from a physical accessory remain separate checks. [Probe](../tests/blueman-pairing/probe.py)
