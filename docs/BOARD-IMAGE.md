@@ -24,6 +24,8 @@ The image builder stages a separate root, omits build SSH keys and runtime state
 
 ## Candidate files and verification
 
+The standard four-argument build uses the pinned original PRC kernel. To assemble a private image with the GPU queue fix, append `--gmu-queue-kernel "$kernel_build"` to that build command. This selects the independently built `Image` and checks its ELF notes against the [kernel input hashes](../config/gmu-queue-kernel.sha256). The companion GPU build applies `asphalt-hfi-match-queued-vote.patch` (SHA-256 `3a30e92a15e858e2238ded2e3cf7e12e462f503be2e50cef967fc87bd9f730fe`) to the checked PRC sources and compares the configuration, kernel release and exported module symbols with the baseline. Both builds use the same release string. The VM and physical checks compare `/sys/kernel/notes` for images selecting this candidate. The separate tablet GPU run with the exact kernel completed 1,800.26 seconds of FD730 OpenGL work. That run used the previous installed root filesystem.
+
 | Raw artifact | SHA-256 |
 | --- | --- |
 | PRC U-Boot Android container | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
@@ -45,6 +47,30 @@ The tested platform archive was built with `SOURCE_DATE_EPOCH=1794969749`. Its S
 The ARM64 root with the 963-package base and 30 locked repair archives was upgraded to `y700-platform 0.1.0~dev5`. The built image `y700-prc-0c54370f-aae7-4020-957e-192dbdba9108` passed ext4 and FAT checks. Direct inspection of the ext4 image confirmed the packaged Bluetooth helper and the enablement link under `bluetooth.service.wants`. The per-device address file must be provisioned on the installed device.
 
 The 4096-byte-sector QEMU test reached systemd PID 1 via EFI with the root on `/dev/vda2` and ESP on `/dev/vda1`. The guest verified all 994 installed package tuples against `b1231983bf8ad6a3dc39075f28f87202d3321a736b13883943024c5c613e6ae7` and reported a clean dpkg audit. The dev5 check covers the UFS-layout VM. Physical boot, the separate card workflow and Bluetooth HID acceptance have their own tests.
+
+## Combined tablet development image
+
+This private build uses the queue-fix kernel, dev6 platform package, camera runtime, CN350 SSC firmware and listener, framebuffer enrollment keyboard, and Arctica greeter. The desktop account starts locked. Initial enrollment uses the local password flow. Each tablet needs its own Bluetooth address and maintenance credentials.
+
+```sh
+bash scripts/integrate-rootfs.sh "$ROOT" "$REPAIR" "$PLATFORM" "$CAMERA_DEBS"
+bash scripts/add-board-layer.sh firstboot-touch "$ROOT" "$ENROLLMENT_DEBS"
+bash scripts/add-board-layer.sh ssc "$ROOT" "$SSC_DEBS"
+bash scripts/add-board-layer.sh warm-greeter "$ROOT" "$GREETER_DEBS"
+bash scripts/build-board-image.sh "$ROOT" "$BOARD" "$PRC_UBOOT" "$DEST" --gmu-queue-kernel "$GPU_BUILD"
+bash tests/board-image-vm.sh "$DEST" "$BOARD" "$QEMU" "$NEW_VM_DIRECTORY"
+```
+
+`ROOT` is a disposable, configured ARM64 build root. The archive directories contain only the locked Debian and board-specific packages for their layer. The 1,050 installed package/version/architecture tuples have SHA-256 `678305b67362a95128af32e67af11e1cce0da48f119729219e46d20c169f6602`. The dev6 platform archive SHA-256 is `3798581f2b8e12158385c1712d38620c74db69e0830f7e2953e5cd4eabee54c2` with `SOURCE_DATE_EPOCH=1794969749`. This build contains private board firmware. Tablet boot, sensor readings, and sustained workloads on this particular root filesystem require physical testing.
+
+The resulting image ID is `y700-prc-5a984d0e-d1eb-4760-9120-1115d9ac41b5`. Readback from ext4 verified the matching CN350 SLPI metadata, camera runtime, enrollment keyboard, greeter configuration, Bluetooth helper and SSC listener. Readback from FAT matched the selected kernel. The 4 KiB-sector ARM64 EFI guest reached systemd with `/dev/vda2` as root and `/dev/vda1` as ESP. It verified the actual kernel notes and all 1,050 package tuples.
+
+| Combined image artifact | SHA-256 |
+| --- | --- |
+| `root.ext4` | `9d8b4f486a94e4fc28aabeaa0842eb77e1ae533a95a9b6203be44a290929ee55` |
+| `linux-boot.fat` | `4e8212be559b57e94daad71a192f0bc87dde67730aaf96563ad3a6059d9f9831` |
+| `asphalt-prc-u-boot.img` | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
+| `identity.txt` | `c29f005148c77f784e699d0074a2340a7b869bec231cc162f5a0852c95c31140` |
 
 ## Attended candidate 03 tablet gate
 

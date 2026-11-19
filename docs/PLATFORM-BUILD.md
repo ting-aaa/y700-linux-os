@@ -30,11 +30,13 @@ The launcher writes the current user's `xsettings:/Gdk/WindowScalingFactor` when
 
 In a disposable Debian 13 ARM64 root with Xfce 4.20.1, X11 clicks through the installed launcher changed the scale from 1× to 2× and back in both 1600×2560 and 2560×1600 sessions. Thunar's window went from 640 to 1280 and back to 640 pixels in each run. To reproduce, install the package with Xvfb and xdotool in a disposable desktop environment and run `bash tests/tablet-scale-x11.sh` and `bash tests/tablet-scale-x11.sh 2560x1600`. Chromium, Onboard and touch usability on the physical tablet remain to be tested.
 
+The optional warm-greeter layer adds an on-screen keyboard to ordinary LightDM sign-in. [Build and VM verification](WARM-GREETER.md)
+
 ## Bluetooth controller address
 
 Version `0.1.0~dev5` supplies the controller's original public address from `/etc/y700/bluetooth-address` when BlueZ reports it missing on Asphalt's WCN6855 Bluetooth controller. The helper needs a root-owned private address file. The unit runs before BlueZ and the built image expects per-device provisioning after installation.
 
-BlueZ can exit on stdin EOF even when given a command. The helper keeps stdin open for its short management command timeout and checks the controller's reported address after programming. Run `sudo bash tests/bluetooth-identity.sh` on a usr-merged Linux host with bubblewrap to exercise the board match, file permissions, noninteractive command path, handling of existing addresses and failed readback in an isolated fixture. Physical discovery and HID acceptance have separate checks. [Bluetooth notes](PERIPHERALS.md)
+BlueZ can exit on stdin EOF even when given a command. The helper keeps stdin open for its short management command timeout. The kernel acknowledges the address command before its worker programs the controller. The follow-up to dev5 sends one write command and polls `info` for confirmation within a bounded retry budget. Run `sudo bash tests/bluetooth-identity.sh` on a usr-merged Linux host with bubblewrap to exercise the board match, file permissions, noninteractive command path, handling of existing addresses, delayed confirmation and failure after exhausted retries in an isolated fixture. Physical discovery and HID acceptance have separate checks. [Bluetooth notes](PERIPHERALS.md) [Linux `set_public_address`](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/net/bluetooth/mgmt.c?h=v7.3.4#n8376) [HCI configuration worker](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/net/bluetooth/hci_sync.c?h=v7.3.4#n5352)
 
 ## Locked repair archives and offline integration
 
@@ -73,7 +75,7 @@ The documentation addresses above are examples. Choose a dedicated USB subnet th
 | Kernel/DT/initramfs | Historical pinned recipe; no new kernel/image rebuilt by this milestone |
 | Board firmware | Local provenance retained; missing sensor firmware and redistribution review remain |
 | Boot-success marking | Existing board lifecycle is not modified by this package; no new slot-success writer is introduced |
-| First-boot UX | Historical console password setup remains; touch-only graphical enrollment/login is not implemented |
+| First-boot UX | The optional framebuffer keyboard passed touchscreen-only enrollment through `passwd` and PAM in an ARM64 VM. The optional Arctica greeter passed password entry and logout using its embedded keyboard. Physical touch alignment, readable controls and the transition between both screens remain open. [First local password](FIRSTBOOT-TOUCH.md) |
 | Image identity finalization | Remove build host keys, machine ID, cached credentials and private logs; provision a new user/identity before any distribution |
 | Saved rotation | Current left rotation was physically accepted; package follows chosen Xfce rotation and does not force a direction |
 | Runtime | New login/cold boot, Onboard auto-show, newly provisioned USB identity and actual SSH authentication require attended tests |

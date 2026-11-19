@@ -21,11 +21,24 @@ read -rt 0.1 ignored || status=$?
 [[ $status -gt 128 ]]
 printf '%s\n' "$3" >> /state/calls
 case "$3" in
-    info) printf '  addr %s version 11\n' "$(cat /state/current)" ;;
+    info)
+        if [[ -e /state/pending ]]; then
+            if [[ -e /state/first-readback ]]; then
+                mv /state/pending /state/current
+            else
+                touch /state/first-readback
+            fi
+        fi
+        printf '  addr %s version 11\n' "$(cat /state/current)"
+        ;;
     config) printf '  missing options: public-address\n' ;;
     public-addr)
         test "$4" = "$(cat /state/address)"
-        if [[ ! -e /state/refuse-confirmation ]]; then printf '%s\n' "$4" > /state/current; fi
+        if [[ -e /state/delay-confirmation ]]; then
+            printf '%s\n' "$4" > /state/pending
+        elif [[ ! -e /state/refuse-confirmation ]]; then
+            printf '%s\n' "$4" > /state/current
+        fi
         ;;
     *) exit 2 ;;
 esac
@@ -69,11 +82,20 @@ test "$(cat "$temp/state/calls")" = "$(printf 'info\nconfig\npublic-addr\ninfo')
 
 : > "$temp/state/calls"
 printf '00:00:00:00:00:00\n' > "$temp/state/current"
+touch "$temp/state/delay-confirmation"
+run_helper
+test "$(cat "$temp/state/current")" = "$(cat "$temp/state/address")"
+test "$(cat "$temp/state/calls")" = "$(printf 'info\nconfig\npublic-addr\ninfo\ninfo')"
+rm -- "$temp/state/delay-confirmation"
+
+: > "$temp/state/calls"
+printf '00:00:00:00:00:00\n' > "$temp/state/current"
 touch "$temp/state/refuse-confirmation"
 if run_helper > "$temp/failure.log" 2>&1; then
     echo 'An unconfirmed public address was reported as installed.' >&2
     exit 1
 fi
 grep -Fq 'public address was not confirmed' "$temp/failure.log"
-test "$(cat "$temp/state/calls")" = "$(printf 'info\nconfig\npublic-addr\ninfo')"
-echo 'PASS: Bluetooth board gate, private address file, silent non-EOF stdin, provision/readback and rejection.'
+test "$(grep -xc public-addr "$temp/state/calls")" = 1
+test "$(grep -xc info "$temp/state/calls")" = 11
+echo 'PASS: Bluetooth board gate, private address file, silent non-EOF stdin, immediate and delayed readback, and bounded rejection.'

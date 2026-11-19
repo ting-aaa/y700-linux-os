@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "scope": "optional-tty1-firstboot-touch",
+  "sources": {
+    "buffybox": "Debian signed sid Sources, 3.5.1+dfsg-2",
+    "libinih1": "https://deb.debian.org/debian/pool/main/libi/libinih/libinih1_59-1_arm64.deb",
+    "trixie_inrelease_sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+    "trixie_packages_sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+    "sid_inrelease_sha256": "2bc6738b18c6beba9f8a76345e32386e74d52fda8d4f242611761b5b6df76b0c",
+    "sid_sources_sha256": "4f19600534f65d09e1d5459f9394c7595eb5c85f5bf77ea77acf9314b35daa02",
+    "archive_keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017"
+  },
+  "packages": [
+    {
+      "package": "libinih1",
+      "version": "59-1",
+      "architecture": "arm64",
+      "size": 6932,
+      "sha256": "fcbc936af8fdd3db56b2a8fc4891b27955ce48c7639cbd6905fd292ae20061fa"
+    },
+    {
+      "package": "y700-firstboot-touch",
+      "version": "3.5.1+dfsg-2~bpo13+1.y7001",
+      "architecture": "arm64",
+      "size": 242768,
+      "sha256": "292bb3802a608b2d579e9320a92c8e763e5ac29c069cee2b152a4dbbe48babb2"
+    }
+  ]
+}

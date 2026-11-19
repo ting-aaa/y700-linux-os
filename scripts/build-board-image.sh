@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Linux root, private build host, regular output files only.
 set -euo pipefail
-if (( $# != 4 )); then
-    echo 'Usage: build-board-image.sh INTEGRATED_ROOT BOARD_DIRECTORY PRC_BOOT NEW_OUTPUT_DIRECTORY' >&2
+if (( $# != 4 )) && { (( $# != 6 )) || [[ $5 != --gmu-queue-kernel ]]; }; then
+    echo 'Usage: build-board-image.sh INTEGRATED_ROOT BOARD_DIRECTORY PRC_BOOT NEW_OUTPUT_DIRECTORY [--gmu-queue-kernel DIRECTORY]' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -10,6 +10,14 @@ base=$(realpath -e "${1:?integrated Debian root}")
 board=$(realpath -e "${2:?board component directory}")
 boot=$(realpath -e "${3:?PRC U-Boot Android container}")
 out=$(realpath -m "${4:?new dedicated output directory}")
+kernel=$board/linux-7.3.4/arch/arm64/boot/Image
+notes_digest=
+if (( $# == 6 )); then
+    candidate=$(realpath -e -- "$6")
+    (cd "$candidate"; sha256sum --quiet -c "$repo/config/gmu-queue-kernel.sha256")
+    kernel=$candidate/Image
+    notes_digest=$(awk '$2=="notes" {print $1}' "$repo/config/gmu-queue-kernel.sha256")
+fi
 test "$(id -u)" = 0
 test "$base" != /
 test -f "$base/.y700-base-packages-complete"
@@ -47,7 +55,7 @@ rsync -aHAX --numeric-ids --one-file-system --exclude='/run/*' --exclude='/tmp/*
     --exclude='/var/log/*' --exclude='/root/.config' --exclude='.ssh' --exclude='/etc/ssh/ssh_host_*' \
     --exclude='/var/lib/systemd/random-seed' --exclude='/var/lib/systemd/credential.secret' \
     --exclude='/var/lib/y700/ssh' --exclude='/var/lib/bluetooth/*' \
-    --exclude='/etc/y700/bluetooth-address' --exclude='/.y700-*' "$base/" stage/
+    --exclude='/var/lib/y700-ssc/*' --exclude='/etc/y700/bluetooth-address' --exclude='/.y700-*' "$base/" stage/
 chmod 755 stage
 for secret in stage/etc/y700/maintenance* stage/etc/y700/bluetooth-address stage/root/.ssh stage/etc/NetworkManager/system-connections/*; do
     test ! -e "$secret"
@@ -84,7 +92,10 @@ grep -Fq "${uuid//-/}" initrd/init
 grep -Fq "$imageid" initrd/init
 chmod 755 initrd/init
 (cd initrd && find . -print0 | LC_ALL=C sort -z | cpio --quiet --null -o -H newc --owner 0:0 | gzip -n -2) > esp/EFI/debian/initrd
-install -m644 "$board/linux-7.3.4/arch/arm64/boot/Image" esp/EFI/debian/kernel.efi
+install -m644 "$kernel" esp/EFI/debian/kernel.efi
+if [[ -n $notes_digest ]]; then
+    test "$(sha256sum esp/EFI/debian/kernel.efi | cut -d' ' -f1)" = "$(awk '$2=="Image" {print $1}' "$repo/config/gmu-queue-kernel.sha256")"
+fi
 install -m644 "$dtb" esp/EFI/debian/board.dtb
 install -m644 "$board/efi/esp/EFI/BOOT/BOOTAA64.EFI" esp/EFI/BOOT/
 for name in charger mobile-boot-action; do install -m644 "$board/efi/esp/EFI/android-devices/$name.efi" esp/EFI/android-devices/; done
@@ -99,5 +110,6 @@ mkdir esp-readback
 mcopy -s -i linux-boot.fat ::/EFI ::/loader esp-readback/
 diff -qr esp esp-readback
 printf 'image_id=%s\nroot_uuid=%s\n%s\n' "$imageid" "$uuid" "$package_receipt" > identity.txt
+if [[ -n $notes_digest ]]; then printf 'kernel_notes_sha256=%s\n' "$notes_digest" >> identity.txt; fi
 sha256sum asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt > SHA256SUMS
 echo 'Candidate files built and read back.'

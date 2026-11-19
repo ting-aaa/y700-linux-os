@@ -18,10 +18,24 @@ address=${address^^}
 [[ $address != 00:00:00:00:00:00 && $address != FF:FF:FF:FF:FF:FF ]] || fail 'invalid public address'
 
 management() {
+    local budget=$1
+    shift
     # BlueZ's management CLI exits on stdin EOF even with a command argument.
-    timeout 2s btmgmt --index "$index" "$@" < <(sleep 2) 2>/dev/null
+    timeout "$budget" btmgmt --index "$index" "$@" < <(sleep 2) 2>/dev/null
 }
-configured_address() { management info | awk '$1 == "addr" { print toupper($2) }'; }
+configured_address() { management "${1:-2s}" info | awk '$1 == "addr" { print toupper($2) }'; }
+
+confirm_public_address() {
+    local current attempt
+    # The kernel replies to SET_PUBLIC_ADDRESS before the controller worker
+    # programs it. Poll the read-only command without replaying the write.
+    for attempt in {1..10}; do
+        current=$(configured_address 0.5s) || current=
+        [[ $current != "$address" ]] || return 0
+        if (( attempt < 10 )); then sleep 0.5; fi
+    done
+    return 1
+}
 
 for attempt in {1..12}; do
     controllers=()
@@ -40,11 +54,10 @@ for attempt in {1..12}; do
             echo 'Y700 Bluetooth: controller already configured'
             exit 0
         fi
-        flags=$(management config) || flags=
+        flags=$(management 2s config) || flags=
         if [[ $flags =~ missing\ options:\ public-address[[:blank:]]*$ ]]; then
-            management public-addr "$address" >/dev/null || fail 'public-address command failed'
-            current=$(configured_address) || current=
-            [[ $current == "$address" ]] || fail 'public address was not confirmed by the kernel'
+            management 2s public-addr "$address" >/dev/null || fail 'public-address command failed'
+            confirm_public_address || fail 'public address was not confirmed by the kernel'
             echo 'Y700 Bluetooth: board public address provisioned'
             exit 0
         fi

@@ -1,0 +1,19 @@
+#!/bin/bash
+# The original first-boot program and PAM own all password input on tty1.
+set -eu
+[[ ! -e /etc/y700/user-configured ]] || exit 0
+firstboot=/usr/local/sbin/y700-firstboot
+keyboard=/usr/libexec/y700-firstboot/buffyboard
+if [[ ! -x $keyboard || ! -c /dev/fb0 || ! -c /dev/uinput ]]; then
+    exec "$firstboot"
+fi
+
+"$keyboard" </dev/null >/dev/null 2>&1 &
+keyboard_pid=$!
+stop_keyboard() {
+    kill "$keyboard_pid" 2>/dev/null || true
+    wait "$keyboard_pid" 2>/dev/null || true
+}
+trap stop_keyboard EXIT
+trap 'exit 143' TERM
+"$firstboot"

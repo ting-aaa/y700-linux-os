@@ -1,0 +1,141 @@
+{
+  "format": 1,
+  "scope": "private-cn350-sensor-firmware-and-debian-runtime",
+  "sources": {
+    "stock": "docs/research/cn350-firmware-comparison.json",
+    "native": [
+      "scripts/build-ssc-firmware.py",
+      "scripts/build-ssc-backport.sh",
+      "scripts/build-ssc-runtime.sh"
+    ],
+    "debian_keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+    "debian_metadata": [
+      {
+        "file": "deb.debian.org_debian_dists_trixie-updates_InRelease",
+        "sha256": "956718d8a45011572372ec8b6ada7473238fde4b6ab7af1bab4ecaecae965727",
+        "date": "Thu, 19 Nov 2026 02:12:54 UTC",
+        "valid_until": "Thu, 26 Nov 2026 02:12:54 UTC",
+        "indexes": [
+          {
+            "path": "main/binary-arm64/Packages",
+            "sha256": "7f1dd99bbd1a0416d39499892ec12ff38d80637029114d234c38972bba8ae041",
+            "size": 2351
+          }
+        ]
+      },
+      {
+        "file": "deb.debian.org_debian_dists_trixie_InRelease",
+        "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+        "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+        "valid_until": null,
+        "indexes": [
+          {
+            "path": "main/binary-arm64/Packages",
+            "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+            "size": 56162922
+          }
+        ]
+      },
+      {
+        "file": "security.debian.org_debian-security_dists_trixie-security_InRelease",
+        "sha256": "26ce960ef9ae5c2dd6c407b134524ec06e213bdc976c15c76415931a2a3b2aea",
+        "date": "Wed, 18 Nov 2026 22:17:43 UTC",
+        "valid_until": "Wed, 25 Nov 2026 22:17:43 UTC",
+        "indexes": [
+          {
+            "path": "main/binary-arm64/Packages",
+            "sha256": "db014ed0b3bfd29487e74d7eaed5c66032c6e1b5b76d61b5294a7099178d968e",
+            "size": 2667923
+          }
+        ]
+      }
+    ],
+    "debian_archives": {
+      "libmbim-glib4": "https://deb.debian.org/debian/pool/main/libm/libmbim/libmbim-glib4_1.32.0-1_arm64.deb",
+      "libmbim-proxy": "https://deb.debian.org/debian/pool/main/libm/libmbim/libmbim-proxy_1.32.0-1_arm64.deb",
+      "libprotobuf-c1": "https://deb.debian.org/debian/pool/main/p/protobuf-c/libprotobuf-c1_1.5.1-1_arm64.deb",
+      "libqmi-glib5": "https://deb.debian.org/debian/pool/main/libq/libqmi/libqmi-glib5_1.36.0-1_arm64.deb",
+      "libqmi-proxy": "https://deb.debian.org/debian/pool/main/libq/libqmi/libqmi-proxy_1.36.0-1_arm64.deb",
+      "libqrtr-glib0": "https://deb.debian.org/debian/pool/main/libq/libqrtr-glib/libqrtr-glib0_1.2.2-1+b2_arm64.deb"
+    }
+  },
+  "packages": [
+    {
+      "package": "iio-sensor-proxy",
+      "version": "3.9-1~bpo13+1.y7001",
+      "architecture": "arm64",
+      "size": 38232,
+      "sha256": "671fa7a9869652d5f5849fee551851ac36f1ba2c62d41770065e329b4d2a1743"
+    },
+    {
+      "package": "libmbim-glib4",
+      "version": "1.32.0-1",
+      "architecture": "arm64",
+      "size": 195004,
+      "sha256": "e73be096b67d32cecfde633bab84bcb8ec15a5219d6bc5c514e74a9c73d078c9"
+    },
+    {
+      "package": "libmbim-proxy",
+      "version": "1.32.0-1",
+      "architecture": "arm64",
+      "size": 9004,
+      "sha256": "feae01b4abbbb1689f0be5c00502e27f7ffdb0668277f5a9b1730ba8c0464a37"
+    },
+    {
+      "package": "libprotobuf-c1",
+      "version": "1.5.1-1",
+      "architecture": "arm64",
+      "size": 19624,
+      "sha256": "6c34790825abb19889f351938430a1e3a4f263cc55812e00f1ba01399638b94b"
+    },
+    {
+      "package": "libqmi-glib5",
+      "version": "1.36.0-1",
+      "architecture": "arm64",
+      "size": 792284,
+      "sha256": "3999250f51439530a807174e3dd272402921e16a632848b5acb9528f185a6965"
+    },
+    {
+      "package": "libqmi-proxy",
+      "version": "1.36.0-1",
+      "architecture": "arm64",
+      "size": 9728,
+      "sha256": "3894e2ce7336aa896debf760a48c8f5d3fa02f1f03469d7ddf685833192c51a3"
+    },
+    {
+      "package": "libqrtr-glib0",
+      "version": "1.2.2-1+b2",
+      "architecture": "arm64",
+      "size": 15904,
+      "sha256": "cceff190cb19d4638d9bf26cd3688f94f04acde21a79b08e7435f4f88222e21e"
+    },
+    {
+      "package": "libssc-bin",
+      "version": "0.4.4-2.1~bpo13+1.y7001",
+      "architecture": "arm64",
+      "size": 25272,
+      "sha256": "4ab9250dd800a127fb9e1284fabd53efb3d765a3c7a9a2f6010eaad4d8f80d23"
+    },
+    {
+      "package": "libssc2",
+      "version": "0.4.4-2.1~bpo13+1.y7001",
+      "architecture": "arm64",
+      "size": 37320,
+      "sha256": "6ed4d4d237723d2ff5b00bcb4cdee62a41b9fb6b4e946ee4b86cfd7d8603a074"
+    },
+    {
+      "package": "y700-ssc-cn350-firmware",
+      "version": "17.0.350-1",
+      "architecture": "all",
+      "size": 2959926,
+      "sha256": "4449c804f27c3d3e2e2e52870923a6567adb6ed75b5d739ec6707e9344239137"
+    },
+    {
+      "package": "y700-ssc-runtime",
+      "version": "0.1.0",
+      "architecture": "arm64",
+      "size": 168746,
+      "sha256": "046a66819fd18d2d5e2d486fea116ac9b61438cbab7ff42188595ae0ee34c97b"
+    }
+  ]
+}

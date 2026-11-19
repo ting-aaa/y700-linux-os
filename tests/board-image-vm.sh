@@ -15,6 +15,8 @@ cd "$images"
 sha256sum -c SHA256SUMS
 package_count=$(sed -n 's/^package_count=//p' identity.txt)
 package_digest=$(sed -n 's/^package_digest=//p' identity.txt)
+notes_digest=$(sed -n 's/^kernel_notes_sha256=//p' identity.txt)
+[[ -z $notes_digest || $notes_digest =~ ^[0-9a-f]{64}$ ]]
 if [[ -z $package_count && -z $package_digest ]]; then
     # Historical candidate 03 predates the package receipt in identity.txt.
     package_count=993
@@ -80,12 +82,16 @@ fi
     echo 'set -eu'
     sed -n '/^image_id=/p; /^root_uuid=/p' "$images/identity.txt"
     printf 'package_count=%s\npackage_digest=%s\n' "$package_count" "$package_digest"
+    printf 'kernel_notes_sha256=%s\n' "$notes_digest"
     echo "split=$split"
     echo "esp_label=$label"
     cat <<'PROBE'
 test -d /sys/firmware/efi
 test "$(cat /proc/1/comm)" = systemd
 test "$(uname -r)" = 7.3.4-asphalt-prc
+if [ -n "$kernel_notes_sha256" ]; then
+    printf '%s  /sys/kernel/notes\n' "$kernel_notes_sha256" | sha256sum -c
+fi
 rootdev=$(findmnt -nro SOURCE /)
 bootdev=$(findmnt -nro SOURCE /boot)
 test "$bootdev" = "$(readlink -f "/dev/disk/by-partlabel/$esp_label")"

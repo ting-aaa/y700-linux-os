@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Run inside the tablet user's graphical login. Capture buffers are discarded.
+# Capture buffers are discarded. Run as the desktop user for a seat-access test.
 set -euo pipefail
+mode=${1:-all}
+if (( $# > 1 )) || [[ $mode != raw && $mode != preview && $mode != all ]]; then
+    echo 'Usage: check-camera-streams.sh [raw|preview|all]' >&2
+    exit 2
+fi
 export LC_ALL=C LIBCAMERA_SOFTISP_MODE=cpu
 export LD_LIBRARY_PATH=/opt/y700-camera/lib
 cam=/opt/y700-camera/bin/cam
 test -x "$cam"
 grep -zFxq 'lenovo,asphalt' /proc/device-tree/compatible
 if [[ $(id -u) == 0 ]]; then
-    echo 'Run as the desktop user to check camera permissions.' >&2
-    exit 2
+    echo 'Access: root (hardware pipeline only)'
+else
+    echo 'Access: unprivileged user'
 fi
 report=$(mktemp)
 trap 'rm -f -- "$report"' EXIT
@@ -46,13 +52,17 @@ capture() {
 main=/base/soc@0/cci@ac15000/i2c-bus@0/camera@20
 front=/base/soc@0/cci@ac15000/i2c-bus@1/camera@10
 macro=/base/soc@0/cci@ac16000/i2c-bus@0/camera@36
-for pass in 1 2; do
-    echo "RAW pass $pass"
-    capture HI1339 "$main" role=raw 12 '4208x3120-SGBRG10_CSI2P/RAW'
-    capture S5K4H7 "$front" role=raw 12 '3264x2448-SGRBG10_CSI2P/RAW'
-    capture SC202CS "$macro" role=raw 12 '1600x1200-SBGGR10_CSI2P/RAW'
-done
-preview=role=viewfinder,width=640,height=480,pixelformat=ABGR8888
-capture HI1339 "$main" "$preview" 6 '640x480-ABGR8888/sRGB'
-capture S5K4H7 "$front" "$preview" 6 '640x480-ABGR8888/sRGB'
-capture SC202CS "$macro" "$preview" 6 '640x480-ABGR8888/sRGB'
+if [[ $mode != preview ]]; then
+    for pass in 1 2; do
+        echo "RAW pass $pass"
+        capture HI1339 "$main" role=raw 12 '4208x3120-SGBRG10_CSI2P/RAW'
+        capture S5K4H7 "$front" role=raw 12 '3264x2448-SGRBG10_CSI2P/RAW'
+        capture SC202CS "$macro" role=raw 12 '1600x1200-SBGGR10_CSI2P/RAW'
+    done
+fi
+if [[ $mode != raw ]]; then
+    preview=role=viewfinder,width=640,height=480,pixelformat=ABGR8888
+    capture HI1339 "$main" "$preview" 6 '640x480-ABGR8888/sRGB'
+    capture S5K4H7 "$front" "$preview" 6 '640x480-ABGR8888/sRGB'
+    capture SC202CS "$macro" "$preview" 6 '640x480-ABGR8888/sRGB'
+fi

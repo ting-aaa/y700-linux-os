@@ -1,0 +1,10 @@
+Package: y700-warm-greeter
+Version: 0.1.0~dev1
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
+Section: x11
+Priority: optional
+Depends: arctica-greeter (= 0.99.9.4-1), lightdm-gtk-greeter, metacity (= 1:3.56.0-1), onboard
+Description: Optional Y700 touchscreen LightDM greeter
+ Selects the Arctica greeter for the local seat and defaults its integrated
+ Onboard keyboard to visible at login.

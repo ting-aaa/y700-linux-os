@@ -1,0 +1,354 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "deb.debian.org_debian-security_dists_trixie-security_InRelease",
+      "sha256": "9b5b3b107b97b432c66698cc37ba8e52a4cb5085c73e8bb0e3ea6581034536ed",
+      "date": "Thu, 19 Nov 2026 05:45:40 UTC",
+      "valid_until": "Thu, 26 Nov 2026 05:45:40 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "34a602d3819c6a55bf97ecc754538a2e5849aa4b304bfbf27d1e49ad677e4a10",
+          "size": 2668763
+        }
+      ]
+    },
+    {
+      "file": "deb.debian.org_debian_dists_trixie_InRelease",
+      "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+          "size": 56162922
+        }
+      ]
+    }
+  ],
+  "installed_count": 35,
+  "authenticated_count": 35,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "arctica-greeter",
+      "version": "0.99.9.4-1",
+      "architecture": "arm64",
+      "size": 1657944,
+      "sha256": "01a17719c3942c7fa47f7c055accfb86b26178efc9c7ee8a79ce03201438122d",
+      "uri": "https://deb.debian.org/debian/pool/main/a/arctica-greeter/arctica-greeter_0.99.9.4-1_arm64.deb",
+      "repository_path": "pool/main/a/arctica-greeter/arctica-greeter_0.99.9.4-1_arm64.deb"
+    },
+    {
+      "package": "fonts-noto-core",
+      "version": "20201225-2",
+      "architecture": "all",
+      "size": 12188336,
+      "sha256": "97978d09b68445fcf85342b106cd2e812d7813e3d5626f9884a5f344c3a55973",
+      "uri": "https://deb.debian.org/debian/pool/main/f/fonts-noto/fonts-noto-core_20201225-2_all.deb",
+      "repository_path": "pool/main/f/fonts-noto/fonts-noto-core_20201225-2_all.deb"
+    },
+    {
+      "package": "fonts-noto-mono",
+      "version": "20201225-2",
+      "architecture": "all",
+      "size": 397580,
+      "sha256": "7636f002caeb4a4082f69e2d9b8eb89da6c50b9c67f55db84e68638049b06006",
+      "uri": "https://deb.debian.org/debian/pool/main/f/fonts-noto/fonts-noto-mono_20201225-2_all.deb",
+      "repository_path": "pool/main/f/fonts-noto/fonts-noto-mono_20201225-2_all.deb"
+    },
+    {
+      "package": "gtk2-engines-murrine",
+      "version": "0.98.2-4+b1",
+      "architecture": "arm64",
+      "size": 87356,
+      "sha256": "d9fea842d06ba7e0ad16dd9dfc19b5188a9185d9077f2d97d599b6264ffab9cd",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gtk2-engines-murrine/gtk2-engines-murrine_0.98.2-4+b1_arm64.deb",
+      "repository_path": "pool/main/g/gtk2-engines-murrine/gtk2-engines-murrine_0.98.2-4+b1_arm64.deb"
+    },
+    {
+      "package": "libadwaita-1-0",
+      "version": "1.7.6-1~deb13u1",
+      "architecture": "arm64",
+      "size": 488760,
+      "sha256": "cb66417d6fb77ded3d3edaa6a7ece850c69eabf0e20b75c669957cfeaa03f794",
+      "uri": "https://deb.debian.org/debian/pool/main/liba/libadwaita-1/libadwaita-1-0_1.7.6-1~deb13u1_arm64.deb",
+      "repository_path": "pool/main/liba/libadwaita-1/libadwaita-1-0_1.7.6-1~deb13u1_arm64.deb"
+    },
+    {
+      "package": "libappstream5",
+      "version": "1.0.5-1",
+      "architecture": "arm64",
+      "size": 210056,
+      "sha256": "a5fbc05f3b33e0568faf43e5820e056b0085984528e10d44e94b4d16877285cb",
+      "uri": "https://deb.debian.org/debian/pool/main/a/appstream/libappstream5_1.0.5-1_arm64.deb",
+      "repository_path": "pool/main/a/appstream/libappstream5_1.0.5-1_arm64.deb"
+    },
+    {
+      "package": "libcairo-script-interpreter2",
+      "version": "1.18.4-1+b1",
+      "architecture": "arm64",
+      "size": 57372,
+      "sha256": "fc18434e2f046c14a08e86175e23976c5046edb27f82fb1b66be50457bad54b0",
+      "uri": "https://deb.debian.org/debian/pool/main/c/cairo/libcairo-script-interpreter2_1.18.4-1+b1_arm64.deb",
+      "repository_path": "pool/main/c/cairo/libcairo-script-interpreter2_1.18.4-1+b1_arm64.deb"
+    },
+    {
+      "package": "libcanberra-gtk3-0",
+      "version": "0.30-18",
+      "architecture": "arm64",
+      "size": 9512,
+      "sha256": "fe65dbc508bb083c3e58517712b41b706855c9704cc5b348158447c3ad84591b",
+      "uri": "https://deb.debian.org/debian/pool/main/libc/libcanberra/libcanberra-gtk3-0_0.30-18_arm64.deb",
+      "repository_path": "pool/main/libc/libcanberra/libcanberra-gtk3-0_0.30-18_arm64.deb"
+    },
+    {
+      "package": "libdbus-glib-1-2",
+      "version": "0.114-1",
+      "architecture": "arm64",
+      "size": 58040,
+      "sha256": "410a86306771bd61bba7fe3f6b8fc66a83a8b916aec365eadd39eaadda54564a",
+      "uri": "https://deb.debian.org/debian/pool/main/d/dbus-glib/libdbus-glib-1-2_0.114-1_arm64.deb",
+      "repository_path": "pool/main/d/dbus-glib/libdbus-glib-1-2_0.114-1_arm64.deb"
+    },
+    {
+      "package": "libgraphene-1.0-0",
+      "version": "1.10.8-5",
+      "architecture": "arm64",
+      "size": 42068,
+      "sha256": "ee2ea1e4f968f294741f205fcca44ebb8024fb47aab3e1540b60fd3c390d7ad3",
+      "uri": "https://deb.debian.org/debian/pool/main/g/graphene/libgraphene-1.0-0_1.10.8-5_arm64.deb",
+      "repository_path": "pool/main/g/graphene/libgraphene-1.0-0_1.10.8-5_arm64.deb"
+    },
+    {
+      "package": "libgtk-4-1",
+      "version": "4.18.6+ds-2",
+      "architecture": "arm64",
+      "size": 2913396,
+      "sha256": "b9691c2cd154739e58f7648242c4db1e217f66e0f55a880e9f965ffe9475a05a",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gtk4/libgtk-4-1_4.18.6+ds-2_arm64.deb",
+      "repository_path": "pool/main/g/gtk4/libgtk-4-1_4.18.6+ds-2_arm64.deb"
+    },
+    {
+      "package": "libgtk-4-common",
+      "version": "4.18.6+ds-2",
+      "architecture": "all",
+      "size": 2797392,
+      "sha256": "32f0ad042f983b1d53cd2c260d4042eda9041b6debb71beb91937196b1ff3f6b",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gtk4/libgtk-4-common_4.18.6+ds-2_all.deb",
+      "repository_path": "pool/main/g/gtk4/libgtk-4-common_4.18.6+ds-2_all.deb"
+    },
+    {
+      "package": "libgtk2.0-0t64",
+      "version": "2.24.33-7",
+      "architecture": "arm64",
+      "size": 1674412,
+      "sha256": "28b2f1622197443f07f25a93e03db1a964184946ac12f501b8221c895026d0ca",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gtk+2.0/libgtk2.0-0t64_2.24.33-7_arm64.deb",
+      "repository_path": "pool/main/g/gtk+2.0/libgtk2.0-0t64_2.24.33-7_arm64.deb"
+    },
+    {
+      "package": "libgtk2.0-common",
+      "version": "2.24.33-7",
+      "architecture": "all",
+      "size": 2661068,
+      "sha256": "f874797252735a9d0d14e6e6baf93e7c1ea7b2bc7ee44ef7ec09fb715bfbc9e6",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gtk+2.0/libgtk2.0-common_2.24.33-7_all.deb",
+      "repository_path": "pool/main/g/gtk+2.0/libgtk2.0-common_2.24.33-7_all.deb"
+    },
+    {
+      "package": "liblzo2-2",
+      "version": "2.10-3+b1",
+      "architecture": "arm64",
+      "size": 49588,
+      "sha256": "ee0f990bef6693c8249d7a3de4b17f65d549beae84b6d1413421618ac6427914",
+      "uri": "https://deb.debian.org/debian/pool/main/l/lzo2/liblzo2-2_2.10-3+b1_arm64.deb",
+      "repository_path": "pool/main/l/lzo2/liblzo2-2_2.10-3+b1_arm64.deb"
+    },
+    {
+      "package": "libmate-desktop-2-17t64",
+      "version": "1.26.2-1.2",
+      "architecture": "arm64",
+      "size": 104540,
+      "sha256": "0b79e6dd500ecd87e323848b2a988e433bc2aab7b15f861db6e9a976366b186a",
+      "uri": "https://deb.debian.org/debian/pool/main/m/mate-desktop/libmate-desktop-2-17t64_1.26.2-1.2_arm64.deb",
+      "repository_path": "pool/main/m/mate-desktop/libmate-desktop-2-17t64_1.26.2-1.2_arm64.deb"
+    },
+    {
+      "package": "libmatekbd-common",
+      "version": "1.26.1-1",
+      "architecture": "all",
+      "size": 86672,
+      "sha256": "448b3d878ceefd8ff37f7339310b8db5d2c2d65ff23ce1c22dad72ddbafb1fbe",
+      "uri": "https://deb.debian.org/debian/pool/main/libm/libmatekbd/libmatekbd-common_1.26.1-1_all.deb",
+      "repository_path": "pool/main/libm/libmatekbd/libmatekbd-common_1.26.1-1_all.deb"
+    },
+    {
+      "package": "libmatekbd4",
+      "version": "1.26.1-1+b2",
+      "architecture": "arm64",
+      "size": 38584,
+      "sha256": "a469a27c04b3cd0d10bc863c7d895d2a057a70d9edd9d8478f82433afc210e09",
+      "uri": "https://deb.debian.org/debian/pool/main/libm/libmatekbd/libmatekbd4_1.26.1-1+b2_arm64.deb",
+      "repository_path": "pool/main/libm/libmatekbd/libmatekbd4_1.26.1-1+b2_arm64.deb"
+    },
+    {
+      "package": "libmatemixer-common",
+      "version": "1.26.1-1",
+      "architecture": "all",
+      "size": 59804,
+      "sha256": "1a4792881c0d940a5a72127840bf174fe5765cecb1ca43248ea4f67dee1b33bc",
+      "uri": "https://deb.debian.org/debian/pool/main/libm/libmatemixer/libmatemixer-common_1.26.1-1_all.deb",
+      "repository_path": "pool/main/libm/libmatemixer/libmatemixer-common_1.26.1-1_all.deb"
+    },
+    {
+      "package": "libmatemixer0",
+      "version": "1.26.1-1+b2",
+      "architecture": "arm64",
+      "size": 77872,
+      "sha256": "d75c1b81e9b4358ff888467ab469c87534405664cb5965f4d37e082e7f6d644e",
+      "uri": "https://deb.debian.org/debian/pool/main/libm/libmatemixer/libmatemixer0_1.26.1-1+b2_arm64.deb",
+      "repository_path": "pool/main/libm/libmatemixer/libmatemixer0_1.26.1-1+b2_arm64.deb"
+    },
+    {
+      "package": "libmetacity3",
+      "version": "1:3.56.0-1",
+      "architecture": "arm64",
+      "size": 208432,
+      "sha256": "58c6e2af076a3bc9c3aaae5cf8521beed9b0dee06eb96b0ec1a30de549c2a66d",
+      "uri": "https://deb.debian.org/debian/pool/main/m/metacity/libmetacity3_3.56.0-1_arm64.deb",
+      "repository_path": "pool/main/m/metacity/libmetacity3_3.56.0-1_arm64.deb"
+    },
+    {
+      "package": "librda-common",
+      "version": "0.0.5-1.1",
+      "architecture": "all",
+      "size": 13752,
+      "sha256": "132b1554b0553e72e0556048233d12fa29a81cb835da775c37e6cfff3f1abc2e",
+      "uri": "https://deb.debian.org/debian/pool/main/libr/librda/librda-common_0.0.5-1.1_all.deb",
+      "repository_path": "pool/main/libr/librda/librda-common_0.0.5-1.1_all.deb"
+    },
+    {
+      "package": "librda0",
+      "version": "0.0.5-1.1+b2",
+      "architecture": "arm64",
+      "size": 9652,
+      "sha256": "ceb98a24f3e335f6417e8b51dd69735d0abac85dad748ce52614fb91b88058ee",
+      "uri": "https://deb.debian.org/debian/pool/main/libr/librda/librda0_0.0.5-1.1+b2_arm64.deb",
+      "repository_path": "pool/main/libr/librda/librda0_0.0.5-1.1+b2_arm64.deb"
+    },
+    {
+      "package": "libstemmer0d",
+      "version": "2.2.0-4+b2",
+      "architecture": "arm64",
+      "size": 110960,
+      "sha256": "f574898ea8d2905c8142af991ee291bb5d13b1c86e0e0d2e00c158a65daef99b",
+      "uri": "https://deb.debian.org/debian/pool/main/s/snowball/libstemmer0d_2.2.0-4+b2_arm64.deb",
+      "repository_path": "pool/main/s/snowball/libstemmer0d_2.2.0-4+b2_arm64.deb"
+    },
+    {
+      "package": "libxmlb2",
+      "version": "0.3.22-1",
+      "architecture": "arm64",
+      "size": 59332,
+      "sha256": "ca5ced6812ac5bf11ef9586e625002f0242764ce7f033fcae055719aa383c4bd",
+      "uri": "https://deb.debian.org/debian/pool/main/libx/libxmlb/libxmlb2_0.3.22-1_arm64.deb",
+      "repository_path": "pool/main/libx/libxmlb/libxmlb2_0.3.22-1_arm64.deb"
+    },
+    {
+      "package": "mate-desktop-common",
+      "version": "1.26.2-1.2",
+      "architecture": "all",
+      "size": 507984,
+      "sha256": "77128c9e34af8ca3030c3bf2008bab0fa6de2be030e769b3b1d3361ea31d32ed",
+      "uri": "https://deb.debian.org/debian/pool/main/m/mate-desktop/mate-desktop-common_1.26.2-1.2_all.deb",
+      "repository_path": "pool/main/m/mate-desktop/mate-desktop-common_1.26.2-1.2_all.deb"
+    },
+    {
+      "package": "mate-settings-daemon",
+      "version": "1.26.1-1.2",
+      "architecture": "arm64",
+      "size": 178000,
+      "sha256": "6eab8bfa7507e02af522d0118f2033968e1034593ee22d0ae64921d02a16b46b",
+      "uri": "https://deb.debian.org/debian/pool/main/m/mate-settings-daemon/mate-settings-daemon_1.26.1-1.2_arm64.deb",
+      "repository_path": "pool/main/m/mate-settings-daemon/mate-settings-daemon_1.26.1-1.2_arm64.deb"
+    },
+    {
+      "package": "mate-settings-daemon-common",
+      "version": "1.26.1-1.2",
+      "architecture": "all",
+      "size": 401120,
+      "sha256": "b0deaa337f799304ca9771f735ea8447a31917f04f59265f3afcb9eac5c0a6fc",
+      "uri": "https://deb.debian.org/debian/pool/main/m/mate-settings-daemon/mate-settings-daemon-common_1.26.1-1.2_all.deb",
+      "repository_path": "pool/main/m/mate-settings-daemon/mate-settings-daemon-common_1.26.1-1.2_all.deb"
+    },
+    {
+      "package": "metacity",
+      "version": "1:3.56.0-1",
+      "architecture": "arm64",
+      "size": 393276,
+      "sha256": "ec4b24a3307c578c2f34ceab98b523b69adb601b25931cad9d0ef79b256b2421",
+      "uri": "https://deb.debian.org/debian/pool/main/m/metacity/metacity_3.56.0-1_arm64.deb",
+      "repository_path": "pool/main/m/metacity/metacity_3.56.0-1_arm64.deb"
+    },
+    {
+      "package": "metacity-common",
+      "version": "1:3.56.0-1",
+      "architecture": "all",
+      "size": 400068,
+      "sha256": "cea216fea05306cc385270c48e42e3de02a75f1310be6eeed09003468a66b71d",
+      "uri": "https://deb.debian.org/debian/pool/main/m/metacity/metacity-common_3.56.0-1_all.deb",
+      "repository_path": "pool/main/m/metacity/metacity-common_3.56.0-1_all.deb"
+    },
+    {
+      "package": "numix-gtk-theme",
+      "version": "2.6.7-7",
+      "architecture": "all",
+      "size": 135348,
+      "sha256": "bfe6c2d9c42b21f68ae1164b1186a857a7ba421c7f4e9c34292c042e432855bd",
+      "uri": "https://deb.debian.org/debian/pool/main/n/numix-gtk-theme/numix-gtk-theme_2.6.7-7_all.deb",
+      "repository_path": "pool/main/n/numix-gtk-theme/numix-gtk-theme_2.6.7-7_all.deb"
+    },
+    {
+      "package": "numix-icon-theme",
+      "version": "0~20250131-1",
+      "architecture": "all",
+      "size": 1932732,
+      "sha256": "5b16765e5118976bf01d466dea1da10d3dc3c5e1d64ee2219aa4e1379b997909",
+      "uri": "https://deb.debian.org/debian/pool/main/n/numix-icon-theme/numix-icon-theme_0~20250131-1_all.deb",
+      "repository_path": "pool/main/n/numix-icon-theme/numix-icon-theme_0~20250131-1_all.deb"
+    },
+    {
+      "package": "python3-setproctitle",
+      "version": "1.3.6-2",
+      "architecture": "arm64",
+      "size": 18508,
+      "sha256": "32158338a8b134cf678882088e5885eaf6ab21d40bad71984554c82d166d1a39",
+      "uri": "https://deb.debian.org/debian/pool/main/p/python-setproctitle/python3-setproctitle_1.3.6-2_arm64.deb",
+      "repository_path": "pool/main/p/python-setproctitle/python3-setproctitle_1.3.6-2_arm64.deb"
+    },
+    {
+      "package": "zenity",
+      "version": "4.1.90-1",
+      "architecture": "arm64",
+      "size": 71224,
+      "sha256": "b8aba9ec4648b879c92d068c12470cf5ee3e4502fa375543d9317ec406f04d2b",
+      "uri": "https://deb.debian.org/debian/pool/main/z/zenity/zenity_4.1.90-1_arm64.deb",
+      "repository_path": "pool/main/z/zenity/zenity_4.1.90-1_arm64.deb"
+    },
+    {
+      "package": "zenity-common",
+      "version": "4.1.90-1",
+      "architecture": "all",
+      "size": 2493456,
+      "sha256": "f058842a23605662eb92efc602aee198906db888ed61301e5b8f061e042f91d0",
+      "uri": "https://deb.debian.org/debian/pool/main/z/zenity/zenity-common_4.1.90-1_all.deb",
+      "repository_path": "pool/main/z/zenity/zenity-common_4.1.90-1_all.deb"
+    }
+  ]
+}

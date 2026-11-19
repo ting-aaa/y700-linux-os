@@ -83,6 +83,8 @@ bash tests/ssc-runtime.sh
 
 The seed and readiness tests passed concurrent initialization, preservation of changed calibration, symbolic-link rejection and sample-gated startup. The FastRPC archive and runtime package each matched a second build byte for byte. The firmware and runtime installed offline in an isolated Trixie ARM64 root with the matching proxy and library. Dpkg audit, APT dependency checks, systemd 257 unit checks, udev rules validation and private library resolution passed. No calibration directory was created during installation. SSC waits for hardware and an explicit listener start.
 
+To include the private CN350 firmware and native SSC stack in an offline development image, run `bash scripts/add-board-layer.sh ssc "$root" "$ssc_archives"` against the disposable ARM64 build root. It verifies all eleven archives and records the exact package set for the image builder. The FastRPC listener is disabled. The kernel can load the firmware on its next probe. Image assembly excludes per-device registry and calibration data. The [SSC layer lock](../config/ssc.lock.json) identifies six Debian dependency archives and five local builds.
+
 ### Physical SSC qualification
 
 1. On the known `TB320FC_PRC` Debian boot, record the current SLPI state, requested path, kernel version and package versions. Keep the original USB route available. Install the reviewed private firmware and runtime packages, matching patched `libssc2`, `libssc-bin`, `iio-sensor-proxy` and the signed Debian dependency closure. There is no automatic listener start by the new packages. The firmware becomes available to the kernel on a subsequent reboot.

@@ -93,7 +93,11 @@ class ScaleWindow(Gtk.ApplicationWindow):
 
 
 def activate(app):
-    window = app.get_active_window() or ScaleWindow(app)
+    window = app.get_active_window()
+    if window is None:
+        window = ScaleWindow(app)
+    else:
+        window.refresh()
     window.present()
 
 

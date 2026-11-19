@@ -30,6 +30,13 @@ test -d /sys/firmware/efi || fail 'EFI runtime missing'
 tr '\000' '\n' < /proc/device-tree/compatible | grep -Fxq lenovo,asphalt || fail 'Wrong board compatible'
 test "$(tr -d '\000' < /proc/device-tree/region_country)" = PRC || fail 'Wrong board region'
 test "$(uname -r)" = 7.3.4-asphalt-prc || fail 'Unexpected kernel'
+if [ -f "$identity" ]; then
+    notes_digest=$(sed -n 's/^kernel_notes_sha256=//p' "$identity")
+    if [ -n "$notes_digest" ]; then
+        printf '%s\n' "$notes_digest" | grep -Exq '[0-9a-f]{64}' || fail 'Invalid kernel notes digest'
+        printf '%s  /sys/kernel/notes\n' "$notes_digest" | sha256sum -c || fail 'Running kernel differs from the selected build'
+    fi
+fi
 test "$(cat /proc/1/comm)" = systemd || fail 'Unexpected PID 1'
 test "$(findmnt -nro UUID /)" = "$uuid" || fail 'Unexpected root UUID'
 rootdev=$(findmnt -nro SOURCE /)

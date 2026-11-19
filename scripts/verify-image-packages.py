@@ -20,6 +20,16 @@ for name in ('debian-base.lock.json', 'desktop-repair-auth.lock.json'):
 control = (repo / 'packaging/control').read_text().splitlines()
 version = next(line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
+for name in ('firstboot-touch.lock.json', 'warm-greeter.lock.json', 'ssc.lock.json'):
+    receipt = args.root / 'var/lib/y700/build' / name
+    if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
+        raise SystemExit(f'{name} receipt must be a regular file')
+    if not receipt.exists():
+        continue
+    expected = json.loads((repo / 'config' / name).read_text())
+    if json.loads(receipt.read_text()) != expected:
+        raise SystemExit(f'{name} receipt differs from the build input lock')
+    wanted.update((p['package'], p['version'], p['architecture']) for p in expected['packages'])
 camera_receipt = args.root / RECEIPT
 if camera_receipt.is_symlink():
     raise SystemExit('Camera layer receipt must be a regular file')
