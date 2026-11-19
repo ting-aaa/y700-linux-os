@@ -101,25 +101,21 @@ manifest_names() {
     done
 }
 patch=
-for version in dev8 dev9; do
+extras=(y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb blueman_2.4.4-1+y7001_arm64.deb chinese-ime.tar)
+for version in dev8 dev9 dev10; do
     expected=(base/SHA256SUMS base/unpack.sh "$version.qcow2" identity.txt RAW-SHA256SUMS
         "y700-platform_0.1.0~${version}_all.deb")
-    if manifest_names "$bundle/SHA256SUMS" "${expected[@]}"; then
-        patch=$version.qcow2
-        break
-    fi
-    if [[ $version == dev8 ]]; then continue; fi
-    expected+=(y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb)
-    if manifest_names "$bundle/SHA256SUMS" "${expected[@]}"; then
-        patch=$version.qcow2
-        break
-    fi
-    expected+=(blueman_2.4.4-1+y7001_arm64.deb)
-    if manifest_names "$bundle/SHA256SUMS" "${expected[@]}" ||
-        manifest_names "$bundle/SHA256SUMS" "${expected[@]}" chinese-ime.tar; then
-        patch=$version.qcow2
-        break
-    fi
+    case $version in
+        dev8) counts=(0) ;;
+        dev9) counts=(0 1 2 3) ;;
+        dev10) counts=(3) ;;
+    esac
+    for count in "${counts[@]}"; do
+        if manifest_names "$bundle/SHA256SUMS" "${expected[@]}" "${extras[@]:0:count}"; then
+            patch=$version.qcow2
+            break 2
+        fi
+    done
 done
 [[ -n $patch ]] || { echo 'Unsupported update manifest' >&2; exit 1; }
 manifest_names "$bundle/RAW-SHA256SUMS" asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt

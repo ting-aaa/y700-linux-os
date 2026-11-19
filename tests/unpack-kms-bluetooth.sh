@@ -31,7 +31,7 @@ EOF
 
 qcam=y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb
 blueman=blueman_2.4.4-1+y7001_arm64.deb
-for name in "dev8" "dev9"; do
+for name in dev8 dev9 dev10; do
     printf 'Synthetic platform fixture\n' > "$bundle/y700-platform_0.1.0~${name}_all.deb"
 done
 printf 'Synthetic qcam fixture\n' > "$bundle/$qcam"
@@ -46,7 +46,7 @@ mkfs.ext4 -q -F "$base/root.ext4.zst"
 debugfs -w -R 'mkdir /etc' "$base/root.ext4.zst" 2> "$work/debugfs.log"
 debugfs -w -R 'mkdir /etc/y700' "$base/root.ext4.zst" 2>> "$work/debugfs.log"
 ln -s base/root.ext4.zst "$bundle/root.ext4"
-for name in dev8 dev9; do
+for name in dev8 dev9 dev10; do
     (cd "$bundle" && qemu-img create -q -f qcow2 -F raw -b root.ext4 "$name.qcow2")
 done
 rm -- "$bundle/root.ext4"
@@ -84,6 +84,10 @@ reject() {
     check_rolled_back
 }
 
+manifest dev10 "$qcam" "$blueman" chinese-ime.tar
+unpack --verify >/dev/null
+manifest dev10 "$qcam" "$blueman"
+reject 'Unsupported update manifest' --verify
 manifest dev8
 unpack --verify >/dev/null
 manifest dev9
@@ -206,4 +210,4 @@ debugfs -w -R 'symlink /etc/y700 /lost+found' "$base/root.ext4.zst" >> "$work/de
 manifest dev9 "$qcam"
 reject 'Unexpected directory metadata' --bluetooth-address "$seed" "$work/rejected"
 unpack --verify >/dev/null
-echo 'Personalized ext4, rollback, and all five portable manifest layouts passed'
+echo 'Personalized ext4, rollback, and all six portable manifest layouts passed'
