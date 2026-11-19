@@ -129,6 +129,21 @@ The bundle occupies about 1.13 GiB. Full streaming readback verified the calcula
 
 The exact source root booted with the KMS kernel and initrd to ARM64 systemd and verified the calibration importer, kernel and 1,096-package digest. The EFI guest ran the installed SSC pre-start command twice. Without a factory partition, initialization copied 329 generic configuration groups. Repeating the command preserved the existing registry and a synthetic calibration receipt byte for byte. Physical qualification covers factory import and live sensor behavior separately. [Sensor runtime](CAMERA-SENSORS.md#physical-ssc-qualification)
 
+### Dev8 first-login keyboard image
+
+The private `out/combined-kms-dev8-camera-ssc` folder contains everything needed to reconstruct the dev8 image on a Linux PC. It includes the compressed dev7 camera and SSC base, a 13,107,200-byte QCOW2 update and the normal Debian platform package. In the build workspace, the large compressed files share storage with the previous bundle through hard links. Copying the whole folder to a new drive includes every input.
+
+On a PC with Bash, Zstandard, GNU coreutils and `qemu-img`, run `bash unpack.sh --verify` to check the input archives. Run `bash unpack.sh /path/to/new-directory` to produce the updated raw root, FAT and U-Boot files. Allow 7.07 GiB for the unpack destination. The unpacker applies the overlay to its own freshly extracted root and checks all output hashes before publishing the directory. The delivery was reconstructed on an empty compressed Btrfs volume and checked with `e2fsck -fn` and `fsck.fat -n`. A separate read-only export of the original build produced the same complete root hash. [Image unpacker](../scripts/unpack-kms-update.sh)
+
+| Item | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `f0274d21a5dfaa16cedde694385aa01726dfe8b3ca792561fbba9b6bbe4dafae` |
+| Portable `dev8.qcow2` | `458647bd54b19fd906cc373296f408afe552f83588a3f5aa71f840f89ecdb9a3` |
+| Reconstructed 6 GiB `root.ext4` | `7885957379313847570527cdc94cdd8c2423486169f3efc082cf595053062efe` |
+| `y700-platform_0.1.0~dev8_all.deb` | `840bf029136b287b0f71de2f216603855f10337c999af32d1097ed796e478bac` |
+
+The platform package introduces the first-login Onboard settings. Its version is the sole change to the 1,096 installed package tuples, whose digest is `a56e81398dfe8185974b64e3ecc19aad6d6bce6f762be5d7470db2707dd8fb83`. The private archive can also upgrade a running dev7 installation through APT. An attended boot of this exact image on the physical tablet remains open. [Platform package](PLATFORM-BUILD.md)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
