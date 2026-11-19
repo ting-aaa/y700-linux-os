@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Y700 screen rotation
+Exec=/usr/lib/y700/y700-auto-rotate.py --session
+OnlyShowIn=XFCE;
+Terminal=false

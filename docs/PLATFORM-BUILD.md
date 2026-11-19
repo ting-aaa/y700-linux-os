@@ -8,6 +8,12 @@ The installed tablet matched all 30 repair package versions. An APT simulation s
 
 On the tablet, package integrity, dpkg audit and APT dependency checks passed. A fresh SSH connection succeeded. The boot ID and existing SSH, USB and LightDM service invocations matched their pre-install values. The live Xfce session reported a 64-pixel panel, 40-pixel icons, compositing disabled, one Onboard process with automatic show enabled and portrait/landscape dock heights of 520/420. X11 recognized the touchscreen. The existing maintenance configuration continued to serve the connection. These observations cover the running session; the new autostart entries take effect on a future login.
 
+## Rotation package update, 2026-11-19
+
+The same physical PRC tablet upgraded from platform dev6 to dev7 over USB SSH. APT selected one upgrade. The boot ID and the LightDM, SSH and Bluetooth service invocations matched before and after installation. The actual desktop user's dconf preference read `false` on a fresh SSH connection. The tablet remained at its ordinary greeter with SLPI offline. The packaged Xfce autostart begins on the next desktop login. The local rollback archive restores dev6.
+
+The dev7 archive SHA-256 is `484f2ba489f59423d4d10daa5f75b6916c6f44dbf3f0a2d2df8e606583b4d0ae` at build epoch `1794969749`. Applying it to a private overlay of the combined KMS root ran the stock GLib trigger and matched the full 1,069-package set, digest `11dbe979be7212b2a36285ef0cee0a72bada9b64b0c26c557d3684135dc543f1`. Downgrading to dev6 in that overlay restored the original package and removed the rotation client. The downloadable local raw image still contains dev6. [Rotation behavior and tests](CAMERA-SENSORS.md#xfce-screen-rotation)
+
 ## Package build and checks
 
 ```sh
@@ -16,7 +22,7 @@ bash tests/platform-package.sh
 uv run --python 3.13 --no-project python -m unittest discover -s tests -v
 ```
 
-Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp. Source archives without Git metadata must supply an explicit valid epoch. Future epochs are rejected to protect the early-boot clock. This establishes determinism of the package on the tested builder.
+Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz, glib-compile-schemas and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp. Source archives without Git metadata must supply an explicit valid epoch. Future epochs are rejected to protect the early-boot clock. This establishes determinism of the package on the tested builder.
 
 The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, USB ACM/NCM, the dedicated maintenance SSH service and optional Bluetooth controller address provisioning. The offline image builder enables service ordering. The package installs the unit files for local activation. `y700-onboard.desktop` has its own name to avoid replacing Debian's Onboard-owned autostart file. The session defaults are applied once per user; touch alignment still starts if settings initialization fails.
 

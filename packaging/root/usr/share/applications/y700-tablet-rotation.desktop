@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Tablet rotation
+Name[zh_CN]=平板屏幕旋转
+Comment=Lock the current orientation or allow automatic rotation
+Comment[zh_CN]=锁定当前屏幕方向或启用自动旋转
+Exec=/usr/libexec/y700-tablet-rotation
+Icon=preferences-desktop-display
+Categories=GTK;Settings;DesktopSettings;
+OnlyShowIn=XFCE;
+Terminal=false

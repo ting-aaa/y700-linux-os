@@ -13,6 +13,9 @@ cp -a "$repo/packaging/root/." "$stage/"
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
 install -Dm755 "$repo/src/session/y700-display" "$stage/usr/bin/y700-display"
+install -Dm755 "$repo/src/sensors/y700-auto-rotate.py" "$stage/usr/lib/y700/y700-auto-rotate.py"
+install -Dm644 "$repo/src/sensors/rotation_session.py" "$stage/usr/lib/y700/rotation_session.py"
+glib-compile-schemas --strict --dry-run "$stage/usr/share/glib-2.0/schemas"
 install -Dm644 "$repo/config/chromium/99-y700-software-rendering" "$stage/etc/chromium.d/99-y700-software-rendering"
 find "$stage/usr/libexec" -type f -exec chmod 755 {} +
 find "$stage/etc" -type f | sed "s|^$stage||" | LC_ALL=C sort > "$stage/DEBIAN/conffiles"

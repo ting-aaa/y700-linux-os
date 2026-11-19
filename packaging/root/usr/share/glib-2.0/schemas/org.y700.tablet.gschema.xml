@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.y700.tablet" path="/org/y700/tablet/">
+    <key name="auto-rotate" type="b">
+      <default>false</default>
+      <summary>Rotate the tablet automatically</summary>
+      <description>Allow the orientation sensor to rotate the display. When disabled, keep the current orientation.</description>
+    </key>
+  </schema>
+</schemalist>

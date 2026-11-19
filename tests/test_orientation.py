@@ -8,6 +8,16 @@ spec.loader.exec_module(orientation)
 
 
 class OrientationTests(unittest.TestCase):
+    def test_monitor_sensor_initial_pose_and_restart(self):
+        policy = orientation.OrientationPolicy(0.8)
+        for message in ('=== No accelerometer', '--- iio-sensor-proxy vanished, waiting for it to appear'):
+            orientation.monitor_event(policy, '=== Has accelerometer (orientation: left-up, tilt: vertical)', 0)
+            self.assertEqual(policy.due(1), 'left')
+            orientation.monitor_event(policy, message, 1.1)
+            self.assertIsNone(policy.due(2))
+        orientation.monitor_event(policy, '    Accelerometer orientation changed: bottom-up', 3)
+        self.assertEqual(policy.due(4), 'inverted')
+
     def test_all_directions_need_stable_pose_and_do_not_repeat(self):
         policy = orientation.OrientationPolicy(0.8)
         for name, expected in orientation.ROTATIONS.items():

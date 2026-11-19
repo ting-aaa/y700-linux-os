@@ -1,8 +1,8 @@
-"""Opt-in X11 orientation bridge; run via uv in a development session.
+#!/usr/bin/python3
+"""Y700 orientation bridge. Default to observing monitor-sensor in a terminal.
 
-Default is observe-only. --apply invokes y700-display, which rolls back the
-display when touch mapping fails. Requires a working SSC-enabled sensor proxy.
-No system service or autostart is installed by the platform package.
+Xfce starts --session, which follows the user's rotation preference and active
+login. The display helper updates panel and touch coordinates together.
 """
 import argparse
 import os
@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROTATIONS = {'normal': 'normal', 'left-up': 'left',
              'bottom-up': 'inverted', 'right-up': 'right'}
-EVENT = re.compile(r'orientation(?: changed)?: ([a-z-]+)\s*$')
+EVENT = re.compile(r'orientation(?: changed)?: ([a-z-]+)(?:, tilt: [a-z-]+)?\)?\s*$')
 
 
 class OrientationPolicy:
@@ -48,6 +48,15 @@ class OrientationPolicy:
             self.since = now  # Bound retries after X11/touch failures.
 
 
+def monitor_event(policy, line, now):
+    if line.startswith(('--- iio-sensor-proxy vanished', '=== No accelerometer')):
+        policy.due(now, locked=True)
+        return
+    match = EVENT.search(line)
+    if match:
+        policy.observe(match[1], now)
+
+
 def run(apply, lock_file, settle):
     if apply and (not os.environ.get('DISPLAY') or
                   os.environ.get('XDG_SESSION_TYPE', 'x11') != 'x11'):
@@ -70,9 +79,7 @@ def run(apply, lock_file, settle):
                     raise RuntimeError('Oversized sensor output')
                 while b'\n' in pending:
                     line, pending = pending.split(b'\n', 1)
-                    match = EVENT.search(line.decode('utf-8', errors='replace'))
-                    if match:
-                        policy.observe(match[1], time.monotonic())
+                    monitor_event(policy, line.decode('utf-8', errors='replace'), time.monotonic())
             now = time.monotonic()
             rotation = policy.due(now, lock_file.exists())
             if rotation:
@@ -96,13 +103,20 @@ def run(apply, lock_file, settle):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--apply', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--apply', action='store_true')
+    mode.add_argument('--session', action='store_true', help='follow the Xfce rotation preference')
     parser.add_argument('--settle', type=float, default=0.8)
     parser.add_argument('--lock-file', type=Path,
                         default=Path(os.environ.get('XDG_RUNTIME_DIR', str(Path.home()/'.cache')))/'y700-rotation-locked')
     args = parser.parse_args()
     if not 0.2 <= args.settle <= 10:
         parser.error('--settle must be between 0.2 and 10 seconds')
+    if args.session:
+        if not os.environ.get('DISPLAY') or os.environ.get('XDG_SESSION_TYPE', 'x11') != 'x11':
+            raise SystemExit(0)
+        from rotation_session import run_session
+        raise SystemExit(run_session(OrientationPolicy(args.settle)))
     def interrupted(*_):
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM, interrupted)
