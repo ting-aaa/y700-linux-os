@@ -23,5 +23,11 @@ mount -t overlay overlay -o lowerdir=/lower,upperdir=/runtime/upper,workdir=/run
 for directory in dev proc sys; do mount --bind "/$directory" "/guest/$directory"; done
 mount -t tmpfs tmpfs /guest/run
 mkdir -p /guest/opt/wifi-test
+if grep -qw y700.wifi_actor=seat /proc/cmdline; then
+    cp -a /test/. /guest/opt/wifi-test/
+    cp /bin/busybox /guest/opt/wifi-test/bin/
+    cp /test/fixture-seat.service /guest/etc/systemd/system/y700-wifi-fixture.service
+    exec switch_root /guest /sbin/init
+fi
 mount --bind /test /guest/opt/wifi-test
 chroot /guest /bin/bash /opt/wifi-test/fixture-guest.sh

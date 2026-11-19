@@ -1,5 +1,6 @@
 """Tap the real Xfce Wi-Fi applet and emit only reduced acceptance results."""
 
+import json
 import os
 from pathlib import Path
 import re
@@ -40,19 +41,26 @@ def xdotool(*args):
 def tap(x, y):
     if x <= 0 or y <= 0 or x >= 1100 or y >= 800:
         raise ProbeError('invalid-tap-target')
-    if xdotool('mousemove', '--sync', str(x), str(y), 'click', '1').returncode:
+    # Consecutive equal passphrase characters tap the same pixel again.
+    if xdotool('mousemove', str(x), str(y), 'click', '1').returncode:
         raise ProbeError('xtest-click-failed')
+
+
+def window_geometry(window):
+    if not window.isdecimal():
+        return None
+    parts = dict(re.findall(r'^(X|Y|WIDTH|HEIGHT)=(-?\d+)$',
+                            xdotool('getwindowgeometry', '--shell', window).stdout, re.M))
+    if len(parts) == 4:
+        return tuple(int(parts[key]) for key in ('X', 'Y', 'WIDTH', 'HEIGHT'))
+    return None
 
 
 def tray_position():
     result = xdotool('search', '--onlyvisible', '--class', '^Nm-applet$')
     for window in result.stdout.split():
-        if not window.isdecimal():
-            continue
-        dimensions = dict(re.findall(r'^(X|Y|WIDTH|HEIGHT)=(-?\d+)$',
-                                     xdotool('getwindowgeometry', '--shell', window).stdout, re.M))
-        if len(dimensions) == 4:
-            x, y, width, height = (int(dimensions[key]) for key in ('X', 'Y', 'WIDTH', 'HEIGHT'))
+        if geometry := window_geometry(window):
+            x, y, width, height = geometry
             if 8 <= width <= 64 and 8 <= height <= 64:
                 return x + width // 2, y + height // 2
     return None
@@ -125,6 +133,73 @@ def editor_count(profile_names):
         editor.wait(timeout=4)
 
 
+def password_dialog(app):
+    for dialog in nodes(app):
+        if dialog.get_role() != Atspi.Role.DIALOG or not showing(dialog):
+            continue
+        entry = None
+        connect = None
+        for child in nodes(dialog):
+            if child.get_role() == Atspi.Role.PASSWORD_TEXT and showing(child):
+                entry = child
+            if (child.get_role() == Atspi.Role.PUSH_BUTTON and child.get_name() == 'Connect' and showing(child)):
+                connect = child
+        if entry and connect:
+            return entry, connect
+    return None
+
+
+def enter_password(entry, connect, secret):
+    editable = entry.get_editable_text_iface()
+    if not editable or not editable.set_text_contents(secret):
+        raise ProbeError('masked-gtk-field-edit-failed')
+    text = entry.get_text_iface()
+    if not text or text.get_character_count() != len(secret):
+        raise ProbeError('password-field-length-mismatch')
+    action = connect.get_action_iface()
+    if not action or not action.do_action(0):
+        raise ProbeError('secured-gtk-connect-action-failed')
+
+
+def verify_password_retry(app, device, transitions, network, choose):
+    entry, connect = await_value(lambda: password_dialog(app), 'secured-password-dialog-missing')
+    before = len(transitions)
+    enter_password(entry, connect, network['wrong'])
+
+    def reject_premature_activation():
+        if (device.get_state() == NM.DeviceState.ACTIVATED or
+                any(state == NM.DeviceState.ACTIVATED for state, _ in transitions[before:])):
+            raise ProbeError('wrong-password-unexpectedly-activated')
+
+    def wrong_failed():
+        reject_premature_activation()
+        tried = False
+        for state, reason in transitions[before:]:
+            if state == NM.DeviceState.CONFIG:
+                tried = True
+            elif tried and state in (NM.DeviceState.NEED_AUTH, NM.DeviceState.FAILED):
+                return state, reason
+        return None
+
+    state, reason = await_value(wrong_failed, 'wrong-password-failure-not-observed', 55)
+    print(f'WIFI_WRONG_REJECTED nm_state={state} nm_reason={reason}', flush=True)
+
+    def retry_ready():
+        dialog = password_dialog(app)
+        if dialog:
+            return dialog
+        if device.get_state() == NM.DeviceState.DISCONNECTED:
+            return 'reselect'
+        return None
+
+    retry = await_value(retry_ready, 'wrong-password-dialog-did-not-return', 18)
+    if retry == 'reselect':
+        choose()
+        retry = await_value(lambda: password_dialog(app), 'password-dialog-did-not-open-on-retry', 50)
+    reject_premature_activation()
+    enter_password(*retry, network['correct'])
+
+
 def main(mode, applet_pid):
     if mode not in ('physical', 'fixture'):
         raise ProbeError('bad-mode')
@@ -146,12 +221,15 @@ def main(mode, applet_pid):
     before = device.get_active_connection()
     before_uuid = before.get_uuid() if before else None
     transitions = []
-    device.connect('state-changed', lambda _, state, previous, reason: transitions.append((state, previous)))
+    device.connect('state-changed', lambda _, state, _previous, reason: transitions.append((state, reason)))
     if mode == 'physical' and (not before or device.get_state() != NM.DeviceState.ACTIVATED):
         raise ProbeError('physical-active-connection-required')
-    if mode == 'fixture' and (before or not (Path('/sys/class/net') / device.get_iface() /
-                                            'device/driver').resolve().name.startswith('mac80211_hwsim')):
-        raise ProbeError('fixture-hwsim-idle-station-required')
+    network = None
+    if mode == 'fixture':
+        if before or (Path('/sys/class/net') / device.get_iface() /
+                      'device/driver').resolve().name != 'mac80211_hwsim':
+            raise ProbeError('fixture-hwsim-idle-station-required')
+        network = json.loads(Path('/run/wifi-fixture/network.json').read_text())
 
     def access_points():
         aps = device.get_access_points()
@@ -178,20 +256,41 @@ def main(mode, applet_pid):
     count, names = access_points()
     rows = await_value(lambda: network_rows(available, names), 'submenu-has-no-visible-nm-ap-rows')
     matched_labels = {label for _, label in rows}
-    if mode == 'fixture':
-        target = next((row for row, label in rows if label == 'Y700 Fixture Open'), None)
+    if network:
+        parameters = dict(item.split('=', 1) for item in Path('/proc/cmdline').read_text().split() if '=' in item)
+        attempt = parameters.get('y700.wifi_attempt', 'retry')
+        if attempt not in ('fresh', 'retry'):
+            raise ProbeError('bad-fixture-attempt')
+        target = next((row for row, label in rows if label == network['ssid']), None)
         if not target:
             raise ProbeError('owned-ap-missing-from-menu')
         tap_node(target)
+        if network['mode'] != 'open' and attempt == 'retry':
+            def choose_again():
+                tap(*position)
+                menu = await_value(submenu, 'retry-applet-menu-missing')
+                tap_node(menu)
+                choices = await_value(lambda: network_rows(menu, {network['ssid']}), 'retry-ap-row-missing')
+                tap_node(choices[0][0])
+
+            verify_password_retry(app, device, transitions, network, choose_again)
+        elif network['mode'] != 'open':
+            dialog = await_value(lambda: password_dialog(app), 'secured-password-dialog-missing')
+            enter_password(*dialog, network['correct'])
 
         def connected():
             ap = device.get_active_access_point()
-            return (ap and ssid(ap.get_ssid()) == 'Y700 Fixture Open' and
+            return (ap and ssid(ap.get_ssid()) == network['ssid'] and
                     device.get_state() == NM.DeviceState.ACTIVATED and device.get_ip4_config())
 
         ip = await_value(connected, 'owned-ap-did-not-activate', 30)
         if not any(address.get_address().startswith('192.0.2.') for address in ip.get_addresses()):
             raise ProbeError('fixture-dhcp-address-missing')
+        if network['mode'] != 'open':
+            setting = device.get_active_connection().get_connection().get_setting_wireless_security()
+            if not setting or setting.get_key_mgmt() != {'wpa2': 'wpa-psk', 'sae': 'sae'}[network['mode']]:
+                raise ProbeError('unexpected-negotiated-security')
+            print(f'WIFI_SECURED_PASS security={network["mode"]} input=gtk-a11y attempt={attempt}')
         print('WIFI_FIXTURE_ASSOCIATION activated=1 dhcp=1')
     else:
         xdotool('key', 'Escape', 'Escape')

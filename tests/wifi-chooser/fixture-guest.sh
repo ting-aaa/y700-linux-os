@@ -10,12 +10,18 @@ tr '\000' '\n' </proc/device-tree/compatible | grep -Fxq linux,dummy-virt || fai
 for device in /sys/class/net/*/device; do
     test ! -e "$device" || fail unexpected-network-device
 done
-test ! -e /run/systemd/system || fail unexpected-system-manager
+actor=$(sed -nE 's/.*[[:space:]]y700.wifi_actor=([a-z]+).*/\1/p' /proc/cmdline)
+case $actor in
+    root) test ! -e /run/systemd/system || fail unexpected-system-manager ;;
+    seat) test -e /run/systemd/system || fail system-manager-missing ;;
+    *) fail bad-actor-mode ;;
+esac
 
 pids=()
 cleanup() {
     for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
     wait || true
+    if [[ -e /run/netns/wifi-ap ]]; then ip netns delete wifi-ap; fi
 }
 trap cleanup EXIT
 mkdir -p /run/wifi-fixture /run/dbus
@@ -29,30 +35,35 @@ for path in "${radios[@]}"; do
 done
 ap=${radios[0]##*/}
 station=${radios[1]##*/}
-/usr/lib/systemd/systemd-udevd --resolve-names=never >/dev/null 2>&1 & pids+=("$!")
+ap_phy=$(basename "$(readlink -f "/sys/class/net/$ap/phy80211")")
+[[ $ap_phy =~ ^phy[0-9]+$ ]] || fail ap-wiphy-missing
+# Keep the destination IP out of the station's local routing table. A ping
+# in the initial namespace must cross the virtual wireless link.
+ip netns add wifi-ap
+iw phy "$ap_phy" set netns name wifi-ap || fail ap-namespace
+ap_net=(ip netns exec wifi-ap)
+test ! -e "/sys/class/net/$ap" || fail ap-remained-in-station-namespace
+if [[ $actor == root ]]; then
+    /usr/lib/systemd/systemd-udevd --resolve-names=never >/dev/null 2>&1 & pids+=("$!")
+fi
 for _ in {1..30}; do [[ ! -S /run/udev/control ]] || break; sleep 0.1; done
 test -S /run/udev/control || fail udev-start
 SYSTEMD_IN_CHROOT=0 udevadm trigger --action=add --subsystem-match=net
 SYSTEMD_IN_CHROOT=0 udevadm settle --timeout=8
-ip address add 192.0.2.1/24 dev "$ap"
+"${ap_net[@]}" ip link set lo up
+"${ap_net[@]}" ip address add 192.0.2.1/24 dev "$ap"
 
-cat > /run/wifi-fixture/hostapd.conf <<EOF
-interface=$ap
-driver=nl80211
-ssid=Y700 Fixture Open
-channel=1
-hw_mode=g
-auth_algs=1
-ctrl_interface=/run/wifi-fixture/hostapd
-EOF
-hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & pids+=("$!")
+security=$(sed -nE 's/.*[[:space:]]y700.wifi_security=([a-z0-9]+).*/\1/p' /proc/cmdline)
+case $security in open|wpa2|sae) ;; *) fail bad-security-mode;; esac
+uv run --offline --no-project --python /usr/bin/python3 python ./prepare-ap.py "$security" "$ap"
+"${ap_net[@]}" hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & pids+=("$!")
 ap_ready() { hostapd_cli -p /run/wifi-fixture/hostapd -i "$ap" status 2>/dev/null | grep -Fxq 'state=ENABLED'; }
 for _ in {1..40}; do
     if ap_ready; then break; fi
     sleep 0.1
 done
 ap_ready || { echo 'WIFI_FIXTURE_ERROR ap-did-not-enable' >&2; exit 1; }
-LD_LIBRARY_PATH=/opt/wifi-test/lib dnsmasq --no-daemon --port=0 --interface="$ap" --bind-interfaces \
+LD_LIBRARY_PATH=/opt/wifi-test/lib "${ap_net[@]}" dnsmasq --no-daemon --port=0 --interface="$ap" --bind-interfaces \
     --dhcp-range=192.0.2.11,192.0.2.19,255.255.255.0,1h --dhcp-option=3 --dhcp-authoritative \
     >/dev/null 2>&1 & pids+=("$!")
 dhcp=$!
@@ -63,16 +74,18 @@ plugins=keyfile
 dns=none
 rc-manager=unmanaged
 
-[keyfile]
-unmanaged-devices=interface-name:$ap
-
 [connectivity]
 enabled=false
 EOF
-dbus-daemon --system --nofork --nopidfile >/dev/null 2>&1 & pids+=("$!")
+if [[ $actor == root ]]; then
+    dbus-daemon --system --nofork --nopidfile >/dev/null 2>&1 & pids+=("$!")
+fi
 for _ in {1..40}; do [[ ! -S /run/dbus/system_bus_socket ]] || break; sleep 0.1; done
 test -S /run/dbus/system_bus_socket || fail system-bus-start
-wpa_supplicant -u >/dev/null 2>&1 & pids+=("$!")
+if ! pgrep -x wpa_supplicant >/dev/null; then
+    wpa_supplicant -u >/dev/null 2>&1 & pids+=("$!")
+fi
+if pgrep -x NetworkManager >/dev/null; then fail unexpected-networkmanager; fi
 NetworkManager --no-daemon --config=/run/wifi-fixture/NetworkManager.conf >/dev/null 2>&1 & pids+=("$!")
 station_state() {
     local value
@@ -98,9 +111,34 @@ nmcli -w 5 connection add type wifi ifname "$station" con-name 'Y700 Fixture Sav
     ssid 'Y700 Fixture Absent' connection.autoconnect no >/dev/null
 kill -0 "$dhcp" 2>/dev/null || fail dhcp-server-start
 nmcli -w 15 device wifi rescan ifname "$station"
-bash ./session.sh fixture
+if [[ $actor == seat ]]; then
+    chown y700 /run/wifi-fixture/network.json
+    [[ -c /dev/tty1 ]] || fail local-vt-missing
+    if [[ $(cat /sys/class/tty/tty0/active) != tty1 ]]; then
+        uv run --offline --no-project --python /usr/bin/python3 python - <<'PY' || fail local-vt-activation
+import fcntl
+
+with open('/dev/tty0', 'rb', buffering=0) as vt:
+    fcntl.ioctl(vt, 0x5606, 1)  # VT_ACTIVATE
+    fcntl.ioctl(vt, 0x5607, 1)  # VT_WAITACTIVE
+PY
+    fi
+    unit=y700-wifi-session-test.service
+    install -o y700 -m600 /dev/null /run/wifi-fixture/seat-receipt
+    status=0
+    systemd-run --quiet --wait --collect --unit="$unit" -p User=y700 -p PAMName=login \
+        -p StandardInput=tty -p TTYPath=/dev/tty1 -p StandardOutput=journal -p StandardError=journal \
+        -E XDG_SESSION_TYPE=x11 -E XDG_SESSION_CLASS=user -E XDG_SEAT=seat0 -E XDG_VTNR=1 \
+        /opt/wifi-test/seat-actor.sh "$security" || status=$?
+    grep -E '^WIFI_' /run/wifi-fixture/seat-receipt || true
+    (( status == 0 )) || fail pam-seat-session
+else
+    bash ./session.sh fixture "$security"
+fi
 test "$(station_state)" = 100
-iw dev "$station" link | grep -Eq '^[[:space:]]*SSID: Y700 Fixture Open$'
+iw dev "$station" link | grep -Eq '^Connected to[[:space:]]'
 ip -4 address show dev "$station" | grep -Eq 'inet 192\.0\.2\.(1[1-9])/24'
-ping -q -c 1 -W 2 192.0.2.1 >/dev/null
+ip route get 192.0.2.1 oif "$station" | grep -Eq " dev $station "
+ping -q -c 1 -W 2 -I "$station" 192.0.2.1 >/dev/null
+nmcli -w 8 device disconnect "$station" >/dev/null || fail station-cleanup
 echo 'WIFI_FIXTURE_PASS nm_connected=1 nl80211_associated=1 local_dhcp=1 local_ping=1'

@@ -3,8 +3,10 @@
 set -euo pipefail
 bundle=$(cd -- "$(dirname -- "$0")" && pwd -P)
 mode=${1:?physical or fixture}
+security=${2:-open}
 case "$mode" in physical|fixture) ;; *) exit 2;; esac
-if [[ ${2:-} != session ]]; then
+case "$mode:$security" in physical:open|fixture:open|fixture:wpa2|fixture:sae) ;; *) exit 2;; esac
+if [[ ${3:-} != session ]]; then
     if [[ $mode == physical ]]; then test "$(id -u)" != 0; fi
     if [[ $mode == fixture ]]; then grep -qw 'y700.wifi_fixture=1' /proc/cmdline; fi
     run=$(mktemp -d "${TMPDIR:-/tmp}/y700-wifi-session.XXXXXXXX")
@@ -32,7 +34,7 @@ if [[ ${2:-} != session ]]; then
     unset SESSION_MANAGER GTK_MODULES NO_AT_BRIDGE G_MESSAGES_DEBUG
     export PATH=$bundle/bin:/usr/local/bin:/usr/bin:/bin
     cd -- "$HOME"
-    dbus-run-session -- bash "$bundle/session.sh" "$mode" session \
+    dbus-run-session -- bash "$bundle/session.sh" "$mode" "$security" session \
         2> >(grep -E '^(WIFI_PROBE_ERROR|WIFI_SESSION_ERROR) ' >&2) | grep -E '^WIFI_'
     exit
 fi
@@ -58,9 +60,9 @@ PY
 
 mkdir -p "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml"
 cp -- "$bundle/xfce4-panel.xml" "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/"
-xp= panel= applet=
+xp= wm= panel= applet=
 cleanup_session() {
-    for pid in "$applet" "$panel" "$xp"; do
+    for pid in "$applet" "$panel" "$wm" "$xp"; do
         if [[ -n $pid ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
     done
 }
@@ -76,6 +78,9 @@ dbus-update-activation-environment DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SE
 # The session bus only hosts this private desktop and its accessibility bus.
 gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
     --method org.a11y.Bus.GetAddress >/dev/null 2>&1 || { echo 'WIFI_SESSION_ERROR accessibility-bus' >&2; exit 1; }
+if [[ $security != open ]]; then xfwm4 --compositor=off >/dev/null 2>&1 & wm=$!; fi
 xfce4-panel --disable-wm-check >/dev/null 2>&1 & panel=$!
-nm-applet --no-agent >/dev/null 2>&1 & applet=$!
+agent_args=()
+if [[ $security == open ]]; then agent_args+=(--no-agent); fi
+nm-applet "${agent_args[@]}" >/dev/null 2>&1 & applet=$!
 "${py[@]}" "$bundle/probe.py" "$mode" "$applet"

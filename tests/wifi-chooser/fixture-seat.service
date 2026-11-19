@@ -1,0 +1,13 @@
+[Unit]
+Description=Isolated Y700 Wi-Fi acceptance fixture
+Requires=systemd-logind.service dbus.service polkit.service systemd-udevd.service
+After=systemd-logind.service dbus.service polkit.service systemd-udevd.service
+FailureAction=poweroff-immediate
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wifi-test/fixture-systemd.sh
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyAMA0
+TimeoutStartSec=205
