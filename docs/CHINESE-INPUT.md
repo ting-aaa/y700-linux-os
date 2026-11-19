@@ -12,7 +12,11 @@ Both placements passed on the final 1,112-package dev9 image with `y700-input-pi
 
 ## Installed tablet software check
 
-On 2026-11-20 the TB320FC_PRC passed the same Chinese and English entry test with its installed dev3 packages. A private 200% Xfce display ran on the tablet with a fresh home, isolated desktop bus and physical input devices hidden. Onboard entered `nihao`. The second numbered popup tap committed `你好`, and switching back to English and using Onboard left the GTK entry with `你好 hello`. The original boot, graphical seat, service invocations and account language matched before and after. This run exercised the native tablet software with synthetic X11 pointer events.
+On 2026-11-20 the TB320FC_PRC passed the same Chinese and English entry test with its installed dev3 packages. A private 200% Xfce display ran on the tablet with a fresh home, isolated desktop bus and physical input devices hidden. Onboard entered `nihao`. The second numbered popup tap committed `你好`, and switching back to English and using Onboard left the GTK entry with `你好 hello`. The original boot, graphical seat, service invocations and account language matched before and after.
+
+## Chromium
+
+Chromium `156.0.8078.47` passed in an ARM64 VM on the same image and on the tablet in a separate private Xfce session. The browser opened a local test page, confirmed focus through `document.activeElement`, and reported the text committed into its actual DOM. After each IBus engine switch, a new focus transition from a button into the text field brought Onboard back automatically. Five letter taps produced the candidate. The numbered popup tap committed `你好` on its first try in one VM run. The tablet and an earlier VM run needed a second tap. The English tray switch plus Onboard then left the page with exactly `你好 hello`. The renderer used seccomp filtering, `NoNewPrivs`, and a separate PID namespace. [Browser fixture](../tests/chinese-input/chromium/browser-probe.py)
 
 ## Repeat on an isolated ARM64 image
 
@@ -23,4 +27,14 @@ sudo bash tests/chinese-input/run-arm64.sh \
   "$ROOT_QCOW2" "$ROOT_SHA256" "$NBD_BIN_DIR" "$X11_DEB_DIR" "$ARM64_UV"
 ```
 
-Set `CHINESE_INPUT_POSITION=lower` to reproduce the geometry where the candidate popup overlaps the Onboard dock. The tests exercise synthetic X11 pointer clicks and a real GTK entry. Chromium text entry and finger input through the tablet’s digitizer need separate acceptance.
+Run with `sudo env CHINESE_INPUT_POSITION=lower bash …` to reproduce the geometry where the candidate popup overlaps the Onboard dock.
+
+For Chromium, use a full ARM64 VM so the browser can create its renderer sandbox. Provide a bootable Y700 kernel and its expected SHA-256, an ARM64 static BusyBox, the X11 archive directory and ARM64 `uv`. The runner boots the supplied root read-only and serves the fixture only on guest loopback. [Chromium runner](../tests/chinese-input/chromium/run-vm.sh)
+
+```sh
+bash tests/chinese-input/chromium/run-vm.sh \
+  "$ROOT_QCOW2" "$ROOT_SHA256" "$KERNEL_IMAGE" "$KERNEL_SHA256" \
+  "$ARM64_BUSYBOX" "$X11_DEB_DIR" "$ARM64_UV"
+```
+
+The tests use synthetic X11 pointer clicks. Finger input through the tablet digitizer and candidate interaction on the physical panel remain to be checked.
