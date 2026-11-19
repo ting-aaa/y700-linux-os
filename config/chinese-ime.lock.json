@@ -112,12 +112,12 @@
       "sha256": "917b0767db80066c46ffce676f8d6136272db7ea1878b4384f589698632b58d4"
     },
     {
-      "filename": "y700-input-pinyin_0.1.0~dev2_all.deb",
+      "filename": "y700-input-pinyin_0.1.0~dev3_all.deb",
       "package": "y700-input-pinyin",
-      "version": "0.1.0~dev2",
+      "version": "0.1.0~dev3",
       "architecture": "all",
-      "size": 3700,
-      "sha256": "f89e3b168f9e5fa769de1c9da2a3bbcfdbc405687814d1d3e3fef60439ffabbe"
+      "size": 4160,
+      "sha256": "462d7b571388c5210a58bc8a8bcd9776bec7e8f1ecb338b4f982a52e4927d6b5"
     }
   ]
 }
