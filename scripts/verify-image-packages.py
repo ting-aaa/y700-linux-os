@@ -20,7 +20,7 @@ for name in ('debian-base.lock.json', 'desktop-repair-auth.lock.json'):
 control = (repo / 'packaging/control').read_text().splitlines()
 version = next(line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
-for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc',
+for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'blueman',
               'camera-qcam', 'camera-pipewire', 'camera-portal'):
     name = f'{layer}.lock.json'
     receipt = args.root / 'var/lib/y700/build' / name
@@ -31,6 +31,13 @@ for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc',
     expected = json.loads((repo / 'config' / name).read_text())
     if json.loads(receipt.read_text()) != expected:
         raise SystemExit(f'{name} receipt differs from the build input lock')
+    if layer == 'blueman':
+        # The local fix updates the base package. Refuse a changed parent version.
+        parent = expected['replaces']
+        original = (parent['package'], parent['version'], parent['architecture'])
+        if original not in wanted:
+            raise SystemExit('Blueman fix does not match the locked Debian base')
+        wanted.remove(original)
     wanted.update((p['package'], p['version'], p['architecture']) for p in expected['packages'])
 camera_receipt = args.root / RECEIPT
 if camera_receipt.is_symlink():
