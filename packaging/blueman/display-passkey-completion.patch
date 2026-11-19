@@ -1,0 +1,16 @@
+Description: Keep displaying all six passkey digits once the remote keyboard has entered them
+Origin: other, Y700 Linux OS
+Forwarded: no
+
+--- a/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
++++ b/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
+@@ -184,6 +184,8 @@
+         key = f"{passkey:06}"
++        # BlueZ can report all six digits as already entered.
++        next_digit = key[entered:entered + 1]
+         notify_message = _("Pairing passkey for") + f" {self.get_device_string(object_path)}: " \
+-                                                    f"{key[:entered]}<b>{key[entered]}</b>{key[entered + 1:]}"
++                                                    f"{key[:entered]}<b>{next_digit}</b>{key[entered + 1:]}"
+         self._close()
+         self._notification = Notification("Bluetooth", notify_message, 0, icon_name="blueman")
+         self._notification.show()
