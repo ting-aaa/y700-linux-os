@@ -13,7 +13,7 @@ pids=()
 cleanup() {
     local rc=$?
     if (( rc != 0 )); then
-        for log in /run/{peer,bluez,btvirt}.log; do
+        for log in /run/{peer,bluez,btvirt,Xorg}.log; do
             [[ ! -e $log ]] || grep -vE 'method_(return|call)|\[signal\]|command 0x' "$log" | tail -65 || :
         done
         dmesg | tail -28
@@ -38,6 +38,7 @@ modprobe cmac
 insmod ./hci_vhci.ko
 test -c /dev/vhci && test -c /dev/uhid
 dbus-daemon --system --fork
+if [[ -f dummy.deb ]]; then source ./desktop-xorg.sh; fi
 mode=()
 controller=()
 if grep -qw y700.virtual_classic=1 /proc/cmdline; then mode=(classic); controller=(-B); fi

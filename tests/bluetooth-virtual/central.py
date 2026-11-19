@@ -1,10 +1,14 @@
 """Drive org.bluez.Device1, observe evdev from the Bluetooth HID bus."""
 import os
 from pathlib import Path
+from contextlib import contextmanager
+import pwd
 import select
 import socket
 import struct
+import subprocess
 import sys
+import tempfile
 import time
 
 import dbus
@@ -44,7 +48,34 @@ def inputs_for(address):
             yield event.name
 
 
-def verify_inputs(address, emit):
+@contextmanager
+def desktop_observer(address):
+    if "Y700_GTK_HID" not in os.environ:
+        yield
+        return
+    user = pwd.getpwnam("y700")
+    with tempfile.TemporaryDirectory(dir=os.environ["XDG_RUNTIME_DIR"]) as directory:
+        os.chown(directory, user.pw_uid, user.pw_gid)
+        ready = Path(directory, "ready")
+        args = ["runuser", "-u", "y700", "--", "env", "UV_CACHE_DIR=" + directory + "/cache",
+                "./uv", "run", "--offline", "--no-project", "--python", "/usr/bin/python3",
+                "python", "-B", "desktop.py", str(address), str(ready)]
+        with subprocess.Popen(args) as witness:
+            def is_ready():
+                if witness.poll() is not None:
+                    raise RuntimeError(f"GTK witness exited before ready: {witness.returncode}")
+                return ready.exists()
+            try:
+                wait("GTK_INPUT_ARMED", is_ready, 45)
+                yield
+                if witness.wait(timeout=12) != 0:
+                    raise RuntimeError("Missing window input from the paired device")
+            finally:
+                if witness.poll() is None:
+                    witness.terminate()
+
+
+def verify_evdev(address, emit):
     fds = []
     try:
         for name in inputs_for(address):
@@ -67,6 +98,11 @@ def verify_inputs(address, emit):
     finally:
         for fd in fds:
             os.close(fd)
+
+
+def verify_inputs(address, emit):
+    with desktop_observer(address):
+        verify_evdev(address, emit)
 
 
 def main():
@@ -101,7 +137,7 @@ def main():
         for attempt in range(2):
             with hidp.outgoing(str(address), str(host)) as emit:
                 wait("CLASSIC_BT_EVDEV_CREATED", lambda: list(inputs_for(address)))
-                assert state()["Connected"] and state()["Bonded"]
+                wait("CLASSIC_CONNECTED_WITH_BOND", lambda: state()["Connected"] and state()["Bonded"])
                 verify_inputs(address, emit)
             if attempt == 0:
                 if state()["Connected"]:

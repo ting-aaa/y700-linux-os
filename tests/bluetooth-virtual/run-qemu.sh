@@ -29,6 +29,11 @@ printf '%s  %s\n' \
     a190508dd5bafd048ead4404535610c8c827181917cb569530f8de36ad329fd6 "$bluez/test/example-gatt-server" \
     48cda541a25514609bcdd0ea6f9787cc2729f232c37bb8915c714ad8f9ac7b28 "$bluez/test/example-advertisement" \
     b801ccb950de2e511f351f7e346a2cdc519fef1e41634f056850dd7d36dbf742 "$btvirt" | sha256sum -c -
+if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
+    printf '%s  %s\n' 5ed4d469b062060a051d7d0e5edaaf5f1d3c93d9abc3f7989e1beee018cc0c5d "$XORG_DUMMY_DEB" | sha256sum -c -
+    cp "$XORG_DUMMY_DEB" "$work/init/test/dummy.deb"
+    cp "$fixture/"{desktop.py,desktop-xorg.sh} "$work/init/test/"
+fi
 cp "$kernel/drivers/bluetooth/hci_vhci.c" "$work/module/"
 echo 'obj-m += hci_vhci.o' > "$work/module/Makefile"
 make -s -C "$kernel" M="$work/module" ARCH=arm64 LLVM="${LLVM:--21}" modules
@@ -73,3 +78,8 @@ timeout -k 4 190 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     </dev/null 2>&1 | tr -d '\r' | tee "$work/run.log"
 grep -Fxq "$marker" "$work/run.log"
 grep -Fxq Y700_VIRTUAL_HID_EXIT=0 "$work/run.log"
+if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
+    expected=3
+    [[ $marker != Y700_VIRTUAL_CLASSIC_INPUT_PASS ]] || expected=2
+    [[ $(grep -Fxc Y700_GTK_HID_INPUT_PASS "$work/run.log") == "$expected" ]]
+fi
