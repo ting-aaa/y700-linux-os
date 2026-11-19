@@ -16,6 +16,8 @@ trap cleanup EXIT
 install -Dm644 "$source_dir/control" "$stage/DEBIAN/control"
 install -Dm644 "$source_dir/90_y700_input_pinyin.gschema.override" "$stage/usr/share/glib-2.0/schemas/90_y700_input_pinyin.gschema.override"
 install -Dm644 "$source_dir/90-y700-language.conf" "$stage/usr/share/lightdm/lightdm-gtk-greeter.conf.d/90-y700-language.conf"
+install -Dm644 "$source_dir/35y700_account_language" "$stage/etc/X11/Xsession.d/35y700_account_language"
+printf '%s\n' /etc/X11/Xsession.d/35y700_account_language > "$stage/DEBIAN/conffiles"
 install -Dm755 "$source_dir/y700-display-language" "$stage/usr/libexec/y700-display-language"
 install -Dm644 "$source_dir/y700-display-language.desktop" "$stage/usr/share/applications/y700-display-language.desktop"
 install -Dm644 "$repo/LICENSE" "$stage/usr/share/doc/y700-input-pinyin/copyright"

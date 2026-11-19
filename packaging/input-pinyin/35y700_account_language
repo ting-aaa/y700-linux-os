@@ -1,0 +1,14 @@
+# Debian's LightDM PAM session reads the system locale. Apply the desktop
+# user's saved language before 40x11-common_xsessionrc and D-Bus activation.
+if [ "${XDG_SESSION_CLASS:-user}" = user ] && [ "$(id -u)" != 0 ]; then
+    _y700_uid=$(id -u)
+    _y700_accounts=org.freedesktop.Accounts
+    _y700_user=/org/freedesktop/Accounts/User$_y700_uid
+    if [ "$(busctl --system --timeout=2s call "$_y700_accounts" /org/freedesktop/Accounts "$_y700_accounts" FindUserById x "$_y700_uid" 2>/dev/null)" = "o \"$_y700_user\"" ]; then
+        case $(busctl --system --timeout=2s get-property "$_y700_accounts" "$_y700_user" "$_y700_accounts.User" Language 2>/dev/null) in
+            's "zh_CN.UTF-8"'|'s "zh_CN.utf8"') LANG=zh_CN.UTF-8; LANGUAGE=zh_CN:zh; export LANG LANGUAGE ;;
+            's "en_US.UTF-8"'|'s "en_US.utf8"') LANG=en_US.UTF-8; LANGUAGE=en_US:en; export LANG LANGUAGE ;;
+        esac
+    fi
+    unset _y700_uid _y700_accounts _y700_user
+fi

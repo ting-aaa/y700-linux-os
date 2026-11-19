@@ -110,8 +110,13 @@ for version in dev8 dev9; do
     fi
     if [[ $version == dev8 ]]; then continue; fi
     expected+=(y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb)
+    if manifest_names "$bundle/SHA256SUMS" "${expected[@]}"; then
+        patch=$version.qcow2
+        break
+    fi
+    expected+=(blueman_2.4.4-1+y7001_arm64.deb)
     if manifest_names "$bundle/SHA256SUMS" "${expected[@]}" ||
-        manifest_names "$bundle/SHA256SUMS" "${expected[@]}" blueman_2.4.4-1+y7001_arm64.deb; then
+        manifest_names "$bundle/SHA256SUMS" "${expected[@]}" chinese-ime.tar; then
         patch=$version.qcow2
         break
     fi
