@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -11,6 +13,8 @@ using Windows.Storage.Streams;
 public sealed class HidPeripheral
 {
     private GattServiceProvider provider;
+    private GattLocalCharacteristic keyboard;
+    private GattLocalCharacteristic mouse;
     private BluetoothLEAdvertisementPublisher controlPublisher;
     private volatile string advertisementError = "No status event";
 
@@ -53,7 +57,7 @@ public sealed class HidPeripheral
         return result.Characteristic;
     }
 
-    private async Task AddInput(byte id, int length)
+    private async Task<GattLocalCharacteristic> AddInput(byte id, int length)
     {
         var report = await Add(0x2a4d, GattCharacteristicProperties.Read | GattCharacteristicProperties.Notify, new byte[length]);
         var parameters = new GattLocalDescriptorParameters {
@@ -63,6 +67,7 @@ public sealed class HidPeripheral
         var result = await report.CreateDescriptorAsync(Uuid(0x2908), parameters);
         if (result.Error != BluetoothError.Success)
             throw new InvalidOperationException("Report Reference 0x2908: " + result.Error);
+        return report;
     }
 
     public async Task Prepare()
@@ -76,8 +81,8 @@ public sealed class HidPeripheral
             try { await args.GetRequestAsync(); }
             finally { deferral.Complete(); }
         };
-        await AddInput(1, 1);
-        await AddInput(2, 2);
+        keyboard = await AddInput(1, 1);
+        mouse = await AddInput(2, 2);
     }
 
     private async Task CreateService(Guid service)
@@ -91,27 +96,87 @@ public sealed class HidPeripheral
         };
     }
 
-    public static async Task<bool> IsTabletPaired(string expectedAddress)
+    private static async Task<Dictionary<string, DeviceInformation>> PairedEndpoints()
     {
         string[] selectors = {
             BluetoothLEDevice.GetDeviceSelectorFromPairingState(true),
             BluetoothDevice.GetDeviceSelectorFromPairingState(true)
         };
         const string key = "System.Devices.Aep.DeviceAddress";
+        var found = new Dictionary<string, DeviceInformation>(StringComparer.OrdinalIgnoreCase);
         foreach (var selector in selectors) {
             var items = await DeviceInformation.FindAllAsync(selector, new string[] {key}, DeviceInformationKind.AssociationEndpoint);
             foreach (var item in items) {
                 object value;
                 if (!item.Properties.TryGetValue(key, out value) || value == null)
                     throw new InvalidOperationException("Paired peer has no address to check");
-                if (string.Equals(value.ToString().Replace(":", "").Replace("-", ""),
-                                  expectedAddress, StringComparison.OrdinalIgnoreCase))
-                    return true;
+                found[item.Id] = item;
             }
         }
-        return false;
+        return found;
     }
 
+    private static string Address(DeviceInformation item)
+    {
+        return item.Properties["System.Devices.Aep.DeviceAddress"].ToString().Replace(":", "").Replace("-", "");
+    }
+
+    public static async Task<bool> IsTabletPaired(string expectedAddress)
+    {
+        return (await PairedEndpoints()).Values.Any(item =>
+            string.Equals(Address(item), expectedAddress, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static async Task<string[]> BondInventory()
+    {
+        return (await PairedEndpoints()).Keys.OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public static async Task RestoreTemporaryBond(string expectedAddress, string[] initial, bool requestIssued)
+    {
+        var original = new HashSet<string>(initial, StringComparer.OrdinalIgnoreCase);
+        foreach (var item in (await PairedEndpoints()).Values) {
+            if (!requestIssued || original.Contains(item.Id) ||
+                !string.Equals(Address(item), expectedAddress, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var result = await item.Pairing.UnpairAsync();
+            if (result.Status != DeviceUnpairingResultStatus.Unpaired && result.Status != DeviceUnpairingResultStatus.AlreadyUnpaired)
+                throw new InvalidOperationException("Temporary endpoint unpair: " + result.Status);
+        }
+        if (!original.SetEquals((await PairedEndpoints()).Keys))
+            throw new InvalidOperationException("Host bond inventory differs from its baseline");
+    }
+
+    private static async Task<GattSubscribedClient> VerifiedClient(GattLocalCharacteristic report, string tablet)
+    {
+        var subscribers = report.SubscribedClients;
+        if (subscribers.Count != 1) throw new InvalidOperationException("Expected one HID subscriber");
+        var client = subscribers[0];
+        using (var device = await BluetoothLEDevice.FromIdAsync(client.Session.DeviceId.Id)) {
+            if (device == null || !device.DeviceInformation.Pairing.IsPaired ||
+                !string.Equals(device.BluetoothAddress.ToString("X12"), tablet, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("HID subscriber does not match the bonded tablet");
+        }
+        return client;
+    }
+
+    private static async Task Send(GattLocalCharacteristic report, GattSubscribedClient client, byte[] value)
+    {
+        var result = await report.NotifyValueAsync(Buffer(value), client);
+        if (result.Status != GattCommunicationStatus.Success)
+            throw new InvalidOperationException("HID test notification: " + result.Status);
+    }
+
+    // Called only after the tablet exclusively grabbed its two test inputs.
+    // There is no user-controlled keycode, mouse button or report payload.
+    public async Task SendFixedSample(string tablet)
+    {
+        var keyClient = await VerifiedClient(keyboard, tablet);
+        var mouseClient = await VerifiedClient(mouse, tablet);
+        await Send(keyboard, keyClient, new byte[] {1});
+        await Send(keyboard, keyClient, new byte[] {0});
+        await Send(mouse, mouseClient, new byte[] {1, 0xff});
+    }
     public static async Task<string> AdapterAddress()
     {
         var adapter = await BluetoothAdapter.GetDefaultAsync();
