@@ -146,6 +146,21 @@ On a PC with Bash, Zstandard, GNU coreutils and `qemu-img`, run `bash unpack.sh 
 
 The platform package introduces the first-login Onboard settings. Its version is the sole change to the 1,096 installed package tuples, whose digest is `a56e81398dfe8185974b64e3ecc19aad6d6bce6f762be5d7470db2707dd8fb83`. The private archive can also upgrade a running dev7 installation through APT. An attended boot of this exact image on the physical tablet remains open. [Platform package](PLATFORM-BUILD.md)
 
+### Dev9 tablet scale image
+
+The dev9 package supplies the 200% GTK scale default when Xfce starts with the internal Y700 panel as the sole active display. Saved per-user scale settings take precedence. An isolated ARM64 guest installed the reviewed dev9 package into a private copy of the dev8 root. APT and dpkg checks passed. The `y700-platform` version was the only change among all 1,096 installed package tuples. Their digest is `386ae3b92f48eda3e63ceaf95827e12721be2cd3275782d448557da8ede3baa2`.
+
+The private `out/combined-kms-dev9-camera-ssc` bundle combines the dev8 and dev9 changes into a single QCOW2 update against the compressed dev7 camera and SSC base. The compressed base files share storage with the earlier bundles through hard links. Copy the entire folder when moving it to another drive. On Linux, run `bash unpack.sh --verify`, then `bash unpack.sh /path/to/new-directory` to reconstruct the complete image. Allow 7.08 GiB at the destination. The source unpacker accepts both dev8 and dev9 bundles. [Image unpacker](../scripts/unpack-kms-update.sh)
+
+| Dev9 artifact | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `0e1442701478a79d20168431fc19cdc4d0d68c2527e96785cbdce248e2557f7b` |
+| Portable `dev9.qcow2`, 21,430,272 bytes | `edaff46682a8fe13731be53b94b7fdf1f2609cb9aad1c0b3c8e9d2915968bef2` |
+| Reconstructed 6 GiB `root.ext4` | `6dcf6a9e1d792fd34d12cef9e1bfa9c3467317203862c7a8f676a49d66cd58cf` |
+| `y700-platform_0.1.0~dev9_all.deb` | `a1e1fa923877ecbc60963814bed6811bf3544c05f9fdab7fb5689c976f57d0e4` |
+
+An independent read-only NBD view of the upgraded root supplied the advertised hash and passed `e2fsck -fn`. Extraction into a fresh compressed Btrfs volume reproduced the advertised hashes for the root, FAT boot filesystem, U-Boot and identity file. Both `e2fsck -fn` and `fsck.fat -n` passed. The unpacker also rejected a corrupt overlay, a mixed dev8/dev9 manifest, an existing output directory and insufficient free space. Booting the extracted dev9 image on the physical tablet remains a separate qualification step.
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
