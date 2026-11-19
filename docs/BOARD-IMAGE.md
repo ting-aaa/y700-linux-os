@@ -203,6 +203,24 @@ The private `out/combined-kms-dev9-bluetooth` bundle adds Blueman `2.4.4-1+y7001
 
 Use the included `prepare-bluetooth-identity.py` and `unpack.sh --bluetooth-address PRIVATE_FILE NEW_DIRECTORY` to provision one tablet while extracting the image. To rebuild this package layer, provide only the reviewed local Blueman archive in a directory and run `bash scripts/add-board-layer.sh blueman "$root" "$blueman_archives"` in the disposable ARM64 build environment. The public source lock identifies the authenticated Debian parent and versioned replacement. [Prepare the address](PERIPHERALS.md#prepare-a-fresh-installation) · [Package lock](../config/blueman.lock.json)
 
+### Dev9 image with Chinese input
+
+The local `out/combined-kms-dev9-pinyin` bundle includes 1,112 installed packages. It combines the dev9 desktop, qcam y7002, Blueman y7001, the existing board kernel and SSC firmware with the Debian IBus stack and the Y700 display language selector. A native ARM64 build added the 15 Debian packages and one board package to a disposable root. The original account is locked for first enrollment. The generic filesystem has an empty machine ID and carries no per-tablet Bluetooth address or sensor registry. [Input layer lock](../config/chinese-ime.lock.json) · [Chinese input](CHINESE-INPUT.md)
+
+| File or receipt | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `da2f4eb0553d225aef1459e93f04b58eee039c10039398ba5ffd06ef8967c7fb` |
+| Portable `dev9.qcow2` (319,356,928 bytes) | `76f27dddfa4cd43d67b37de51c6ec16ac67aa2ae06db6bae37057de6bc630a75` |
+| Generic 6 GiB `root.ext4` | `08a42daf79b0742a9d01c4e750b914d3886c60b08e5adfc51c6692ec9ef65a73` |
+| Installed package tuples | `6e926f63e7b509e796837b986971cbeea07723ad2322a516d2da945c57a491c9` |
+| Offline IME archives and their checksums (`chinese-ime.tar`) | `00ddd93a50a35563753cd0e89f7439f24065040c8010f4525cde1fe1b3135135` |
+
+Copy the complete bundle including `base/`. On Linux, check `sha256sum --strict -c TOOLS-SHA256SUMS` and run `bash unpack.sh --verify`, then `bash unpack.sh /absolute/path/to/new-directory`. Allow 7.5 GiB of free space on the destination filesystem. The same unpacker supports the private original-address option documented above. [Prepare one tablet’s Bluetooth identity](PERIPHERALS.md#prepare-a-fresh-installation)
+
+Two independent read-only streams of the 6 GiB filesystem matched the generic SHA-256 above. Full extraction from the portable bundle reproduced all partition hashes and the 1,112-package identity. The generic ext4 and FAT passed filesystem checks. A second full extraction with the original Android Bluetooth identity produced a root-owned 0600 address file, retained the generic hash manifest, matched the privately supplied address on readback and passed ext4 checks.
+
+A full-system ARM64 guest booted the same generic root through EFI. The ordinary user set a password on the KMS enrollment keyboard and signed in through LightDM. From the English Xfce session the user selected Simplified Chinese. After logout a separate ordinary LightDM session inherited `LANG=zh_CN.UTF-8` and `LANGUAGE=zh_CN:zh`, and the standard GTK Cancel button displayed `取消(C)`. The system-wide default remained English. [Language selection and reproduction](DEBIAN-SNAPSHOT.md#optional-simplified-chinese-input)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

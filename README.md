@@ -24,13 +24,14 @@
 
 - **首次开机**　组合开发镜像的本地账户名为 `y700`。首次开机在屏幕键盘上输入两遍新密码，随后在图形登录界面使用同一密码进入 Xfce。已在同一份 ARM64 镜像里走通全程，平板内置屏的实际触点和方向仍待验证。[首次设密](docs/FIRSTBOOT-TOUCH.md) · [图形登录](docs/WARM-GREETER.md)
 - **调整缩放**　dev9 在单独使用原生分辨率内屏时，为新 Xfce 用户默认选择 200%。已有用户明确选择的比例继续生效。「设置 → 平板显示缩放」可切换 100% 或 200%，部分应用需重新打开。[桌面与应用缩放](docs/PLATFORM-BUILD.md) · [浏览器手势](docs/TOUCH-GESTURES.md)
+- **输入中文和切换桌面语言**　点面板的输入法图标，选择「Chinese – Intelligent Pinyin」。点入文本框后用屏幕键盘拼写，点候选词前的编号上屏。若拼音仍在编辑，再点一次编号，空格也可选中当前候选。用「设置 → Display language」选择简体中文或英语，下次登录生效。完整镜像在 ARM64 EFI 测试中先后登录了英文和中文桌面。[中文输入实测](docs/CHINESE-INPUT.md)
 - **锁定屏幕方向**　「设置 → 平板屏幕旋转」可保存当前用户的偏好，默认锁定当前方向。实机在一次 5.018 秒的传感器 DSP 启停中读到了加速度、角速度、磁场、环境光、接近、罗盘和保护套霍尔。四个方向的自动旋转、触点对齐和开合盖响应仍待实测。[七通道读数](docs/SSC-TRIAL.md#seven-channel-physical-survey) · [桌面旋转](docs/CAMERA-SENSORS.md#xfce-screen-rotation)
 - **保留本机传感器校准**　SSC 0.1.1 首次初始化时，从这台平板的内部 UFS 只读导入出厂校准。本机实测合并得到 375 组配置，重复初始化保留了已有状态。通用镜像随附板级默认值，每台平板在本地完成导入。[校准来源与验证](docs/SSC-CALIBRATION.md)
-- **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。实机普通用户的菜单里显示了当前网络和另外 6 个可用网络。「Network Connections」（网络连接）列出 2 个已保存配置。实机测试保留了当前连接，独立 ARM64 测试通过菜单选择网络并取得 DHCP 地址。[选网验证](docs/WIFI-CHOOSER.md)
+- **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。实机普通用户的菜单里显示了当前网络和另外 6 个可用网络。「Network Connections」（网络连接）列出 2 个已保存配置。WPA3 密码输错时，可以打开「设置 → 高级网络配置」，编辑已保存连接的 Wi-Fi 安全密码并保存。独立 ARM64 测试中原连接随后取得了 DHCP 地址。[选网验证](docs/WIFI-CHOOSER.md)
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 管理器选择设备。键盘要求输入配对码时，在键盘上键入平板显示的六位数字。Blueman y7001 已修复输完最后一位时界面报错的问题。实机已识别无线键鼠报告，隔离桌面验证了码值显示及确认按钮。低功耗和经典蓝牙的键鼠输入与重连通过了原生 ARM64 虚拟设备测试，实际配件仍待上手验证。[实机无线](docs/BLUETOOTH-HID-RADIO.md) · [配对界面](docs/BLUEMAN-PAIRING.md) · [输入与重连](docs/BLUETOOTH-VIRTUAL.md)
 - **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
-最新国行 KMS 开发镜像使用 Debian 13 ARM64、dev9 平板组件、qcam y7002 和 Blueman y7001，包含 1,096 个软件包。组合镜像集成首次设密屏幕键盘、三摄 PipeWire 接口、Chromium 摄像头授权、SSC 0.1.1 本机校准导入，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。现有平板已单独升级桌面、相机及蓝牙应用，整个新镜像仍待上板启动。[镜像组成与校验值](docs/BOARD-IMAGE.md#dev9-image-with-the-bluetooth-keyboard-fix) · [屏幕键盘验证](docs/PLATFORM-BUILD.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
+最新国行 KMS 开发镜像使用 Debian 13 ARM64、dev9 平板组件、qcam y7002、Blueman y7001 和中英文输入组件，包含 1,112 个软件包。组合镜像集成首次设密屏幕键盘、三摄 PipeWire 接口、Chromium 摄像头授权、SSC 0.1.1 本机校准导入，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。现有平板已单独升级桌面、相机、蓝牙应用及中文输入组件，整个新镜像仍待上板启动。[镜像组成与校验值](docs/BOARD-IMAGE.md#dev9-image-with-chinese-input) · [屏幕键盘验证](docs/PLATFORM-BUILD.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
 ## 仓库内容
 
