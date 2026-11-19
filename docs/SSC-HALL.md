@@ -13,7 +13,7 @@ cc -std=c11 -O2 -Wall -Wextra -Werror src/sensors/ssc-hall.c \
 ./ssc-hall --count 4 --timeout 30
 ```
 
-The seven-channel PRC survey received one physical `FAR` report from the Hall listener. No one moved a cover during that run. [Measured survey](SSC-TRIAL.md#seven-channel-physical-survey)
+The seven-channel PRC survey received one physical `FAR` report from the Hall listener. The run sampled the initial state only. [Measured survey](SSC-TRIAL.md#seven-channel-physical-survey)
 
 For the transition test, record the open and closed positions separately and correlate changes with at least two deliberate cover cycles. Retain event text and counts. Exit 3 means discovery was unavailable, exit 4 means too few valid events arrived, and exit 5 means a subscription or library interface failed. Wake from suspend needs a separate test after the awake transitions are established.
 

@@ -1,6 +1,6 @@
 # Hardware and system status
 
-Evidence through 2026-11-19 covers one TB320FC_PRC with 16 GiB RAM, 512 GB storage and the CN350 Android firmware. This is a pre-alpha development system. The current dev9 ARM64 image contains 1,096 packages. A fresh reconstruction passed filesystem and SHA-256 checks. The running tablet received the dev9 desktop package over USB SSH. [Image receipt](BOARD-IMAGE.md#dev9-tablet-scale-image)
+Evidence through 2026-11-19 covers one TB320FC_PRC with 16 GiB RAM, 512 GB storage and the CN350 Android firmware. This is a pre-alpha development system. The latest dev9 ARM64 image contains 1,096 packages, including the updated Qt camera chooser. A fresh reconstruction passed filesystem and SHA-256 checks. The running tablet received desktop dev9 and camera application revision y7002 over USB SSH. [Image receipt](BOARD-IMAGE.md#dev9-image-with-the-scaled-qcam-chooser)
 
 | Area | Evidence / current status | Remaining acceptance |
 | --- | --- | --- |
