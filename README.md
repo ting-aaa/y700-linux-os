@@ -29,7 +29,7 @@
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 蓝牙管理器搜索并选择设备。当前实机已启用蓝牙控制器并成功启动发现，键鼠配对、输入和重连仍待实际外设验证。
 - **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
-最新 KMS 开发镜像包含 1,069 个软件包，使用固定哈希的 Adreno 候选内核，预装「Y700 相机」和可直接在 DRM 内屏上显示的首次设密键盘。它使用两次 GPU 实机测试所用的 framebuffer 启动设置，已在 ARM64 电脑模拟环境从 EFI 启动到 systemd，并核对内核、该设置及完整软件包清单。原厂 CN350 私有传感器固件包含在本机开发镜像中。新安装使用的蓝牙地址须从该台设备单独配置。[最新镜像与校验值](docs/BOARD-IMAGE.md#kms-touchscreen-build) · [原 1,050 包镜像](docs/BOARD-IMAGE.md#combined-tablet-development-image) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
+最新 KMS 开发镜像使用 Debian 13 ARM64 和 dev7 平板组件，包含 1,096 个软件包。ARM64 EFI 虚拟机已启动到 systemd 并核对完整包清单。它沿用通过两次实机 GPU 测试的 Adreno 候选内核与 framebuffer 设置，集成 DRM 首次设密键盘、三摄 PipeWire 接口、Chromium 摄像头授权和 CN350 传感器固件。此前的 1,069 包镜像通过了虚拟机首次设密、登录和退出测试。蓝牙地址需按设备配置。[完整 dev7 镜像组成与校验值](docs/BOARD-IMAGE.md#standalone-dev7-camera-image) · [首次登录验证](docs/FIRSTBOOT-DRM.md) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
 ## 仓库内容
 

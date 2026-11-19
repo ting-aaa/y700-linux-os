@@ -103,6 +103,18 @@ A second snapshot of these delivered files reached the normal graphical target. 
 
 In a disposable copy of the KMS root upgraded to platform dev7, the `camera-pipewire` layer added one ARM64 plugin for the three physical sensors. The `camera-portal` layer added 26 Debian packages for application permission requests. The resulting inventory contained 1,096 packages with package/version/architecture digest `af3c9d2b39d671aab8b293284447ee0f68a5086e16687ac45f4dcf8781b68915`. Removing the layers restored the dev7 starting inventory. The derivative also booted in ARM64 QEMU using the KMS EFI kernel and initrd. It reached systemd on kernel `7.3.4-asphalt-prc`, mounted the root from `/dev/vda2` and ESP from `/dev/vda1`, reported fbdev emulation disabled and verified the 1,096-package digest and the private camera plugin's dynamic links. The dependent QCOW2 root is 92,471,296 bytes with SHA-256 `d6d1c16984cb60841848fc7291810f6df99ba146f8cd6957efb975aaff936d0a`. Its backing file is the exact dev6 `root.ext4` in the table above. It retains that root's UUID to satisfy the EFI initrd. Use one root with this UUID at a time. Camera capture and browser permissions were exercised on the existing physical Debian installation upgraded to dev7 and the same camera packages. Cold-boot and first-enrollment acceptance of the derivative on the tablet remain open. [Layer commands and archive locks](CAMERA-PIPEWIRE.md#add-the-two-image-layers)
 
+### Standalone dev7 camera image
+
+The local `combined-kms-dev7-camera` bundle contains all three complete partition images. The compressed payloads occupy about 1.13 GiB together. The root's logical bytes match the EFI-tested dev7 derivative, and its FAT and PRC U-Boot match the verified KMS boot components. The bundled `identity.txt` carries the 1,096-package count and digest for use with the existing board image tools.
+
+| Partition | Zstandard bytes | SHA-256 of the decompressed partition |
+| --- | ---: | --- |
+| `root.ext4` | 1,153,039,047 | `52b9c1526ad428c7f0cce336d6b5f598f945485341b5879ec4d25f4f1fe60aa0` |
+| `linux-boot.fat` | 56,247,701 | `9c7dbadfe9dca55f6a5da34d564a6004a99f90ad403d1323ec6bf561ec196a22` |
+| `asphalt-prc-u-boot.img` | 586,909 | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
+
+From the bundle directory on a PC with Bash and Zstandard, use `bash unpack.sh --verify` for a full streaming readback. Running `bash unpack.sh /path/to/new-directory` writes three raw images, the identity file and raw `SHA256SUMS` into a new directory. An end-to-end unpack of the delivered bundle into an empty Linux tmpfs verified each raw hash, all five ext4 checks, the FAT filesystem and the root UUID. The three sparse output files used 3,499,835,392 bytes there. The bundle contains the local board firmware for the tested PRC variant. [Unpack helper](../scripts/unpack-kms-image.sh)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
