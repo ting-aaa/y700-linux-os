@@ -34,6 +34,8 @@
 
 最新国行 KMS 开发镜像使用 Debian 13 ARM64、dev10 平板组件、qcam y7002、Blueman y7001 和中英文输入组件，包含 1,112 个软件包。组合镜像集成首次设密屏幕键盘、三摄 PipeWire 接口、Chromium 摄像头授权、SSC 0.1.1 本机校准导入，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。现有平板已单独升级桌面、相机、蓝牙应用及中文输入组件，整个新镜像仍待上板启动。[镜像组成与校验值](docs/BOARD-IMAGE.md#dev10-touch-mapping) · [屏幕键盘验证](docs/PLATFORM-BUILD.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
+dev10 另有集成 Xorg 内屏尺寸修复的组合镜像。平板内核能读出 118 × 190 毫米，现有桌面向应用报告 0 × 0。组合镜像在 ARM64 虚拟 DSI 上的四个方向都向应用报告了正确尺寸，并在 200% 缩放下通过点按、双指滚动和捏合测试。实机当前运行原版 Xorg。[候选镜像与校验值](docs/BOARD-IMAGE.md#dev10-image-with-dsi-panel-dimensions) · [内屏尺寸原理与实测](docs/PANEL-GEOMETRY.md)
+
 ## 仓库内容
 
 | 路径 | 用途 |

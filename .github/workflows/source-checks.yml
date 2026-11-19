@@ -20,5 +20,7 @@ jobs:
         run: uv run --python 3.13 --no-project python scripts/check-public-tree.py
       - name: Check maintenance provisioning
         run: uv run --python 3.13 --no-project python -m unittest discover -s tests -v
+      - name: Check the optional Xorg package upgrade and retry
+        run: uv run --python 3.13 --no-project python tests/xorg-dsi-layer.py
       - name: Build and verify platform package
         run: bash tests/platform-package.sh

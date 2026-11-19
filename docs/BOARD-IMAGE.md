@@ -239,6 +239,32 @@ A one-package update installed dev10 on the existing physical tablet. The new he
 
 This generic root also booted through U-Boot and ARM64 EFI on the board kernel in QEMU. A locked account completed the KMS touchscreen password flow and two ordinary LightDM logins. The user selected Simplified Chinese in the first English desktop, and the second session displayed the translated GTK Cancel button before a normal poweroff. The guest recomputed all 1,112 package tuples. A separate VM using the same sealed root passed all 12 Chromium virtual direct-touch checks through the installed rotation helper and a test DSI connector. [Language observer](../tests/display-language/README.md) · [Gesture measurements](TOUCH-GESTURES.md)
 
+### Dev10 image with DSI panel dimensions
+
+The local `out/combined-kms-dev10-panel` bundle includes the dev10 touch update and the Debian Xorg panel-size fix. Its package database differs from the dev10 touch image in exactly two rows. The versions of `xserver-xorg-core` (arm64) and `xserver-common` (all) are both `2:21.1.16-1.3+deb13u4+y7001`. The physical tablet still runs Debian's stock X server. Its kernel reports a 118 × 190 mm DSI panel, while the stock X server reports 0 × 0 mm for this connector. [Source, package build and EDID tests](PANEL-GEOMETRY.md)
+
+| File or receipt | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `89e4aaf1673d1aa89fd9fcb57e907f3cbd70e08f5dffca6803c19a1fae0a5328` |
+| Portable `dev10.qcow2` (333,578,240 bytes) | `ebc880f623acbbec415004ad56e0ca519fd391af7b157252b6d37ca9791840b3` |
+| Generic 6 GiB `root.ext4` | `4ee46e6158c21d1cdf54a51af719ff82606c491fa2e81f450deb8f74989502c9` |
+| Installed package tuples (1,112) | `97a1bef5161651b9282a38909223a462178d07834640c6f46add25ed2cfec054` |
+| Offline `xorg-dsi.tar` (6,062,080 bytes) | `b0693a2441d874516fc77779223b094aaa8f34726a1c5794451704ba91f41bf7` |
+
+Use the same unpack commands and per-tablet Bluetooth address option as for the dev10 touch image above. The generic root contains the installed driver, SHA-256 `8db0cd0e45540948fd847b601e85f1c71647461a992869f0f653d48121f206e4`. Its account starts locked for first-boot password enrollment.
+
+Full extraction verified the generic root hash, the installed Xorg and input-method locks, the ext4 root and FAT filesystem. A second extraction reproduced the tablet's private adapter address and preserved the original boot-file hashes. An independent read-only stream of the root matched the generic hash before an ARM64 EFI boot. The guest verified the complete package inventory, rejected mismatched touchscreen enrollment, completed password setup and signed in with LightDM. Xorg loaded the packaged driver. Selecting Simplified Chinese in the English desktop and signing in again produced a translated GTK Cancel button (`取消(C)`). The guest powered off cleanly.
+
+In a separate ARM64 guest on the same sealed root, Xorg reported 118 × 190 mm for the virtual DSI connector in all four orientations. At 200% scale, Chromium 156 registered an off-centre tap on the expected target, a two-finger scroll and a pinch in each orientation. Scroll distances ranged from 319.5 to 574 CSS pixels and pinch scales from 2.48× to 2.65×. The physical trial still needs the corrected X server on the tablet and finger input on its glass. [Four-way touch method](TOUCH-GESTURES.md)
+
+To add the fix when building another copy of the dev10 root, unpack `xorg-dsi.tar` into an empty directory. From the source repository, run the board layer installer against the prepared, disposable ARM64 build root. It checks both parent package versions and the two new archives. A second installation on the same root reproduced the package inventory and lock receipt.
+
+```sh
+tar -xf "$bundle/xorg-dsi.tar" -C "$packages"
+(cd "$packages" && sha256sum --strict --check SHA256SUMS)
+bash scripts/add-board-layer.sh xorg-dsi "$root" "$packages"
+```
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
