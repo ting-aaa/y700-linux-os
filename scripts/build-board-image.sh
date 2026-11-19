@@ -62,9 +62,11 @@ dtb="$board/linux-7.3.4/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dtb"
 "${py[@]}" "$repo/reference/y700-linux/asphalt-debian/verify-dtb.py" "$dtb"
 src="$repo/reference/y700-linux/asphalt-upstream"
 test "$(git -c safe.directory="$src" -C "$src" rev-parse HEAD)" = 8dcb481fc2ce91794fd294630e06f15a52ec7513
-for name in HiFi.conf Lenovo-Y700.conf; do
-    git -c safe.directory="$src" -C "$src" show "HEAD:pkgs/asphalt/$name" > "$out/$name"
-done
+git -c safe.directory="$src" -C "$src" show HEAD:pkgs/asphalt/Lenovo-Y700.conf > "$out/Lenovo-Y700.conf"
+upstream_hifi=$(git -c safe.directory="$src" -C "$src" show HEAD:pkgs/asphalt/HiFi.conf | sha256sum)
+test "${upstream_hifi%% *}" = 1ba9c514c4aae63f849e8bd64c1d90d2541ae45854379101db65896630770110
+hifi=usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf
+cmp "$repo/packaging/root/$hifi" "$base/$hifi"
 cd "$out"
 mkdir stage initrd esp
 # The integrated root was freshly constructed; discard per-build/service state.
@@ -84,7 +86,7 @@ depmod -b stage "$version"
 cp -a "$board/board-firmware/." stage/usr/lib/firmware/
 ucm=stage/usr/share/alsa/ucm2
 install -d "$ucm/Lenovo-Y700" "$ucm/conf.d/sm8475"
-install -m644 HiFi.conf Lenovo-Y700.conf "$ucm/Lenovo-Y700/"
+install -m644 Lenovo-Y700.conf "$ucm/Lenovo-Y700/"
 ln -sfn ../../Lenovo-Y700/Lenovo-Y700.conf "$ucm/conf.d/sm8475/Lenovo-Y700.conf"
 # ASoC uses the PRC firmware's DMI long name for the UCM card lookup.
 ln -sfn Lenovo-Y700.conf "$ucm/conf.d/sm8475/lenovo-LenovoLegionY7002ndgen.conf"
