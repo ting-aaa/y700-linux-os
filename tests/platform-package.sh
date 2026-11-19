@@ -17,6 +17,15 @@ dash -n "$temp/root/etc/X11/Xsession.d/60y700_tablet_scale"
 bash "$repo/tests/tablet-xsession-scale.sh" "$temp/root/etc/X11/Xsession.d/60y700_tablet_scale"
 test -s "$temp/root/usr/share/y700/tablet-xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
 test -x "$temp/root/usr/libexec/y700-tablet-rotation"
+test -x "$temp/root/usr/libexec/y700-tablet-brightness"
+brightness="$temp/root/usr/share/applications/y700-tablet-brightness.desktop"
+grep -Fxq 'Exec=/usr/libexec/y700-tablet-brightness' "$brightness"
+for setting in brightness scale rotation; do
+    launcher="$temp/root/usr/share/applications/y700-tablet-$setting.desktop"
+    categories=$(sed -n 's/^Categories=//p' "$launcher")
+    [[ ";${categories}" == *';X-XFCE-SettingsDialog;'* && ";${categories}" == *';X-XFCE-HardwareSettings;'* ]]
+done
+cmp "$repo/packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf" "$temp/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf"
 test -x "$temp/root/usr/lib/y700/y700-auto-rotate.py"
 test -f "$temp/root/usr/lib/y700/rotation_session.py"
 schemas="$temp/root/usr/share/glib-2.0/schemas"
@@ -30,6 +39,7 @@ grep -Fxq 'Exec=/usr/libexec/y700-tablet-scale' "$temp/root/usr/share/applicatio
 if command -v desktop-file-validate >/dev/null; then
     desktop-file-validate "$temp/root/usr/share/applications/y700-tablet-scale.desktop"
     desktop-file-validate "$temp/root/usr/share/applications/y700-tablet-rotation.desktop" "$temp/root/etc/xdg/autostart/y700-rotation.desktop"
+    desktop-file-validate "$brightness"
 fi
 test ! -e "$temp/root/etc/xdg/autostart/onboard-autostart.desktop"
 test -e "$temp/root/etc/xdg/autostart/y700-onboard.desktop"
