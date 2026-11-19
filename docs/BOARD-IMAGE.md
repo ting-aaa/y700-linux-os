@@ -161,6 +161,21 @@ The private `out/combined-kms-dev9-camera-ssc` bundle combines the dev8 and dev9
 
 An independent read-only NBD view of the upgraded root supplied the advertised hash and passed `e2fsck -fn`. Extraction into a fresh compressed Btrfs volume reproduced the advertised hashes for the root, FAT boot filesystem, U-Boot and identity file. Both `e2fsck -fn` and `fsck.fat -n` passed. The unpacker also rejected a corrupt overlay, a mixed dev8/dev9 manifest, an existing output directory and insufficient free space. Booting the extracted dev9 image on the physical tablet remains a separate qualification step.
 
+### Dev9 image with the scaled qcam chooser
+
+The private `out/combined-kms-dev9-camera2-ssc` variant contains the 200% Xfce platform package and `y700-camera-qcam 0.7.2-1~bpo13+1.y7002`. A native ARM64 package transaction upgraded only qcam on a copy of the dev9 root. The image still has 1,096 installed package tuples. The qcam lock receipt and package manifest were refreshed and independently read back from the raw root. The build verified the locked first-boot account, empty machine ID and unseeded SSC registry. The packaged EFI FAT and U-Boot bytes match the preceding dev9 bundle. [Camera app and scale validation](QCAM.md)
+
+The bundle uses the same hard-linked compressed dev7 base and includes both standalone upgrade packages. Run `bash unpack.sh --verify` and `bash unpack.sh /path/to/new-directory` on Linux. Allow 7.09 GiB at the destination. [Image unpacker](../scripts/unpack-kms-update.sh)
+
+| Dev9 with qcam y7002 artifact | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `1975160678f175fb3d46277fa6c604fb90a2d59bebee0d3f1a16be1899f0462f` |
+| Portable `dev9.qcow2`, 28,639,232 bytes | `4cc88353aa159162a2388692f410cc00054b4652a4c8ddeca8ecb388a16f938a` |
+| Reconstructed 6 GiB `root.ext4` | `b7312d29131acdd1eba42168867d50d7f344e184e610322c9c8b57e6b451c901` |
+| Installed package tuples | `31bb6435b756ea88cdc9254a71675b99a2d75dd6f7d658f057971a6311380491` |
+
+Fresh extraction into an empty compressed Btrfs volume reproduced all raw hashes. The rebuilt ext4 and FAT filesystems passed read-only checks. The rebuilt qcam lock and package manifest matched the independent NBD readback. The unpacker accepted the prior dev8 and dev9 manifest layouts and rejected a corrupt or mismatched qcam archive. The physical package upgrade is recorded separately from this image reconstruction. [Qcam package results](QCAM.md#verification)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

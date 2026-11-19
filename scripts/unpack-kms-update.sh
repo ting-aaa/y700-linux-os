@@ -17,8 +17,11 @@ manifest_names() {
 }
 patch=
 for version in dev8 dev9; do
-    if manifest_names "$bundle/SHA256SUMS" base/SHA256SUMS base/unpack.sh "$version.qcow2" \
-        identity.txt RAW-SHA256SUMS "y700-platform_0.1.0~${version}_all.deb"; then
+    expected=(base/SHA256SUMS base/unpack.sh "$version.qcow2" identity.txt RAW-SHA256SUMS
+        "y700-platform_0.1.0~${version}_all.deb")
+    if manifest_names "$bundle/SHA256SUMS" "${expected[@]}" ||
+        { [[ $version == dev9 ]] && manifest_names "$bundle/SHA256SUMS" "${expected[@]}" \
+            y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb; }; then
         patch=$version.qcow2
         break
     fi
