@@ -1,0 +1,25 @@
+#!/bin/busybox sh
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+finish() {
+    result=$?
+    trap - EXIT
+    echo "SSC_CI_EXIT=$result"
+    poweroff -f
+}
+trap finish EXIT
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t ext4 -o ro,noload /dev/vda /lower
+mount -t tmpfs tmpfs /runtime
+mkdir /runtime/upper /runtime/work
+mount -t overlay overlay -o lowerdir=/lower,upperdir=/runtime/upper,workdir=/runtime/work /guest
+for directory in dev proc sys; do
+    mount --bind "/$directory" "/guest/$directory"
+done
+mount -t tmpfs tmpfs /guest/run
+mkdir -p /guest/opt/ssc-test
+mount --bind /test /guest/opt/ssc-test
+chroot /guest /bin/bash /opt/ssc-test/guest.sh

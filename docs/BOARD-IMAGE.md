@@ -115,6 +115,20 @@ The local `combined-kms-dev7-camera` bundle contains all three complete partitio
 
 From the bundle directory on a PC with Bash and Zstandard, use `bash unpack.sh --verify` for a full streaming readback. Running `bash unpack.sh /path/to/new-directory` writes three raw images, the identity file and raw `SHA256SUMS` into a new directory. An end-to-end unpack of the delivered bundle into an empty Linux tmpfs verified each raw hash, all five ext4 checks, the FAT filesystem and the root UUID. The three sparse output files used 3,499,835,392 bytes there. The bundle contains the local board firmware for the tested PRC variant. [Unpack helper](../scripts/unpack-kms-image.sh)
 
+### Standalone dev7 image with SSC 0.1.1
+
+The private `out/combined-kms-dev7-camera-ssc-0.1.1` bundle adds the updated SSC runtime to the dev7 camera image. The only changed package tuple is `y700-ssc-runtime` version 0.1.1. The 1,096-package digest is `de52b3ddbb2bdc7995e1b9a179ddad8a31edfa1b4e7f4ab7183652add30ef6dd`. The writable SSC state starts empty. The earlier camera bundle remains available as a separate build.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `root.ext4.zst` | 1,153,777,594 | `30a86acced366df02f80bc9ce9e0afecb3d4fb34278c596c4dc9281b05a23707` |
+| `root.ext4` after decompression | 6,442,450,944 | `59549a5d99990971f7368a3922982fbbaad4e3588983d8b7c55c6dac4fc0a0e8` |
+| `identity.txt` | 304 | `8e8aebad82c828b68de9d5fbac049f0ec1ada9a347840c4c5d9d43de39f06918` |
+
+The bundle occupies about 1.13 GiB. Full streaming readback verified the calculated root hash and the KMS FAT and PRC U-Boot hashes above. Use the same `unpack.sh` commands. The incremental QCOW2 in `out/ssc-calibrated-image` is 11,993,088 bytes with SHA-256 `a9d21ad32d9be39d2a8c6649a51fa1b590de42e57ab3149625f89e87c8511a80`. It uses the camera QCOW2 and dev6 `root.ext4` as backing files.
+
+The exact source root booted with the KMS kernel and initrd to ARM64 systemd and verified the calibration importer, kernel and 1,096-package digest. The EFI guest ran the installed SSC pre-start command twice. Without a factory partition, initialization copied 329 generic configuration groups. Repeating the command preserved the existing registry and a synthetic calibration receipt byte for byte. Physical qualification covers factory import and live sensor behavior separately. [Sensor runtime](CAMERA-SENSORS.md#physical-ssc-qualification)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

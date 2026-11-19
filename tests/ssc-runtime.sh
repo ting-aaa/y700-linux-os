@@ -20,6 +20,29 @@ cp "$work/state/registry/registry/fixture" "$work/calibration"
 bash "$ssc/seed" "$work/defaults" "$work/state"
 cmp "$work/calibration" "$work/state/registry/registry/fixture"
 
+mkdir "$work/first-device" "$work/no-factory"
+cat >"$work/bin/import-calibration" <<'IMPORT'
+#!/bin/bash
+set -euo pipefail
+test "$1" = import-live && test "$2" = --state
+exec 9>"$3/.seed.lock"
+flock --exclusive 9
+printf 'factory reader called\n' >> "$SSC_TEST_IMPORTS"
+[[ $3 != */no-factory ]] || exit 1
+mkdir -p "$3/registry/registry"
+echo factory > "$3/registry/registry/fixture"
+IMPORT
+chmod 755 "$work/bin/import-calibration"
+export SSC_TEST_IMPORTS=$work/imports
+for attempt in 1 2; do
+    bash "$ssc/seed" "$work/defaults" "$work/first-device" "$work/bin/import-calibration"
+done
+test "$(cat "$work/first-device/registry/registry/fixture")" = factory
+test "$(wc -l <"$SSC_TEST_IMPORTS")" -eq 1
+bash "$ssc/seed" "$work/defaults" "$work/no-factory" "$work/bin/import-calibration" 2>"$work/fallback.log"
+grep -Fq 'Using board defaults' "$work/fallback.log"
+diff -r "$work/defaults" "$work/no-factory/registry"
+
 mkdir "$work/unsafe-state"
 ln -s "$work/state/registry" "$work/unsafe-state/registry"
 if bash "$ssc/seed" "$work/defaults" "$work/unsafe-state" 2>/dev/null; then

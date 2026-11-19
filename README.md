@@ -25,11 +25,12 @@
 - **首次开机**　组合开发镜像的本地账户名为 `y700`。首次开机在屏幕键盘上输入两遍新密码，随后在图形登录界面使用同一密码进入 Xfce。已在同一份 ARM64 镜像里走通全程，平板内置屏的实际触点和方向仍待验证。[首次设密](docs/FIRSTBOOT-TOUCH.md) · [图形登录](docs/WARM-GREETER.md)
 - **调整缩放**　在 Xfce 应用菜单进入「设置 → 平板显示缩放」，选择「200% 大控件」。选择「100% 标准」可恢复。少数应用需要重新打开才能使用新的缩放比例。
 - **锁定屏幕方向**　从平台包 dev7 起，「设置 → 平板屏幕旋转」可保存当前用户的自动旋转偏好。默认锁定当前方向。打开后，桌面在收到加速度计读数时同步旋转屏幕和触控。现有实机的传感器 DSP 离线，开关会显示正在等待方向传感器。[传感器与桌面验证](docs/CAMERA-SENSORS.md#xfce-screen-rotation)
+- **保留本机传感器校准**　SSC 0.1.1 首次初始化时，从这台平板的内部 UFS 只读导入出厂校准。本机实测合并得到 375 组配置，重复初始化保留了已有状态。通用镜像随附板级默认值，每台平板在本地完成导入。[校准来源与验证](docs/SSC-CALIBRATION.md)
 - **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。「Network Connections」（网络连接）用于编辑已保存的配置。打开菜单时，网络小程序会请求扫描。实机的触屏选网和重连仍待验证。
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 蓝牙管理器搜索并选择设备。当前实机已启用蓝牙控制器并成功启动发现，键鼠配对、输入和重连仍待实际外设验证。
 - **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
-最新 KMS 开发镜像使用 Debian 13 ARM64 和 dev7 平板组件，包含 1,096 个软件包。ARM64 EFI 虚拟机已启动到 systemd 并核对完整包清单。它沿用通过两次实机 GPU 测试的 Adreno 候选内核与 framebuffer 设置，集成 DRM 首次设密键盘、三摄 PipeWire 接口、Chromium 摄像头授权和 CN350 传感器固件。此前的 1,069 包镜像通过了虚拟机首次设密、登录和退出测试。蓝牙地址需按设备配置。[完整 dev7 镜像组成与校验值](docs/BOARD-IMAGE.md#standalone-dev7-camera-image) · [首次登录验证](docs/FIRSTBOOT-DRM.md) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
+最新 KMS 开发镜像使用 Debian 13 ARM64 和 dev7 平板组件，包含 1,096 个软件包。ARM64 EFI 虚拟机已启动到 systemd 并核对完整包清单。镜像沿用通过两次实机 GPU 测试的 Adreno 候选内核与 framebuffer 设置，集成 DRM 首次设密键盘、三摄 PipeWire 接口、Chromium 摄像头授权、CN350 传感器固件和 SSC 0.1.1 本机校准导入。此前的 1,069 包镜像通过了虚拟机首次设密、登录和退出测试。蓝牙地址需按设备配置。[当前镜像组成与校验值](docs/BOARD-IMAGE.md#standalone-dev7-image-with-ssc-011) · [首次登录验证](docs/FIRSTBOOT-DRM.md) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
 ## 仓库内容
 

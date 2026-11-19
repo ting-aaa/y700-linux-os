@@ -4,6 +4,14 @@ seed=$1
 state=$2
 umask 027
 
+# Import before taking the seed lock. The importer publishes a complete
+# registry under that same lock. The check below resolves concurrent starts.
+if [[ $# == 3 && ! -e $state/registry && ! -L $state/registry ]]; then
+    if ! "$3" import-live --state "$state"; then
+        echo 'Factory sensor calibration unavailable. Using board defaults if state is still empty.' >&2
+    fi
+fi
+
 exec 9>"$state/.seed.lock"
 flock --exclusive 9
 if [[ -e $state/registry || -L $state/registry ]]; then

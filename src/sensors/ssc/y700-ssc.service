@@ -10,7 +10,7 @@ Upholds=iio-sensor-proxy.service
 Type=exec
 StateDirectory=y700-ssc
 StateDirectoryMode=0750
-ExecStartPre=/usr/libexec/y700-ssc/seed /usr/share/y700/ssc/seed/registry /var/lib/y700-ssc
+ExecStartPre=/usr/libexec/y700-ssc/seed /usr/share/y700/ssc/seed/registry /var/lib/y700-ssc /usr/libexec/y700-ssc/import-calibration
 ExecStart=/usr/libexec/y700-ssc/sdsprpcd sensorspd
 Environment="LD_LIBRARY_PATH=/usr/lib/y700/ssc"
 Environment="ADSP_LIBRARY_PATH=;/vendor/etc/sensors;/vendor/dsp;/usr/lib/firmware"
