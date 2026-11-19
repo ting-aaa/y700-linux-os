@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read-only by default. The physical trial requires an attended, explicit invocation.
+# Read-only by default. Each physical trial requires explicit owner authorization.
 set -euo pipefail
 export LC_ALL=C
 
@@ -54,7 +54,8 @@ write_state() {
     local fd rc=0 owner=$BASHPID
     exec {fd}<> "$slpi/state" || return 1
     # Compare the actual open endpoint. A rebind can reuse a class path.
-    if [[ $(identity "/proc/$owner/fd/$fd") == "$(<"$run/identity")" ]]; then
+    if [[ $(identity "/proc/$owner/fd/$fd") == "$(<"$run/identity")" ]] &&
+        [[ $1 != start || $(read_state) == offline ]]; then
         printf '%s\n' "$1" >&"$fd" || rc=$?
     else
         rc=1
@@ -139,18 +140,135 @@ firmware_baseline() {
 }
 
 check_fault() {
+    [[ ! -e $run/first-fault ]] || return 1
     [[ -s $run/cursor ]] || return 0
     local fault
     fault=$(journalctl -k --no-pager -o cat --after-cursor="$(<"$run/cursor")" |
         awk -v r="${slpi##*/}:" -v dev="${slpi_device##*/}:" -v adsp="${adsp##*/}:" '
             (index($0, " " r) || index($0, " " dev) || index($0, "msm/slpi/sensor_pd") ||
              index($0, "fastrpc-sdsp") || index($0, " " adsp)) &&
-            tolower($0) ~ /fail|fault|fatal|crash|timeout|timed out|watchdog|recovering/ && !printed {print; printed=1}')
-    if [[ -n $fault && ! -e $run/first-fault ]]; then
-        printf '%s\n' "$fault" > "$run/first-fault"
+            tolower($0) ~ /fail|fault|fatal|crash|timeout|timed out|watchdog|recovering/ && !printed {print; printed=1}') ||
+        { echo 'SSC trial: could not read the kernel journal' >&2; return 1; }
+    if [[ -n $fault ]]; then
+        printf '%s\n' "$fault" > "$run/first-fault" || return 1
         printf 'SSC first fault: %s\n' "$fault" >&2
     fi
     [[ ! -e $run/first-fault ]]
+}
+
+qrtr_lookup() {
+    local mode=$1 seconds=$2
+    # Run in a subshell or as a background job so timeout owns the command.
+    UV_CACHE_DIR=$run/uv-cache exec timeout -k 1 "$((seconds + 2))" "$uv" run \
+        --offline --no-project --python /usr/bin/python3 python -B - "$mode" "$seconds" <<'PY'
+import socket
+import struct
+import sys
+import time
+
+# linux/qrtr.h: 20-byte little-endian qrtr_ctrl_pkt. Instance 0 looks up all versions.
+control_port = 0xFFFFFFFE
+new_server, del_server, new_lookup = 4, 5, 10
+ssc_service = 400
+packet = struct.Struct("<5I")
+mode, limit = sys.argv[1:]
+deadline = time.monotonic() + int(limit)
+servers = set()
+listed = False
+try:
+    with socket.socket(socket.AF_QIPCRTR, socket.SOCK_DGRAM) as client:
+        control = (client.getsockname()[0], control_port)
+        client.settimeout(int(limit))
+        client.sendto(packet.pack(new_lookup, ssc_service, 0, 0, 0), control)
+        while (remaining := deadline - time.monotonic()) > 0:
+            client.settimeout(remaining)
+            data, source = client.recvfrom(packet.size + 1)
+            if source != control or len(data) != packet.size:
+                continue
+            command, service, instance, node, port = packet.unpack(data)
+            if command == new_server and not (service or instance or node or port):
+                listed = True
+            elif service == ssc_service and 0 < port < control_port and node != 0xFFFFFFFF:
+                server = (instance, node, port)
+                if command == new_server:
+                    servers.add(server)
+                elif command == del_server:
+                    servers.discard(server)
+            if listed and mode == "baseline" and not servers:
+                print("SSC QRTR baseline: service 400 absent")
+                sys.exit(0)
+            if listed and servers:
+                if mode == "baseline" or len(servers) != 1:
+                    sys.exit(f"SSC QRTR {mode}: {len(servers)} existing service 400 endpoint(s)")
+                instance, node, port = next(iter(servers))
+                print(f"SSC QRTR ready: service=400 instance={instance} node={node} port={port}")
+                sys.exit(0)
+except TimeoutError:
+    pass
+except OSError as exc:
+    sys.exit(f"SSC QRTR {mode}: {exc}")
+reason = "service 400 not announced" if listed else "no nameservice listing response"
+sys.exit(f"SSC QRTR {mode} timeout: {reason}")
+PY
+}
+
+check_running() {
+    check_fault || return 1
+    [[ $(read_state) == running ]] || { echo 'SSC trial: SLPI did not stay running' >&2; return 1; }
+    [[ $(<"$adsp/state") == running ]] || { echo 'SSC trial: ADSP is no longer running' >&2; return 1; }
+    [[ $(systemctl show "$listener" -p ActiveState --value) == active ]] ||
+        { echo 'SSC trial: transient SDSP listener is no longer active' >&2; return 1; }
+}
+
+first_sample() {
+    local axis='-?[0-9]+\.[0-9]+'
+    grep -m1 -E "^Accelerometer sensor measurement: X=$axis Y=$axis Z=$axis m/s²$" "$run/sample"
+}
+
+sdsp_present() { [[ -c /dev/fastrpc-sdsp ]]; }
+
+report_job() {
+    local job=$1 file=$run/$1 status=unavailable row
+    [[ -f $file && ! -e $file.reported ]] || return 0
+    if [[ -s $file.exit ]]; then status=$(<"$file.exit"); fi
+    printf 'SSC %s exit=%s\nSSC %s output begins\n' "$job" "$status" "$job"
+    cat -- "$file" || return 1
+    printf '\nSSC %s output ends\n' "$job"
+    if [[ $job == sample ]] && row=$(first_sample); then
+        printf 'SSC first sample row: %s\n' "$row"
+    fi
+    : > "$file.reported"
+}
+
+wait_job() {
+    local job=$1 pid=$2 rc=0 unhealthy=0
+    while kill -0 "$pid" 2>/dev/null; do
+        if ! check_running; then
+            unhealthy=1
+            kill -TERM "$pid" 2>/dev/null || :
+            break
+        fi
+        sleep 0.25
+    done
+    wait "$pid" || rc=$?
+    printf '%s\n' "$rc" > "$run/$job.exit" || return 1
+    report_job "$job" || return 1
+    (( unhealthy == 0 )) && check_running && return "$rc"
+    return 1
+}
+
+discover_and_sample() {
+    qrtr_lookup wait 12 > "$run/qrtr" 2>&1 &
+    wait_job qrtr "$!" || return 1
+    sdsp_present || { echo 'SSC trial: SDSP node is missing after QRTR registration' >&2; return 1; }
+    (
+        # Bound the captured output and duration even on a misbehaving collector.
+        ulimit -f 64
+        LC_ALL=C.UTF-8 G_MESSAGES_DEBUG=all exec timeout -k 1 8 ssccli --sensor accelerometer --timeout 1
+    ) > "$run/sample" 2>&1 &
+    wait_job sample "$!" || return 1
+    first_sample >/dev/null || return 1
+    echo 'SSC trial: one real accelerometer sample received'
 }
 
 worker_context() {
@@ -164,7 +282,8 @@ arm_listener() {
     local description="Y700 SSC trial listener $INVOCATION_ID"
     # Build mount destinations inside /run so the host need not acquire Android paths.
     local listener_root=$run/listener-root
-    mkdir -p "$listener_root"/{usr,etc,dev,proc,sys,tmp,run,vendor/etc/sensors,system/vendor/etc/sensors,vendor/dsp,persist/sensors,mnt/vendor/persist/sensors}
+    mkdir -p "$listener_root"/{usr,etc,dev,proc,sys,tmp,run/trial-owner,vendor/etc/sensors,system/vendor/etc/sensors,vendor/dsp,persist/sensors,mnt/vendor/persist/sensors}
+    mkdir -m700 "$run/armed"
     ln -s usr/lib "$listener_root/lib"
     ln -s usr/bin "$listener_root/bin"
     printf '%s\n' "$description" > "$run/listener-description"
@@ -172,20 +291,24 @@ arm_listener() {
         -p "Requisite=$unit" -p "PartOf=$unit" \
         -p "RootDirectory=$listener_root" -p MountAPIVFS=yes \
         -p Restart=no -p RuntimeMaxSec=38s -p TimeoutStopSec=4s \
-        -p 'BindReadOnlyPaths=/usr:/usr /etc:/etc /usr/share/y700/ssc/etc/sensors:/vendor/etc/sensors /usr/share/y700/ssc/etc/sensors:/system/vendor/etc/sensors /usr/share/y700/ssc/dsp:/vendor/dsp' \
+        -p "BindReadOnlyPaths=/usr:/usr /etc:/etc /usr/share/y700/ssc/etc/sensors:/vendor/etc/sensors /usr/share/y700/ssc/etc/sensors:/system/vendor/etc/sensors /usr/share/y700/ssc/dsp:/vendor/dsp $run/armed:/run/trial-owner" \
         -p "BindPaths=/dev:/dev $run/state:/persist/sensors $run/state:/mnt/vendor/persist/sensors" \
         --setenv=LD_LIBRARY_PATH=/usr/lib/y700/ssc \
         '--setenv=ADSP_LIBRARY_PATH=;/vendor/etc/sensors;/vendor/dsp;/usr/lib/firmware' \
-        /bin/bash -ec 'for i in {1..80}; do if [[ -c /dev/fastrpc-sdsp ]]; then exec /usr/libexec/y700-ssc/sdsprpcd sensorspd; fi; sleep 0.25; done; exit 1'
+        /bin/bash -ec 'for i in {1..80}; do if [[ -e /run/trial-owner/owned && -c /dev/fastrpc-sdsp ]]; then exec /usr/libexec/y700-ssc/sdsprpcd sensorspd; fi; sleep 0.25; done; exit 1'
 }
 
 cleanup() {
     worker_context
     local rc=0 description
     if [[ -r $run/listener-description ]]; then
-        description=$(systemctl show "$listener" --property=Description --value)
-        if [[ $description == "$(<"$run/listener-description")" ]]; then
-            systemctl stop "$listener" || rc=1
+        if description=$(systemctl show "$listener" --property=Description --value); then
+            if [[ $description == "$(<"$run/listener-description")" ]]; then
+                systemctl stop "$listener" || rc=1
+            fi
+        else
+            echo 'SSC trial: could not verify the transient listener identity' >&2
+            rc=1
         fi
     fi
     if [[ -s $run/identity ]]; then
@@ -199,6 +322,9 @@ cleanup() {
             rc=1
         fi
     fi
+    # PID 1 may have canceled the coordinator before it could reap a job.
+    report_job qrtr || rc=1
+    report_job sample || rc=1
     if [[ $rc == 0 ]]; then echo 'SSC trial: cleanup completed'; fi
     return "$rc"
 }
@@ -222,32 +348,10 @@ worker() {
     mount --bind -- "$run/firmware" "$target"
     mount -o remount,bind,ro -- "$target"
     arm_listener
+    (qrtr_lookup baseline 2) || die 'SSC QRTR baseline is not clear'
     start_once || die 'SLPI start was refused or failed'
-    local attempt sample_pid
-    for attempt in {1..40}; do
-        check_fault || die 'SLPI fault observed'
-        [[ $(read_state) == running ]] || die 'SLPI did not stay running'
-        [[ $(<"$adsp/state") == running ]] || die 'ADSP is no longer running'
-        if [[ -c /dev/fastrpc-sdsp ]]; then break; fi
-        sleep 0.25
-    done
-    [[ -c /dev/fastrpc-sdsp ]] || die 'FastRPC device did not appear'
-    timeout -k 1 8 ssccli --sensor accelerometer --timeout 1 > "$run/sample" 2>&1 &
-    sample_pid=$!
-    while kill -0 "$sample_pid" 2>/dev/null; do
-        check_fault || die 'SLPI fault observed during sample'
-        [[ $(read_state) == running ]] || die 'SLPI did not stay running during sample'
-        [[ $(<"$adsp/state") == running ]] || die 'ADSP is no longer running'
-        sleep 0.25
-    done
-    if wait "$sample_pid" &&
-        grep -q '^Accelerometer sensor measurement:' "$run/sample"; then
-        check_fault || die 'SLPI fault observed during sample'
-        echo 'SSC trial: one real accelerometer sample received'
-    else
-        check_fault || :
-        die 'No verified accelerometer sample, inspect listener and kernel journal'
-    fi
+    : > "$run/armed/owned"
+    discover_and_sample || die 'No verified accelerometer sample, inspect QRTR, collector, listener and kernel output'
 }
 
 main() {
