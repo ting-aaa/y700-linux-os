@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Only the read-only root and an initramfs are connected to an isolated ARM VM.
+# Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT.qcow2 Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic]' >&2
+    echo 'Usage: run-qemu.sh ROOT.qcow2 Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-reboot|--cold-reboot-linked]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -13,10 +13,14 @@ bluez=$(realpath -e "$5")
 btvirt=$(realpath -e "$6")
 marker=Y700_VIRTUAL_HOG_PASS
 extra_cmdline=
+shutdown_case=
 if (( $# == 7 )); then
-    [[ $7 == --classic ]] || exit 2
-    extra_cmdline=y700.virtual_classic=1
-    marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS
+    case "$7" in
+        --classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS ;;
+        --cold-reboot) marker=Y700_COLD_SEED_PASS ;;
+        --cold-reboot-linked) marker=Y700_COLD_SEED_PASS; shutdown_case=y700.virtual_linked_shutdown=1 ;;
+        *) exit 2 ;;
+    esac
 fi
 fixture=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/y700-virtual-hid.XXXXXXXX")
@@ -40,7 +44,7 @@ make -s -C "$kernel" M="$work/module" ARCH=arm64 LLVM="${LLVM:--21}" modules
 cp "$work/module/hci_vhci.ko" "$work/init/test/"
 cp "$bluez/test/example-gatt-server" "$work/init/test/gatt.py"
 cp "$bluez/test/example-advertisement" "$work/init/test/adv.py"
-cp "$fixture/"{central.py,peer.py,classic.py,guest.sh} "$work/init/test/"
+cp "$fixture/"{central.py,peer.py,classic.py,cold-boot.py,guest.sh} "$work/init/test/"
 install -m755 "$busybox" "$work/init/bin/busybox"
 install -m755 "$uv" "$work/init/test/uv"
 install -m755 "$btvirt" "$work/init/test/btvirt"
@@ -52,7 +56,10 @@ export PATH=/bin
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev
-mount -t ext4 -o ro,noload /dev/vda /lower
+rootdev=/dev/vda
+if [ "$(cat /sys/block/vda/ro)" != 1 ]; then rootdev=/dev/vdb; fi
+[ "$(cat "/sys/block/${rootdev##*/}/ro")" = 1 ]
+mount -t ext4 -o ro,noload "$rootdev" /lower
 mount -t tmpfs tmpfs /runtime
 mkdir /runtime/upper /runtime/work
 mount -t overlay overlay -o lowerdir=/lower,upperdir=/runtime/upper,workdir=/runtime/work /guest
@@ -68,16 +75,39 @@ INIT
 chmod 755 "$work/init/init"
 (cd "$work/init"; find . -print0 | cpio --null --quiet -o -H newc | gzip -1 > "$work/initrd")
 args=()
+state_disk=()
 if [[ -n ${QEMU_FIRMWARE_DIR:-} ]]; then args+=(-L "$QEMU_FIRMWARE_DIR"); fi
-timeout -k 4 190 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
+if [[ $marker == Y700_COLD_SEED_PASS ]]; then
+    printf '%s  %s\n' 18c58b29bad672bc0a3971f4e68b49c3c27101a9759f87da8acde640ef4b02e2 "$root" | sha256sum -c -
+    install -m600 /dev/null "$work/bonds.ext4"
+    truncate -s 16M "$work/bonds.ext4"
+    mkfs.ext4 -q -m0 -L Y700_BT_TEST "$work/bonds.ext4"
+    state_disk=(-drive "if=none,id=bonds,format=raw,file=$work/bonds.ext4" -device virtio-blk-device,drive=bonds)
+    extra_cmdline="y700.virtual_bond=seed $shutdown_case"
+fi
+boot() {
+    timeout -k 4 190 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     -machine virt,gic-version=3 -cpu max -m 680 -smp 2 -nodefaults -no-user-config \
     -display none -monitor none -serial stdio -nic none -no-reboot \
     -kernel "$kernel/arch/arm64/boot/Image" -initrd "$work/initrd" \
     -append "console=ttyAMA0 loglevel=4 y700.virtual_hid=1 $extra_cmdline panic=4" \
     -drive "if=none,id=root,format=qcow2,readonly=on,file=$root" -device virtio-blk-device,drive=root \
+    "${state_disk[@]}" \
     </dev/null 2>&1 | tr -d '\r' | tee "$work/run.log"
-grep -Fxq "$marker" "$work/run.log"
-grep -Fxq Y700_VIRTUAL_HID_EXIT=0 "$work/run.log"
+    grep -Fxq "$marker" "$work/run.log"
+    grep -Fxq Y700_VIRTUAL_HID_EXIT=0 "$work/run.log"
+}
+boot
+if [[ $marker == Y700_COLD_SEED_PASS ]]; then
+    first=$(grep -Ex 'COLD_BOOT_ID=[[:xdigit:]-]{36}' "$work/run.log")
+    extra_cmdline="y700.virtual_bond=resume $shutdown_case"
+    marker=Y700_COLD_RESUME_PASS
+    boot
+    second=$(grep -Ex 'COLD_BOOT_ID=[[:xdigit:]-]{36}' "$work/run.log")
+    [[ $first != "$second" ]]
+    echo Y700_COLD_BOND_PERSISTENCE_PASS
+    exit 0
+fi
 if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
     expected=3
     [[ $marker != Y700_VIRTUAL_CLASSIC_INPUT_PASS ]] || expected=2

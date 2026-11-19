@@ -6,13 +6,23 @@ grep -zFxq 'linux,dummy-virt' /proc/device-tree/compatible
 [[ $(uname -m) == aarch64 && -z $(ls -A /sys/class/bluetooth 2>/dev/null) ]]
 cd /opt/y700-virtual-hid
 mkdir -p /var/lib/bluetooth /run/dbus /dev/shm
-mount -t tmpfs -o mode=700 tmpfs /var/lib/bluetooth
+bond_phase=
+for phase in seed resume; do
+    if grep -qw "y700.virtual_bond=$phase" /proc/cmdline; then bond_phase=$phase; fi
+done
+if [[ -n $bond_phase ]]; then
+    mount -t ext4 -o nodev,nosuid,noexec LABEL=Y700_BT_TEST /var/lib/bluetooth
+    chmod 700 /var/lib/bluetooth
+    echo "COLD_BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)"
+else
+    mount -t tmpfs -o mode=700 tmpfs /var/lib/bluetooth
+fi
 mount -t tmpfs -o mode=1777 tmpfs /dev/shm
 export UV_CACHE_DIR=/run/uv UV_OFFLINE=1 PYTHONUNBUFFERED=1
 pids=()
 cleanup() {
     local rc=$?
-    if (( rc != 0 )); then
+    if (( rc != 0 )) && [[ -z $bond_phase ]]; then
         for log in /run/{peer,bluez,btvirt,Xorg}.log; do
             [[ ! -e $log ]] || grep -vE 'method_(return|call)|\[signal\]|command 0x' "$log" | tail -65 || :
         done
@@ -23,11 +33,20 @@ cleanup() {
         kill "${pids[i]}" 2>/dev/null || :
         wait "${pids[i]}" 2>/dev/null || :
     done
+    if [[ -n $bond_phase ]]; then sync; umount /var/lib/bluetooth; fi
 }
 trap cleanup EXIT
 wait_for() {
     local end=$((SECONDS+15))
     until "$@"; do ((SECONDS < end)) || return 1; sleep .15; done
+}
+adapter_boolean() {
+    local path=$1 property=$2 value=$3
+    if [[ $(busctl --system get-property org.bluez "$path" org.bluez.Adapter1 "$property") == "b $value" ]]; then
+        return 0
+    fi
+    busctl --system set-property org.bluez "$path" org.bluez.Adapter1 "$property" b "$value" >/dev/null 2>&1 || :
+    return 1
 }
 modprobe bluetooth
 modprobe uhid
@@ -42,6 +61,11 @@ if [[ -f dummy.deb ]]; then source ./desktop-xorg.sh; fi
 mode=()
 controller=()
 if grep -qw y700.virtual_classic=1 /proc/cmdline; then mode=(classic); controller=(-B); fi
+if [[ -n $bond_phase ]]; then
+    install -d -m700 /run/cold-bond
+    btmon -w /run/cold-bond/trace >/dev/null 2>&1 & monitor=$!; pids+=("$monitor")
+    wait_for test -s /run/cold-bond/trace
+fi
 ./btvirt "${controller[@]}" -l2 > /run/btvirt.log 2>&1 & pids+=($!)
 wait_for test -e /sys/class/bluetooth/hci1
 for adapter in /sys/class/bluetooth/hci?; do
@@ -55,12 +79,36 @@ if ((${#mode[@]})); then options+=(--compat); fi
 for controller in hci0 hci1; do
     path=/org/bluez/$controller
     wait_for busctl --system --no-pager get-property org.bluez "$path" org.bluez.Adapter1 Address 2>/dev/null
-    busctl --system set-property org.bluez "$path" org.bluez.Adapter1 Powered b true
-    busctl --system set-property org.bluez "$path" org.bluez.Adapter1 Pairable b true
+    if [[ -n $bond_phase ]]; then
+        wait_for adapter_boolean "$path" Powered true
+        value=true
+        [[ $bond_phase != resume ]] || value=false
+        wait_for adapter_boolean "$path" Pairable "$value"
+    else
+        busctl --system set-property org.bluez "$path" org.bluez.Adapter1 Powered b true
+        busctl --system set-property org.bluez "$path" org.bluez.Adapter1 Pairable b true
+    fi
 done
 if ((${#mode[@]})); then
     busctl --system set-property org.bluez /org/bluez/hci1 org.bluez.Adapter1 Discoverable b true
 fi
+if [[ $bond_phase == resume ]]; then mode=(resume); fi
 ./uv run --offline --no-project --python /usr/bin/python3 python -B peer.py "${mode[@]}" >/run/peer.log 2>&1 & pids+=($!)
 wait_for grep -q '^PEER_READY$' /run/peer.log
+if [[ -n $bond_phase ]]; then
+    timeout -k 3 90 ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "$bond_phase"
+    kill -INT "$monitor"
+    wait "$monitor"
+    btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
+    grep -q 'Enabled with AES-CCM' /run/cold-bond/decoded
+    if [[ $bond_phase == resume ]]; then
+        grep -q 'LE Long Term Key Request Reply' /run/cold-bond/decoded
+        if grep -Eq 'SMP: Pairing (Request|Response)' /run/cold-bond/decoded; then exit 1; fi
+    else
+        grep -q 'SMP: Pairing Request' /run/cold-bond/decoded
+    fi
+    echo "HCI_AES_CCM_VERIFIED pairing_exchange=$([[ $bond_phase == seed ]] && echo yes || echo no)"
+    echo "Y700_COLD_${bond_phase^^}_PASS"
+    exit 0
+fi
 timeout -k 3 125 ./uv run --offline --no-project --python /usr/bin/python3 python -B central.py "${mode[@]}"

@@ -136,10 +136,11 @@ def main():
         raise RuntimeError("Requires the marked VM")
     DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    agent = VirtualAgent(bus)
-    agent_manager = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez"), BLUEZ + ".AgentManager1")
-    agent_manager.RegisterAgent(agent.path, "NoInputNoOutput")
-    agent_manager.RequestDefaultAgent(agent.path)
+    if sys.argv[1:] != ["resume"]:
+        agent = VirtualAgent(bus)
+        agent_manager = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez"), BLUEZ + ".AgentManager1")
+        agent_manager.RegisterAgent(agent.path, "NoInputNoOutput")
+        agent_manager.RequestDefaultAgent(agent.path)
     if sys.argv[1:] == ["classic"]:
         obj = bus.get_object(BLUEZ, "/org/bluez/hci1")
         addr = dbus.Interface(obj, dbus.PROPERTIES_IFACE).Get(BLUEZ + ".Adapter1", "Address")
