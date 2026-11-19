@@ -5,7 +5,11 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 grep -qw y700.touch_gesture_fixture=1 /proc/cmdline
 grep -zFxq linux,dummy-virt /proc/device-tree/compatible
 test "$(uname -m)" = aarch64
-test "$(dpkg-query -W -f='${Version}' y700-platform)" = '0.1.0~dev8'
+case $(dpkg-query -W -f='${Version}' y700-platform) in
+    '0.1.0~dev8') factor=1 ;;
+    '0.1.0~dev9') factor=2 ;;
+    *) echo 'Expected the dev8 or dev9 test image' >&2; exit 1 ;;
+esac
 
 fixture=$(cd -- "$(dirname -- "$0")" && pwd)
 work=$(mktemp -d /run/y700-touch-gestures.XXXXXXXX)
@@ -14,19 +18,25 @@ user_dir=$work/user
 install -d -m 700 -o y700 -g y700 "$user_dir"
 export DISPLAY=:1 XAUTHORITY=$user_dir/Xauthority
 export XDG_RUNTIME_DIR=$user_dir UV_CACHE_DIR=$work/uv
+export XDG_SESSION_TYPE=x11
 unset WAYLAND_DISPLAY
 export LC_ALL=C HTTPS_PROXY= HTTP_PROXY= ALL_PROXY= https_proxy= http_proxy= all_proxy=
 
-chrome= browser_pid= xorg= wm= input= web=
+chrome= browser_pid= xorg= wm= settings= input= web=
 cleanup() {
     local rc=$?
     if (( rc != 0 )); then
-        for log in Xorg chrome wm udev; do
+        for log in Xorg chrome wm settings udev input; do
             if [[ -f $work/$log.log ]]; then tail -40 "$work/$log.log"; fi
         done
+        if [[ -n $xorg ]]; then
+            xprop -root _NET_ACTIVE_WINDOW _NET_CLIENT_LIST_STACKING || :
+            xwininfo -root -tree | tail -80 || :
+            xinput list-props 'NT36523N Capacitive Touchscreen' || :
+        fi
         if [[ -f $work/Xorg.log ]]; then grep -E 'fixture|clock range' "$work/Xorg.log" || :; fi
     fi
-    for pid in "$browser_pid" "$chrome" "$wm" "$xorg" "$web" "$input"; do
+    for pid in "$browser_pid" "$chrome" "$settings" "$wm" "$xorg" "$web" "$input"; do
         if [[ -n $pid ]]; then kill "$pid" 2>/dev/null || :; fi
     done
 }
@@ -106,10 +116,30 @@ xinput list-props "$device" | grep -F 'libinput Calibration Matrix'
 xinput list --long "$device" | grep -i -E 'touch|direct'
 grep -F "Using input driver 'libinput' for '$device'" "$work/Xorg.log"
 
-runuser -u y700 -- dbus-run-session -- xfwm4 --compositor=off > "$work/wm.log" 2>&1 &
+if (( factor == 2 )); then
+    # DUMMY0 is a virtual monitor. Use the profile selected on the physical DSI-1.
+    export XDG_CONFIG_DIRS=/usr/share/y700/tablet-xdg:/etc/xdg XDG_CURRENT_DESKTOP=XFCE
+fi
+runuser -u y700 -- dbus-run-session -- bash -ec '
+    printf "%s\n" "$DBUS_SESSION_BUS_ADDRESS" > "$XDG_RUNTIME_DIR/gesture-bus"
+    exec xfwm4 --compositor=off' > "$work/wm.log" 2>&1 &
 wm=$!
 has_wm() { xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'; }
-wait_for 20 has_wm
+wait_for 65 has_wm
+read -r DBUS_SESSION_BUS_ADDRESS < "$user_dir/gesture-bus"
+export DBUS_SESSION_BUS_ADDRESS
+if (( factor == 2 )); then
+    runuser -u y700 -- xfsettingsd --no-daemon --replace > "$work/settings.log" 2>&1 &
+    settings=$!
+    gtk_scaled() {
+        "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -c '
+import gi
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk
+raise SystemExit(Gdk.Display.get_default().get_monitor(0).get_scale_factor() != 2)'
+    }
+    wait_for 25 gtk_scaled
+fi
 "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" serve &
 web=$!
 wait_for 15 curl -fsS http://127.0.0.1:8937/record >/dev/null 2>&1
@@ -118,7 +148,7 @@ verify() {
     local phase=$1
     curl -fsS http://127.0.0.1:8937/record > "$work/record"
     "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" \
-        "$phase" "$width" "$height" < "$work/record" > "$work/assert.log" 2>&1
+        "$phase" "$width" "$height" "$factor" < "$work/record" > "$work/assert.log" 2>&1
 }
 
 assert_renderer_sandbox() {
@@ -135,6 +165,8 @@ assert_renderer_sandbox() {
     echo 'Chromium renderer sandbox: seccomp=2 no_new_privs=1 PID namespace isolated'
 }
 
+injections=0
+trace_complete() { [[ $(grep -c '^DONE$' "$work/input.log") == "$injections" ]]; }
 for orientation in portrait landscape; do
     if [[ $orientation == portrait ]]; then
         width=1600 height=2560 matrix=(1 0 0 0 1 0 0 0 1)
@@ -144,16 +176,17 @@ for orientation in portrait landscape; do
     xrandr --output DUMMY0 --mode "${width}x${height}-fixture" --pos 0x0
     xinput set-prop "$device" 'Coordinate Transformation Matrix' "${matrix[@]}"
     xinput list-props "$device" | grep -F 'Coordinate Transformation Matrix'
-    runuser -u y700 -- dbus-run-session -- chromium --user-data-dir="$user_dir/$orientation" --kiosk --no-first-run \
-        --start-fullscreen --window-position=0,0 --window-size="$width,$height" \
+    runuser -u y700 -- chromium --user-data-dir="$user_dir/$orientation" --kiosk --no-first-run \
         --no-default-browser-check --disable-background-networking --disable-gpu --ozone-platform=x11 \
         http://127.0.0.1:8937/ > "$work/chrome.log" 2>&1 &
     chrome=$!
-    if ! wait_for 45 verify ready; then cat "$work/record" "$work/assert.log"; exit 1; fi
+    if ! wait_for 100 verify ready; then cat "$work/record" "$work/assert.log"; exit 1; fi
     printf 'VIEWPORT %s %s\n' "$orientation" "$(cat "$work/record")"
     wait_for 15 assert_renderer_sandbox
     for gesture in scroll pinch; do
+        injections=$((injections+1))
         printf '%s %s\n' "$orientation" "$gesture" >&8
+        wait_for 10 trace_complete
         if ! wait_for 20 verify "$gesture"; then cat "$work/record" "$work/assert.log"; exit 1; fi
         # Keep the final state after the last evdev frame and compositor animation.
         sleep 1.5

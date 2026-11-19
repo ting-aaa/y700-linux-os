@@ -6,7 +6,7 @@ import secrets
 import socket
 import struct
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
@@ -41,11 +41,15 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
 
-def verify(record, phase, width, height):
+def verify(record, phase, width, height, factor):
     viewport = record["viewport"]
-    assert (viewport["width"], viewport["height"]) == (width, height), viewport
+    assert viewport["dpr"] == factor, viewport
+    assert (viewport["width"] * factor, viewport["height"] * factor) == (width, height), viewport
     if phase == "ready":
-        assert not record["gestures"] and viewport["scroll"] == 0 and viewport["scale"] == 1, record
+        assert record["visible"] == "visible" and record["focused"], record
+        assert record["loaded"] == "complete" and record["frames"] >= 8, record
+        assert record["touches"] == 0 and not record["gestures"], record
+        assert viewport["scroll"] == 0 and viewport["scale"] == 1, record
         return
     number = 1 if phase == "scroll" else 2
     assert len(record["gestures"]) == number, record
@@ -74,9 +78,9 @@ def write_xauthority(filename, display):
 
 if __name__ == "__main__":
     if sys.argv[1] == "serve":
-        HTTPServer(("127.0.0.1", 8937), Fixture).serve_forever()
+        ThreadingHTTPServer(("127.0.0.1", 8937), Fixture).serve_forever()
     elif sys.argv[1] == "xauthority":
         write_xauthority(*sys.argv[2:])
     else:
-        mode, width, height = sys.argv[1:]
-        verify(json.load(sys.stdin), mode, int(width), int(height))
+        mode, width, height, factor = sys.argv[1:]
+        verify(json.load(sys.stdin), mode, int(width), int(height), int(factor))

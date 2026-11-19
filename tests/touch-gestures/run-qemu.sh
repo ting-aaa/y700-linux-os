@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the reviewed Y700 kernel with the exact dev8 root and a disposable test initrd.
+# Boot the Y700 kernel with the selected development root and a disposable test initrd.
 set -euo pipefail
 if (( $# != 5 )); then
     echo 'Usage: run-qemu.sh ROOT.qcow2 KERNEL BUSYBOX_ARM64 UV_ARM64 DUMMY_ARM64.deb' >&2
@@ -64,7 +64,7 @@ chmod 755 "$work/init/init"
     cd "$work/init"
     find . -print0 | cpio --null -o -H newc --quiet | gzip -1 > "$work/initrd.cpio.gz"
 )
-timeout -k 5 240 "$qemu" "${qemu_args[@]}" -machine virt,gic-version=3 -cpu max -smp 3 -m 2304 \
+timeout -k 5 380 "$qemu" "${qemu_args[@]}" -machine virt,gic-version=3 -cpu max -smp 3 -m 2304 \
     -nodefaults -no-user-config -monitor none -display none -serial stdio -nic none -no-reboot \
     -kernel "$kernel" -initrd "$work/initrd.cpio.gz" -append 'console=ttyAMA0 loglevel=5 y700.touch_gesture_fixture=1 panic=5' \
     -drive "if=none,id=root,format=qcow2,readonly=on,file=$disk" -device virtio-blk-device,drive=root \

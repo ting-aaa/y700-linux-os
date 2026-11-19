@@ -15,11 +15,20 @@ Chromium 156.0.8078.47 on the dev8 Debian ARM64 root received both contacts thro
 | 1600×2560 portrait | +1,065 CSS px | 1.00× → 3.87× | 1 |
 | 2560×1600 left landscape | +854 CSS px | 1.00× → 4.00× | 1 |
 
-The swipe kept viewport scale at 1×. The spread preserved the document scroll offset in each run. These are outcomes of the synthetic traces. Actual contact detection, motion, rotation and gesture comfort on the tablet panel still require physical testing. [Dev8 root receipt](BOARD-IMAGE.md#dev8-first-login-keyboard-image)
+The swipe kept viewport scale at 1×. The spread preserved the document scroll offset in each run. [Dev8 root receipt](BOARD-IMAGE.md#dev8-first-login-keyboard-image)
+
+The dev9 image with qcam revision y7002 ran the same browser and two-contact traces at the tablet's 200% Xfce setting. Chromium used its window manager's kiosk bounds. The fixture waited until the page had loaded, had focus and had received eight animation frame callbacks before sending the first touch. Both orientations reported the expected centroids, four touch starts across the two gestures, and an isolated, seccomp-filtered renderer.
+
+| Virtual display | Browser viewport in CSS px | Two-finger swipe, document movement | Spread two fingers, viewport scale | Device pixel ratio |
+| --- | ---: | ---: | ---: | ---: |
+| 1600×2560 portrait | 800×1280 | +602.5 CSS px | 1.00× → 2.94× | 2 |
+| 2560×1600 left landscape | 1280×800 | +320 CSS px | 1.00× → 3.72× | 2 |
+
+The page scale again stayed at 1× during the swipe and the scroll offset stayed fixed during the spread. Physical contact tracking, two-finger motion and gesture comfort on the glass still require testing. [Dev9 image receipt](BOARD-IMAGE.md#dev9-image-with-the-scaled-qcam-chooser)
 
 ## Reproduce in ARM64 QEMU
 
-Use the verified dev8 ARM64 QCOW2 root with its backing chain available, the Y700 candidate `Image`, an ARM64 static BusyBox, an ARM64 `uv`, and the Debian ARM64 `xserver-xorg-video-dummy` archive `1:0.4.0-1+b2`. The fixture checks the dummy archive digest. It serves the web page over guest loopback, with no virtual network interface. The root disk is attached read-only. Temporary package files and browser profiles reside in the guest. The test uses software rendering throughout.
+Use the verified dev8 or dev9 ARM64 QCOW2 root with its backing chain available, the Y700 candidate `Image`, an ARM64 static BusyBox, an ARM64 `uv`, and the Debian ARM64 `xserver-xorg-video-dummy` archive `1:0.4.0-1+b2`. The fixture checks the dummy archive digest. On dev9 it applies the tablet's packaged Xfce profile to the virtual monitor, starts xfsettingsd, and verifies the GTK scale before launching Chromium. It serves the web page over guest loopback, with no virtual network interface. The root disk is attached read-only. Temporary package files and browser profiles reside in the guest. The test uses software rendering throughout.
 
 ```sh
 bash tests/touch-gestures/run-qemu.sh "$root_qcow2" "$kernel" "$busybox" "$arm64_uv" "$dummy_deb"

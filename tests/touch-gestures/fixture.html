@@ -12,9 +12,16 @@
   const viewport = () => ({ width: innerWidth, height: innerHeight, scroll: scrollY,
                             scale: visualViewport.scale, dpr: devicePixelRatio });
   const gestures = [];
+  let touches = 0;
+  let frames = 0;
+  function painted() {
+    if (++frames < 8) requestAnimationFrame(painted);
+  }
+  requestAnimationFrame(painted);
   let active = null;
   let sending = false;
   addEventListener('touchstart', event => {
+    touches++;
     if (event.touches.length !== 2 || active) return;
     const [a, b] = event.touches;
     active = { before: viewport(), contacts: event.touches.length,
@@ -33,7 +40,9 @@
     if (sending) return;
     sending = true;
     try {
-      await fetch('/record', { method: 'POST', body: JSON.stringify({ viewport: viewport(), gestures }) });
+      await fetch('/record', { method: 'POST', body: JSON.stringify({ viewport: viewport(), gestures,
+        touches, frames, loaded: document.readyState, visible: document.visibilityState,
+        focused: document.hasFocus() }) });
     } finally {
       sending = false;
     }
