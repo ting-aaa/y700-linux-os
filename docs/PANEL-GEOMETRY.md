@@ -19,7 +19,19 @@ In Debian's `2:21.1.16-1.3+deb13u4` X server, the modesetting driver initially c
 
 ## Build and qualification
 
-The source package, original tarball and Debian diff were checked against the signed trixie-security Sources index. The patch passed a clean application to the Debian-patched source. On an ARM64 Debian 13 build root with the X server build dependencies, use the following commands from that source tree. Set `product` to the product repository's absolute path.
+The source package, original tarball and Debian diff were checked against the signed trixie-security Sources index. The retained 2026-11-19 InRelease has SHA-256 `04b0a435801d3b6798c397526d528892183080ebadec7d39b95e6df671441da4`. Its signed `main/source/Sources.xz` has SHA-256 `f66a707b8abd87b9c57f17380b65db82fd263689c04f4b789294798a8c03588f`. The selected package is `xorg-server 2:21.1.16-1.3+deb13u4`. [Source archive checksums](../config/xorg/debian-source.sha256) · [Debian source package](https://security.debian.org/debian-security/pool/updates/main/x/xorg-server/xorg-server_21.1.16-1.3+deb13u4.dsc)
+
+On a Debian 13 ARM64 build host, put the three pinned source files under `$sources`. From the repository, install the upstream build dependencies and run the Debian package recipe. It adds the panel fix to Debian's quilt series and preserves the X server's package layout. The output pair is `xserver-xorg-core` (arm64) and `xserver-common` (all), version `2:21.1.16-1.3+deb13u4+y7001`. Debian's core package requires a common package at least as new as its source version. [Package builder](../scripts/build-xorg-dsi.sh)
+
+```sh
+lock="$PWD/config/xorg/debian-source.sha256"
+(cd "$sources" && sha256sum --strict --check "$lock")
+sudo apt-get build-dep "$sources/xorg-server_21.1.16-1.3+deb13u4.dsc"
+mkdir -p "$out"
+DEB_BUILD_OPTIONS='parallel=4 nocheck noddebs' bash scripts/build-xorg-dsi.sh "$sources" "$out"
+```
+
+The earlier module-only comparison used a Meson build on ARM64. Set `product` to the product repository's absolute path and run the following commands in the Debian-patched source tree.
 
 ```sh
 git apply --check "$product/config/xorg/modesetting-dsi-physical-size.patch"
@@ -42,3 +54,9 @@ In a networkless ARM64 guest, stock Debian Xorg loaded either its installed driv
 | Candidate | DSI | 118 × 190 | 300 × 200 | 300 × 200 |
 
 The tested module is in the private build output `out/xorg-dsi-geometry/modesetting_drv.so`, SHA-256 `714d119c89d58d8cf0c1de05fdeea2bcbb13b9c507e44005574fe4dd0cc4e154`. The nearby receipt contains the guest transcript and the real tablet's reduced KMS and Xorg observations. Physical acceptance requires a session using the candidate Xorg module. The existing kernel already exports the panel dimensions. [Debian source package](https://security.debian.org/debian-security/pool/updates/main/x/xorg-server/xorg-server_21.1.16-1.3+deb13u4.dsc)
+
+## Debian package test, 2026-11-20
+
+A full ARM64 Debian package build produced the core and common packages above. The archived build used the earlier patch context. Applying the checked-in patch with zero fuzz produced the same compiled input, `drmmode_display.c` SHA-256 `3d52150e8a487c927db22b1746ebf174823a7759151fa1d643c5134353056755`. Compared with their authenticated Trixie counterparts, both packages have the same installed paths under `/usr`. The X server's 2,005 exported dynamic symbol/type pairs, the driver's two exported pairs and both binaries' direct library dependencies matched stock. The packaged driver has SHA-256 `8db0cd0e45540948fd847b601e85f1c71647461a992869f0f653d48121f206e4`. [Tested archive checksums](../config/xorg/arm64-packages.sha256)
+
+A networkless ARM64 QEMU guest first reproduced the stock 0 × 0 result. It installed both packages with dpkg into a disposable RAM overlay, passed `dpkg --audit`, `dpkg -V` and `apt-get check`, and loaded `/usr/lib/xorg/modules/drivers/modesetting_drv.so` from Xorg's default module path. All 15 RandR queries across the five cases in the table matched, including the EDID-free DSI panel at 118 × 190 mm and the EDID override at 300 × 200 mm. The guest powered off with test exit 0. The two archives, package audit, build information and serial receipt are in `out/xorg-dsi-packages/`. The packaged pair still needs an ordinary Xorg session on the physical DSI panel. [Repeat the package test](../tests/xorg-dsi/README.md)

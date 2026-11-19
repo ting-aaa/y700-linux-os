@@ -1,9 +1,8 @@
 --- a/hw/xfree86/drivers/modesetting/drmmode_display.c
 +++ b/hw/xfree86/drivers/modesetting/drmmode_display.c
-@@ -2706,5 +2706,14 @@ drmmode_output_get_modes(xf86OutputPtr output)
-             mon->flags |= MONITOR_EDID_COMPLETE_RAWDATA;
-     }
+@@ -2708,3 +2708,12 @@ drmmode_output_get_modes(xf86OutputPtr output)
      xf86OutputSetEDID(output, mon);
+-
 +
 +    /* Integrated DSI panels can publish their physical size through KMS
 +     * without an EDID.  xf86OutputSetEDID resets the output size. */
@@ -13,5 +12,5 @@
 +        output->mm_width = koutput->mmWidth;
 +        output->mm_height = koutput->mmHeight;
 +    }
-
++
      drmmode_output_attach_tile(output);
