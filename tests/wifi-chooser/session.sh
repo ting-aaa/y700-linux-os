@@ -26,7 +26,7 @@ if [[ ${3:-} != session ]]; then
     export HOME=$run/home XDG_RUNTIME_DIR=$run/runtime
     export XDG_CONFIG_HOME=$HOME/.config XDG_CACHE_HOME=$HOME/.cache
     export XDG_DATA_HOME=$HOME/.local/share XDG_STATE_HOME=$HOME/.local/state
-    export UV_CACHE_DIR=$XDG_CACHE_HOME/uv UV_OFFLINE=1
+    export UV_CACHE_DIR=$XDG_CACHE_HOME/uv UV_OFFLINE=1 PYTHONUNBUFFERED=1
     export LC_ALL=C XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 XDG_CURRENT_DESKTOP=XFCE
     export GTK_USE_PORTAL=0
     mkdir -m700 "$HOME" "$XDG_RUNTIME_DIR"
@@ -35,7 +35,7 @@ if [[ ${3:-} != session ]]; then
     export PATH=$bundle/bin:/usr/local/bin:/usr/bin:/bin
     cd -- "$HOME"
     dbus-run-session -- bash "$bundle/session.sh" "$mode" "$security" session \
-        2> >(grep -E '^(WIFI_PROBE_ERROR|WIFI_SESSION_ERROR) ' >&2) | grep -E '^WIFI_'
+        2> >(grep --line-buffered -E '^(WIFI_PROBE_ERROR|WIFI_SESSION_ERROR) ' >&2) | grep --line-buffered -E '^WIFI_'
     exit
 fi
 
@@ -60,26 +60,49 @@ PY
 
 mkdir -p "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml"
 cp -- "$bundle/xfce4-panel.xml" "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/"
-xp= wm= panel= applet=
+if [[ $mode == fixture ]] && grep -Eq 'y700.wifi_attempt=(editor|onboard)( |$)' /proc/cmdline; then
+    # Expose the image's standard Applications menu on this isolated panel.
+    xml=$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+    sed -i '/name="plugin-ids" type="array"/a\        <value type="int" value="2"/>' "$xml"
+    sed -i '/name="plugins" type="empty"/a\    <property name="plugin-2" type="string" value="applicationsmenu"/>' "$xml"
+fi
+xp= wm= panel= applet= settings= keyboard=
 cleanup_session() {
-    for pid in "$applet" "$panel" "$wm" "$xp"; do
+    for pid in "$keyboard" "$applet" "$panel" "$wm" "$settings" "$xp"; do
         if [[ -n $pid ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
     done
 }
 trap cleanup_session EXIT
-Xvfb "$DISPLAY" -auth "$XAUTHORITY" -screen 0 1024x768x24 -nolisten tcp >/dev/null 2>&1 & xp=$!
+screen=1024x768x24
+unset Y700_WIFI_ONBOARD
+if [[ $mode == fixture ]] && grep -qw y700.wifi_attempt=onboard /proc/cmdline; then
+    screen=2560x1600x24
+    export Y700_WIFI_ONBOARD=1 XDG_CONFIG_DIRS=/usr/share/y700/tablet-xdg:/etc/xdg
+fi
+Xvfb "$DISPLAY" -auth "$XAUTHORITY" -screen 0 "$screen" -nolisten tcp >/dev/null 2>&1 & xp=$!
 for _ in {1..40}; do
     kill -0 "$xp" || { echo 'WIFI_SESSION_ERROR xvfb-exited' >&2; exit 1; }
     if xdpyinfo >/dev/null 2>&1; then break; fi
     sleep 0.1
 done
 xdpyinfo >/dev/null || { echo 'WIFI_SESSION_ERROR x-display-not-ready' >&2; exit 1; }
-dbus-update-activation-environment DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_RUNTIME_DIR HOME
+activation=(DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_RUNTIME_DIR HOME)
+if [[ -n ${Y700_WIFI_ONBOARD:-} ]]; then activation+=(XDG_CONFIG_DIRS); fi
+dbus-update-activation-environment "${activation[@]}"
 # The session bus only hosts this private desktop and its accessibility bus.
 gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
     --method org.a11y.Bus.GetAddress >/dev/null 2>&1 || { echo 'WIFI_SESSION_ERROR accessibility-bus' >&2; exit 1; }
 if [[ $security != open ]]; then xfwm4 --compositor=off >/dev/null 2>&1 & wm=$!; fi
+if [[ -n ${Y700_WIFI_ONBOARD:-} ]]; then
+    xfsettingsd --no-daemon >/dev/null 2>&1 & settings=$!
+    timeout 20 gdbus wait --session org.xfce.SettingsDaemon
+    onboard --startup-delay=2.0 >/dev/null 2>&1 & keyboard=$!
+    timeout 30 gdbus wait --session org.onboard.Onboard
+fi
 xfce4-panel --disable-wm-check >/dev/null 2>&1 & panel=$!
+if [[ -n ${Y700_WIFI_ONBOARD:-} ]]; then
+    timeout 25 gdbus wait --session org.xfce.Panel
+fi
 agent_args=()
 if [[ $security == open ]]; then agent_args+=(--no-agent); fi
 nm-applet "${agent_args[@]}" >/dev/null 2>&1 & applet=$!

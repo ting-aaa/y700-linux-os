@@ -11,6 +11,7 @@ finish() {
     /opt/wifi-test/bin/busybox poweroff -n -f
 }
 trap finish EXIT
+trap 'exit 143' TERM
 # systemd can prefix the first console write with tty reset escapes.
 printf '\n'
 bash /opt/wifi-test/fixture-guest.sh

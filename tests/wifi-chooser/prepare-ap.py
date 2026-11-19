@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import string
 import sys
 
 
@@ -25,8 +26,11 @@ def main():
         'channel=1\nhw_mode=g\nauth_algs=1\nctrl_interface=/run/wifi-fixture/hostapd\n'
     )
     if mode != 'open':
-        network['correct'] = secrets.token_urlsafe(24)
-        network['wrong'] = secrets.token_urlsafe(24)
+        for key in ('correct', 'wrong'):
+            if 'y700.wifi_attempt=onboard' in Path('/proc/cmdline').read_text().split():
+                network[key] = ''.join(secrets.choice(string.ascii_lowercase) for _ in range(16))
+            else:
+                network[key] = secrets.token_urlsafe(24)
         if network['wrong'] == network['correct']:
             return 1
         cfg += 'wpa=2\nrsn_pairwise=CCMP\n'

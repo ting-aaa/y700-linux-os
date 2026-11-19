@@ -10,4 +10,4 @@ ExecStart=/opt/wifi-test/fixture-systemd.sh
 StandardOutput=tty
 StandardError=tty
 TTYPath=/dev/ttyAMA0
-TimeoutStartSec=205
+TimeoutStartSec=320

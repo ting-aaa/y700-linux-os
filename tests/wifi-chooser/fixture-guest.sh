@@ -16,6 +16,10 @@ case $actor in
     seat) test -e /run/systemd/system || fail system-manager-missing ;;
     *) fail bad-actor-mode ;;
 esac
+printf 'WIFI_STACK kernel=%s nm=%s applet=%s editor=%s\n' "$(uname -r)" \
+    "$(dpkg-query -W -f='${Version}' network-manager)" \
+    "$(dpkg-query -W -f='${Version}' network-manager-applet)" \
+    "$(dpkg-query -W -f='${Version}' nm-connection-editor)"
 
 pids=()
 cleanup() {
@@ -129,8 +133,10 @@ PY
     systemd-run --quiet --wait --collect --unit="$unit" -p User=y700 -p PAMName=login \
         -p StandardInput=tty -p TTYPath=/dev/tty1 -p StandardOutput=journal -p StandardError=journal \
         -E XDG_SESSION_TYPE=x11 -E XDG_SESSION_CLASS=user -E XDG_SEAT=seat0 -E XDG_VTNR=1 \
-        /opt/wifi-test/seat-actor.sh "$security" || status=$?
-    grep -E '^WIFI_' /run/wifi-fixture/seat-receipt || true
+        /opt/wifi-test/seat-actor.sh "$security" &
+    seat_job=$!
+    tail --pid="$seat_job" -s .3 -n +1 -f /run/wifi-fixture/seat-receipt | grep --line-buffered -E '^WIFI_' || true
+    wait "$seat_job" || status=$?
     (( status == 0 )) || fail pam-seat-session
 else
     bash ./session.sh fixture "$security"
@@ -140,5 +146,12 @@ iw dev "$station" link | grep -Eq '^Connected to[[:space:]]'
 ip -4 address show dev "$station" | grep -Eq 'inet 192\.0\.2\.(1[1-9])/24'
 ip route get 192.0.2.1 oif "$station" | grep -Eq " dev $station "
 ping -q -c 1 -W 2 -I "$station" 192.0.2.1 >/dev/null
+if [[ $security == sae ]]; then
+    peer=$(cat "/sys/class/net/$station/address")
+    details=$(hostapd_cli -p /run/wifi-fixture/hostapd -i "$ap" sta "$peer")
+    grep -Fxq 'AKMSuiteSelector=00-0f-ac-8' <<<"$details" || fail negotiated-sae-missing
+    grep -Eq '^flags=.*\[MFP\]' <<<"$details" || fail negotiated-pmf-missing
+    echo 'WIFI_SAE_NEGOTIATED akm=SAE pmf=1'
+fi
 nmcli -w 8 device disconnect "$station" >/dev/null || fail station-cleanup
 echo 'WIFI_FIXTURE_PASS nm_connected=1 nl80211_associated=1 local_dhcp=1 local_ping=1'
