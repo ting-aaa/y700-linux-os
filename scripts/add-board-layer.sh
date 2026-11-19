@@ -64,6 +64,8 @@ case $layer in
         test -x "$root/usr/bin/ibus-daemon"
         test -x "$root/usr/libexec/ibus-x11"
         test -x "$root/usr/libexec/ibus-engine-libpinyin"
+        test -x "$root/usr/libexec/y700-display-language"
+        test -f "$root/usr/share/applications/y700-display-language.desktop"
         test -s "$root/etc/X11/Xsession.d/70im-config_launch"
         test -s "$root/usr/lib/aarch64-linux-gnu/gtk-3.0/3.0.0/immodules/im-ibus.so"
         grep -Fq '<name>libpinyin</name>' "$root/usr/share/ibus/component/libpinyin.xml"
