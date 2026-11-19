@@ -1,5 +1,25 @@
 # Xfce Wi-Fi chooser on Y700
 
+## Physical LAN transfer
+
+On November 20 the running TB320FC_PRC exchanged data directly with a Windows WLAN peer on its existing access point. The tablet used `ath11k_pci`. Its supplicant reported a completed WPA2-PSK association with CCMP, 2,437 MHz and 40 MHz channel width. The host bound its Wi-Fi IPv4 address, and the tablet bound the address selected by its on-link wireless route back to that peer. USB SSH started the test and returned measurements. [Linux wireless station information](https://wireless.docs.kernel.org/en/latest/en/users/documentation/iw.html)
+
+| 32 MiB of TCP application data per transfer | Run 1 | Run 2 | Run 3 | Median |
+| --- | ---: | ---: | ---: | ---: |
+| Received by tablet, Mbit/s | 78.59 | 81.86 | 79.60 | 79.60 |
+| Sent by tablet, Mbit/s | 102.76 | 111.97 | 106.69 | 106.69 |
+
+The receiving side verified SHA-256 on each of the six transfers (192 MiB total). The tablet wireless interface counted 104,756,294 received bytes and 106,026,576 transmitted bytes, including protocol overhead and other traffic. Its RX and TX error and drop counters each increased by zero. These figures cover this access point, band, peer and TCP workload. Physical WPA3, roaming and resume remain open.
+
+In a separate 300.8-second observation, 301 of 301 gateway pings bound to the physical WLAN returned. Round-trip times were 5.914 ms minimum, 21.617 ms mean and 108.884 ms maximum. The tablet retained the same boot and active connection profile. Both endpoints of the observation showed WPA2-PSK with CCMP and a 40 MHz channel. The journal recorded no matching disconnection, firmware crash or driver timeout during this window.
+
+To reproduce from a peer on the same LAN, set `HOST_LAN_IPV4` to its local IPv4 address and `USB_SSH` to the host-key-verified tablet SSH wrapper. The tablet starts a short-lived, unprivileged listener on its chosen WLAN address. Pass the wrapper command last. On Windows with the wrapper in WSL, replace `bash "$USB_SSH"` with `wsl -d Ubuntu -u root --exec bash "$USB_SSH"`. Successful output contains rates and counter deltas and omits network identities. [Transfer fixture](../tests/wifi-lan-transfer.py)
+
+```sh
+uv run --no-project --python 3.13 python tests/wifi-lan-transfer.py \
+    --host "$HOST_LAN_IPV4" --mib 32 --control bash "$USB_SSH"
+```
+
 On 2026-11-19, the tablet's Debian 13 session tooling opened the real NetworkManager applet in a private, cookie-authenticated Xvfb display as an ordinary user. It ran the shipped Xfce notification-area plugin, `network-manager-applet` 1.36.0-3 and the actual running NetworkManager 1.52.1-1. One synthesized pointer tap opened the tray menu and a second tap opened **Available networks**. The probe matched the showing AT-SPI menu rows to NetworkManager access-point objects in memory. [Physical probe](../tests/wifi-chooser/run-live.sh) · [Applet source](https://github.com/GNOME/network-manager-applet/blob/1.36.0/src/applet-device-wifi.c)
 
 | Physical result | Count |
