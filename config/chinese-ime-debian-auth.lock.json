@@ -1,0 +1,192 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "mirrors.tuna.tsinghua.edu.cn_debian_dists_trixie-updates_InRelease",
+      "sha256": "db25a33cc751efad4af201ed961c3f25a2ac27c4cd3cfa5973a2d7046101f858",
+      "date": "Fri, 23 Oct 2026 14:10:51 UTC",
+      "valid_until": "Fri, 30 Oct 2026 14:10:51 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "e162035448feb92bbe3f53c6b31bafc8c06cf232734640bcfa92ab043898469d",
+          "size": 1406
+        }
+      ]
+    },
+    {
+      "file": "mirrors.tuna.tsinghua.edu.cn_debian_dists_trixie_InRelease",
+      "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+          "size": 56162922
+        },
+        {
+          "path": "non-free-firmware/binary-arm64/Packages",
+          "sha256": "b84b3f3e247cdb9e804ec26f646929bd5cf4f300541cdc5f77919ab70de6e516",
+          "size": 29374
+        }
+      ]
+    },
+    {
+      "file": "security.debian.org_debian-security_dists_trixie-security_InRelease",
+      "sha256": "1f27d805a2aae966c685d369ac1f67eb3b2b672f946bec850a4a1afd2842aa79",
+      "date": "Fri, 23 Oct 2026 17:22:33 UTC",
+      "valid_until": "Fri, 30 Oct 2026 17:22:33 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "9248d873dcf0355cf9ff0993c274433684b640950f428e98cd81d826f0d17386",
+          "size": 1882607
+        }
+      ]
+    }
+  ],
+  "installed_count": 15,
+  "authenticated_count": 15,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "dconf-cli",
+      "version": "0.40.0-5",
+      "architecture": "arm64",
+      "size": 27868,
+      "sha256": "308c9e8e42040169fbeeee7f5dfe557b2031d7dca0dc90acb967ff30e1ad2ead",
+      "uri": "https://deb.debian.org/debian/pool/main/d/dconf/dconf-cli_0.40.0-5_arm64.deb",
+      "repository_path": "pool/main/d/dconf/dconf-cli_0.40.0-5_arm64.deb"
+    },
+    {
+      "package": "gettext-base",
+      "version": "0.23.1-2",
+      "architecture": "arm64",
+      "size": 240936,
+      "sha256": "b2cacbf178915d739c5134dfffeb0cfc0edcf4247a61329ab7a872628a91d80a",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gettext/gettext-base_0.23.1-2_arm64.deb",
+      "repository_path": "pool/main/g/gettext/gettext-base_0.23.1-2_arm64.deb"
+    },
+    {
+      "package": "gir1.2-ibus-1.0",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 371760,
+      "sha256": "4c6e4b77e1df980825f953ad71b53bfb8fcabd286e4ad4afa7217cd1d3a707be",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/gir1.2-ibus-1.0_1.5.32-2_arm64.deb",
+      "repository_path": "pool/main/i/ibus/gir1.2-ibus-1.0_1.5.32-2_arm64.deb"
+    },
+    {
+      "package": "ibus",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 624528,
+      "sha256": "5c0ce52da04c5f74baba3d7d4491e6e5eb9b674a81dadcf0fd9b58b254664ab6",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/ibus_1.5.32-2_arm64.deb",
+      "repository_path": "pool/main/i/ibus/ibus_1.5.32-2_arm64.deb"
+    },
+    {
+      "package": "ibus-data",
+      "version": "1.5.32-2",
+      "architecture": "all",
+      "size": 13238692,
+      "sha256": "6b4e9f013941488d3b299326079f6ce470bf34b5b59a75dd007c89d77048f587",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/ibus-data_1.5.32-2_all.deb",
+      "repository_path": "pool/main/i/ibus/ibus-data_1.5.32-2_all.deb"
+    },
+    {
+      "package": "ibus-gtk3",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 318316,
+      "sha256": "14b2d26fc25bff1cd36e536fa1bcdcbeb537641f4e3e71c7bc41c8476da0ebeb",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/ibus-gtk3_1.5.32-2_arm64.deb",
+      "repository_path": "pool/main/i/ibus/ibus-gtk3_1.5.32-2_arm64.deb"
+    },
+    {
+      "package": "ibus-libpinyin",
+      "version": "1.15.8-2",
+      "architecture": "arm64",
+      "size": 751964,
+      "sha256": "4ab848a59be20027fc8dfc4d865b02588372ea6ffba9b01230c2e026c7ce8f35",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus-libpinyin/ibus-libpinyin_1.15.8-2_arm64.deb",
+      "repository_path": "pool/main/i/ibus-libpinyin/ibus-libpinyin_1.15.8-2_arm64.deb"
+    },
+    {
+      "package": "im-config",
+      "version": "0.57-2",
+      "architecture": "all",
+      "size": 57428,
+      "sha256": "21c42a3ebe9422f927656de2ca38bf99ac68e8f62c3691e49c34376c3582f89d",
+      "uri": "https://deb.debian.org/debian/pool/main/i/im-config/im-config_0.57-2_all.deb",
+      "repository_path": "pool/main/i/im-config/im-config_0.57-2_all.deb"
+    },
+    {
+      "package": "libibus-1.0-5",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 452584,
+      "sha256": "70ca5d33241c0b34b3ef617c3f87572810aeec8b10e002dc5660f7e86dc082d6",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/libibus-1.0-5_1.5.32-2_arm64.deb",
+      "repository_path": "pool/main/i/ibus/libibus-1.0-5_1.5.32-2_arm64.deb"
+    },
+    {
+      "package": "libmarisa0",
+      "version": "0.2.6-19",
+      "architecture": "arm64",
+      "size": 47304,
+      "sha256": "ce4a3503fc52e3f1dcc14993175737256454e7ba85c6f471ba9f4e3a807f3a9d",
+      "uri": "https://deb.debian.org/debian/pool/main/m/marisa/libmarisa0_0.2.6-19_arm64.deb",
+      "repository_path": "pool/main/m/marisa/libmarisa0_0.2.6-19_arm64.deb"
+    },
+    {
+      "package": "libopencc-data",
+      "version": "1.1.9+ds1-1+deb13u1",
+      "architecture": "all",
+      "size": 15100,
+      "sha256": "fd0079511578c0d62b4f7745fc7ff4ee88fc9a8f797377e5040d35159d9591c3",
+      "uri": "https://deb.debian.org/debian/pool/main/o/opencc/libopencc-data_1.1.9+ds1-1+deb13u1_all.deb",
+      "repository_path": "pool/main/o/opencc/libopencc-data_1.1.9+ds1-1+deb13u1_all.deb"
+    },
+    {
+      "package": "libopencc1.1",
+      "version": "1.1.9+ds1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 543236,
+      "sha256": "30d6293e06eb3616bbcbdc8953ac361bb16a0ecd14d9601570dcea7f54e9ee54",
+      "uri": "https://deb.debian.org/debian/pool/main/o/opencc/libopencc1.1_1.1.9+ds1-1+deb13u1_arm64.deb",
+      "repository_path": "pool/main/o/opencc/libopencc1.1_1.1.9+ds1-1+deb13u1_arm64.deb"
+    },
+    {
+      "package": "libpinyin-data",
+      "version": "2.8.1-1+b2",
+      "architecture": "arm64",
+      "size": 11981212,
+      "sha256": "602da878fcee09a49bfffb619c34ecc141990bd510de7f9e96daa10dc5deaa15",
+      "uri": "https://deb.debian.org/debian/pool/main/libp/libpinyin/libpinyin-data_2.8.1-1+b2_arm64.deb",
+      "repository_path": "pool/main/libp/libpinyin/libpinyin-data_2.8.1-1+b2_arm64.deb"
+    },
+    {
+      "package": "libpinyin15",
+      "version": "2.8.1-1+b2",
+      "architecture": "arm64",
+      "size": 258980,
+      "sha256": "8dbf0f9f577bcbccee159d5a5a37afa3a08192352383a87e2c2d5747db32bb1e",
+      "uri": "https://deb.debian.org/debian/pool/main/libp/libpinyin/libpinyin15_2.8.1-1+b2_arm64.deb",
+      "repository_path": "pool/main/libp/libpinyin/libpinyin15_2.8.1-1+b2_arm64.deb"
+    },
+    {
+      "package": "python3-ibus-1.0",
+      "version": "1.5.32-2",
+      "architecture": "all",
+      "size": 309208,
+      "sha256": "917b0767db80066c46ffce676f8d6136272db7ea1878b4384f589698632b58d4",
+      "uri": "https://deb.debian.org/debian/pool/main/i/ibus/python3-ibus-1.0_1.5.32-2_all.deb",
+      "repository_path": "pool/main/i/ibus/python3-ibus-1.0_1.5.32-2_all.deb"
+    }
+  ]
+}

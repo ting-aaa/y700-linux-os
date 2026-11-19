@@ -2,12 +2,12 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -60,6 +60,14 @@ chroot "$root" env SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive dpkg -i "${d
 chroot "$root" apt-get check
 test -z "$(chroot "$root" dpkg --audit)"
 case $layer in
+    chinese-ime)
+        test -x "$root/usr/bin/ibus-daemon"
+        test -x "$root/usr/libexec/ibus-x11"
+        test -x "$root/usr/libexec/ibus-engine-libpinyin"
+        test -s "$root/etc/X11/Xsession.d/70im-config_launch"
+        test -s "$root/usr/lib/aarch64-linux-gnu/gtk-3.0/3.0.0/immodules/im-ibus.so"
+        grep -Fq '<name>libpinyin</name>' "$root/usr/share/ibus/component/libpinyin.xml"
+        ;;
     blueman)
         test -x "$root/usr/bin/blueman-applet"
         test -s "$root/etc/xdg/autostart/blueman.desktop"

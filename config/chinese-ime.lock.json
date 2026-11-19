@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "scope": "optional-offline-simplified-chinese-input",
+  "sources": {
+    "debian": "config/chinese-ime-debian-auth.lock.json",
+    "board": "scripts/build-input-pinyin.sh"
+  },
+  "packages": [
+    {
+      "package": "dconf-cli",
+      "version": "0.40.0-5",
+      "architecture": "arm64",
+      "size": 27868,
+      "sha256": "308c9e8e42040169fbeeee7f5dfe557b2031d7dca0dc90acb967ff30e1ad2ead"
+    },
+    {
+      "package": "gettext-base",
+      "version": "0.23.1-2",
+      "architecture": "arm64",
+      "size": 240936,
+      "sha256": "b2cacbf178915d739c5134dfffeb0cfc0edcf4247a61329ab7a872628a91d80a"
+    },
+    {
+      "package": "gir1.2-ibus-1.0",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 371760,
+      "sha256": "4c6e4b77e1df980825f953ad71b53bfb8fcabd286e4ad4afa7217cd1d3a707be"
+    },
+    {
+      "package": "ibus",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 624528,
+      "sha256": "5c0ce52da04c5f74baba3d7d4491e6e5eb9b674a81dadcf0fd9b58b254664ab6"
+    },
+    {
+      "package": "ibus-data",
+      "version": "1.5.32-2",
+      "architecture": "all",
+      "size": 13238692,
+      "sha256": "6b4e9f013941488d3b299326079f6ce470bf34b5b59a75dd007c89d77048f587"
+    },
+    {
+      "package": "ibus-gtk3",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 318316,
+      "sha256": "14b2d26fc25bff1cd36e536fa1bcdcbeb537641f4e3e71c7bc41c8476da0ebeb"
+    },
+    {
+      "package": "ibus-libpinyin",
+      "version": "1.15.8-2",
+      "architecture": "arm64",
+      "size": 751964,
+      "sha256": "4ab848a59be20027fc8dfc4d865b02588372ea6ffba9b01230c2e026c7ce8f35"
+    },
+    {
+      "package": "im-config",
+      "version": "0.57-2",
+      "architecture": "all",
+      "size": 57428,
+      "sha256": "21c42a3ebe9422f927656de2ca38bf99ac68e8f62c3691e49c34376c3582f89d"
+    },
+    {
+      "package": "libibus-1.0-5",
+      "version": "1.5.32-2",
+      "architecture": "arm64",
+      "size": 452584,
+      "sha256": "70ca5d33241c0b34b3ef617c3f87572810aeec8b10e002dc5660f7e86dc082d6"
+    },
+    {
+      "package": "libmarisa0",
+      "version": "0.2.6-19",
+      "architecture": "arm64",
+      "size": 47304,
+      "sha256": "ce4a3503fc52e3f1dcc14993175737256454e7ba85c6f471ba9f4e3a807f3a9d"
+    },
+    {
+      "package": "libopencc-data",
+      "version": "1.1.9+ds1-1+deb13u1",
+      "architecture": "all",
+      "size": 15100,
+      "sha256": "fd0079511578c0d62b4f7745fc7ff4ee88fc9a8f797377e5040d35159d9591c3"
+    },
+    {
+      "package": "libopencc1.1",
+      "version": "1.1.9+ds1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 543236,
+      "sha256": "30d6293e06eb3616bbcbdc8953ac361bb16a0ecd14d9601570dcea7f54e9ee54"
+    },
+    {
+      "package": "libpinyin-data",
+      "version": "2.8.1-1+b2",
+      "architecture": "arm64",
+      "size": 11981212,
+      "sha256": "602da878fcee09a49bfffb619c34ecc141990bd510de7f9e96daa10dc5deaa15"
+    },
+    {
+      "package": "libpinyin15",
+      "version": "2.8.1-1+b2",
+      "architecture": "arm64",
+      "size": 258980,
+      "sha256": "8dbf0f9f577bcbccee159d5a5a37afa3a08192352383a87e2c2d5747db32bb1e"
+    },
+    {
+      "package": "python3-ibus-1.0",
+      "version": "1.5.32-2",
+      "architecture": "all",
+      "size": 309208,
+      "sha256": "917b0767db80066c46ffce676f8d6136272db7ea1878b4384f589698632b58d4"
+    },
+    {
+      "filename": "y700-input-pinyin_0.1.0~dev1_all.deb",
+      "package": "y700-input-pinyin",
+      "version": "0.1.0~dev1",
+      "architecture": "all",
+      "size": 1928,
+      "sha256": "2c7c17c2f3e84de24c367d0b291dc5618db7860d7e239f525459a0c7a3966b1e"
+    }
+  ]
+}

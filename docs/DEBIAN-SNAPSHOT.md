@@ -51,6 +51,24 @@ uv run --python 3.13 --no-project python scripts/verify-image-packages.py /build
 
 The default camera lock binds the exact development runtime used for the initial hardware capture. A source rebuild generates a new IPA signing key and may change package length and SHA-256. After checking the rebuilt package with its matching `cam`, IPA signature and GStreamer plugin, explicitly record a separate reviewed lock. An override can change the camera archive length and hash for this pinned runtime version. The six Debian archive tuples and digests remain fixed. [Private camera build and validation](CAMERA-SENSORS.md#bring-up-capture-and-desktop-camera-access)
 
+### Optional Simplified Chinese input
+
+The `chinese-ime` layer adds 15 Debian packages and the local `y700-input-pinyin` defaults package to the 1,096-package dev9 Bluetooth image. The dependency calculation used the installed ARM64 package database, the signed Trixie indexes and `--no-install-recommends`. It selected IBus 1.5.32-2, its GTK 3 input module, ibus-libpinyin 1.15.8-2 and im-config 0.57-2. The IBus archive includes the X11 input-method server. The base image supplies the Noto CJK fonts and its Qt 6 IBus input plugin. [Authenticated Debian archives](../config/chinese-ime-debian-auth.lock.json) · [Complete layer lock](../config/chinese-ime.lock.json)
+
+Use a directory dedicated to this layer. The fetcher names each Debian archive after its SHA-256. The local package keeps its Debian filename. After staging, the directory can be copied to an offline build host. The layer installer configures the archives with dpkg and checks the local dependency database.
+
+```sh
+uv run --no-project --python 3.13 python scripts/fetch-debian-inputs.py \
+    --lock config/chinese-ime-debian-auth.lock.json --cache "$archives"
+bash scripts/build-input-pinyin.sh "$archives"
+uv run --no-project --python 3.13 python scripts/repair-inputs.py \
+    verify "$archives" config/chinese-ime.lock.json
+(export LC_ALL=C; cd "$archives" && sha256sum -- *.deb > SHA256SUMS && sha256sum --check --strict SHA256SUMS)
+sudo env UV_BIN=/path/to/uv bash scripts/add-board-layer.sh chinese-ime "$root" "$archives"
+```
+
+Debian's im-config defaults to automatic selection on Xfce, including English-language sessions. It honors a user's `~/.xinputrc`. The local package supplies a direct US keyboard and the `libpinyin` engine as its default input-source list. Installing this optional layer leaves the system locale and existing user preferences in place.
+
 ```sh
 uv run --python 3.13 --no-project python scripts/repair-inputs.py \
   record /build/camera-debs /build/camera-rebuilt.lock.json --camera-layer
