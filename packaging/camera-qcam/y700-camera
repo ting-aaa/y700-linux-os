@@ -1,4 +1,42 @@
 #!/bin/sh
+
+configure_qt_scale() {
+    [ "${XDG_SESSION_TYPE-}" = x11 ] && [ -n "${DISPLAY-}" ] && [ -z "${WAYLAND_DISPLAY-}" ] || return 0
+    case :${XDG_CURRENT_DESKTOP-}: in
+        *:XFCE:*) ;;
+        *) return 0 ;;
+    esac
+    # Explicit Qt choices and platform themes take precedence over this fallback.
+    [ -z "${QT_SCALE_FACTOR+x}${QT_SCREEN_SCALE_FACTORS+x}${QT_FONT_DPI+x}${QT_USE_PHYSICAL_DPI+x}" ] &&
+        [ -z "${QT_ENABLE_HIGHDPI_SCALING+x}${QT_SCALE_FACTOR_ROUNDING_POLICY+x}${QT_DPI_ADJUSTMENT_POLICY+x}" ] &&
+        [ -z "${QT_DEVICE_PIXEL_RATIO+x}${QT_AUTO_SCREEN_SCALE_FACTOR+x}${QT_QPA_PLATFORMTHEME+x}" ] || return 0
+    [ "$(xfconf-query -c xsettings -p /Gdk/WindowScalingFactor 2>/dev/null)" = 2 ] || return 0
+    case $(xfconf-query -c xsettings -p /Xft/DPI 2>/dev/null) in
+        -1|96) ;;
+        *) return 0 ;;
+    esac
+
+    topology=$(LC_ALL=C xrandr --current 2>/dev/null) || return 0
+    printf '%s\n' "$topology" | awk '
+        $2 == "connected" {
+            for (i = 3; i <= NF; ++i) {
+                if ($i ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+$/) {
+                    active++
+                    if ($1 == "DSI-1" && $i ~ /^(1600x2560|2560x1600)[+-]/)
+                        panel = 1
+                    break
+                }
+            }
+        }
+        END { exit !(active == 1 && panel) }' || return 0
+
+    # Qt Xcb derives its scale from Xft DPI. Apply the Xfce factor only at 96 DPI.
+    resources=$(LC_ALL=C xrdb -query 2>/dev/null) || return 0
+    dpi=$(printf '%s\n' "$resources" | awk '$1 == "Xft.dpi:" && NF == 2 { print $2 }')
+    if [ "$dpi" = 96 ]; then export QT_SCALE_FACTOR=2; fi
+}
+
+configure_qt_scale
 export LD_LIBRARY_PATH=/opt/y700-camera/lib
 export LIBCAMERA_SOFTISP_MODE=cpu
 export QT_QPA_PLATFORM=xcb

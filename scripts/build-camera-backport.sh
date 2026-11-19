@@ -75,14 +75,16 @@ meson setup obj source --prefix="$prefix" --libdir=lib \
     -Dtracing=disabled -Dtest="$tests" -Dv4l2=disabled -Dlc-compliance=disabled
 
 runtime_package=y700-camera-runtime
-version=0.7.2-1~bpo13+1.y7001
+runtime_version=0.7.2-1~bpo13+1.y7001
+version=$runtime_version
 package=$runtime_package
 extra_dependencies=
 summary='Private libcamera runtime for the Lenovo TB320FC'
 details=$' Contains the simple pipeline, software ISP, cam and a GStreamer plugin.\n Programs and libraries in /opt/y700-camera require explicit selection.'
 if [[ $component == qcam ]]; then
     package=y700-camera-qcam
-    extra_dependencies="$runtime_package (= $version), "
+    version=0.7.2-1~bpo13+1.y7002
+    extra_dependencies="$runtime_package (= $runtime_version), "
     summary='Qt desktop camera app for the Lenovo TB320FC'
     details=' Starts upstream qcam with the Y700 libcamera runtime and CPU software ISP.'
 fi
@@ -126,8 +128,8 @@ Package: $package
 Architecture: arm64
 EOF
 cat > debian/shlibs.local <<EOF
-libcamera 0.7 $runtime_package (= $version)
-libcamera-base 0.7 $runtime_package (= $version)
+libcamera 0.7 $runtime_package (= $runtime_version)
+libcamera-base 0.7 $runtime_package (= $runtime_version)
 EOF
 elf=()
 while IFS= read -r -d '' binary; do

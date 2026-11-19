@@ -127,10 +127,10 @@
     },
     {
       "package": "y700-camera-qcam",
-      "version": "0.7.2-1~bpo13+1.y7001",
+      "version": "0.7.2-1~bpo13+1.y7002",
       "architecture": "arm64",
-      "size": 105716,
-      "sha256": "a89c0b4bc3793c36359c45cf7c0840ea03e9de219128715785c73bff113444b0"
+      "size": 106716,
+      "sha256": "2ce3ec833c4b609c3cfa0e38346530e9d07267c0d2192db5c7a4a2d050c5a972"
     }
   ]
 }
