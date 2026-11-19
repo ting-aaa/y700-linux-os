@@ -1,0 +1,12 @@
+[Unit]
+Description=Provision the Y700 Bluetooth controller public address
+Before=bluetooth.service
+ConditionPathExists=/etc/y700/bluetooth-address
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/y700-bluetooth-identity
+TimeoutStartSec=20
+
+[Install]
+WantedBy=bluetooth.service

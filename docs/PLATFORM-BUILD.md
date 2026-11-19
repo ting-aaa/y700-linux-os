@@ -16,11 +16,25 @@ bash tests/platform-package.sh
 uv run --python 3.13 --no-project python -m unittest discover -s tests -v
 ```
 
-Requirements: Bash, GNU coreutils, findutils, dpkg-deb, xz and uv. The package is architecture-independent shell/configuration; its dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp; future epochs are rejected so a local calendar date cannot move the early-boot clock ahead. Source archives without Git metadata must supply an explicit valid epoch. This only establishes determinism of this package on the tested builder.
+Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp. Source archives without Git metadata must supply an explicit valid epoch. Future epochs are rejected to protect the early-boot clock. This establishes determinism of the package on the tested builder.
 
-The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, a USB ACM/NCM service and a dedicated SSH service. No maintainer script starts or enables a service. `y700-onboard.desktop` has its own name to avoid replacing Debian's Onboard-owned autostart file. The session defaults are applied once per user; touch alignment still starts if settings initialization fails.
+The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, USB ACM/NCM, the dedicated maintenance SSH service and optional Bluetooth controller address provisioning. The offline image builder enables service ordering. The package installs the unit files for local activation. `y700-onboard.desktop` has its own name to avoid replacing Debian's Onboard-owned autostart file. The session defaults are applied once per user; touch alignment still starts if settings initialization fails.
 
 The USB descriptor class and function combination follow the repaired prototype. Serial and locally administered MAC addresses are generated separately per installation. Host recognition of those new identities is **not physically tested**. The current tablet continues using its existing tested maintenance service.
+
+## Tablet display scale
+
+From the Xfce applications menu, open **Settings → Tablet display scale**. Select **200% Larger controls** for touch or **100% Standard** to restore the standard desktop scale. Both choices apply immediately through Xfce's user XSettings. Reopen apps that keep their old size.
+
+The launcher writes the current user's `xsettings:/Gdk/WindowScalingFactor` when a scale is selected. The option applies to the signed-in X11 desktop and compatible apps across all connected displays. Xfce Appearance uses the same setting for its 1× and 2× options. [Xfce 4.20.1 source](https://github.com/xfce-mirror/xfce4-settings/blob/xfce4-settings-4.20.1/dialogs/appearance-settings/main.c)
+
+In a disposable Debian 13 ARM64 root with Xfce 4.20.1, X11 clicks through the installed launcher changed the scale from 1× to 2× and back in both 1600×2560 and 2560×1600 sessions. Thunar's window went from 640 to 1280 and back to 640 pixels in each run. To reproduce, install the package with Xvfb and xdotool in a disposable desktop environment and run `bash tests/tablet-scale-x11.sh` and `bash tests/tablet-scale-x11.sh 2560x1600`. Chromium, Onboard and touch usability on the physical tablet remain to be tested.
+
+## Bluetooth controller address
+
+Version `0.1.0~dev5` supplies the controller's original public address from `/etc/y700/bluetooth-address` when BlueZ reports it missing on Asphalt's WCN6855 Bluetooth controller. The helper needs a root-owned private address file. The unit runs before BlueZ and the built image expects per-device provisioning after installation.
+
+BlueZ can exit on stdin EOF even when given a command. The helper keeps stdin open for its short management command timeout and checks the controller's reported address after programming. Run `sudo bash tests/bluetooth-identity.sh` on a usr-merged Linux host with bubblewrap to exercise the board match, file permissions, noninteractive command path, handling of existing addresses and failed readback in an isolated fixture. Physical discovery and HID acceptance have separate checks. [Bluetooth notes](PERIPHERALS.md)
 
 ## Locked repair archives and offline integration
 
@@ -31,7 +45,7 @@ uv run --python 3.13 --no-project python scripts/repair-inputs.py verify /build/
 # Build and configure /build/candidate using DEBIAN-SNAPSHOT.md first.
 # That builder writes the disposable-root marker after checking all packages.
 sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
-  /build/candidate /build/repair-debs out/packages/y700-platform_0.1.0~dev2_all.deb
+  /build/candidate /build/repair-debs out/packages/y700-platform_0.1.0~dev5_all.deb
 sudo env UV_BIN=/path/to/uv bash tests/arm64-rootfs.sh /build/candidate
 ```
 
@@ -55,7 +69,7 @@ The documentation addresses above are examples. Choose a dedicated USB subnet th
 
 | Input or behavior | Current boundary |
 | --- | --- |
-| Debian base root | Fresh 962-package build and 993-package integrated root verified; historical signed snapshot needs security refresh, filesystem content is not claimed bit-identical |
+| Debian base root | The 994-package dev5 root passed ARM64 integration and UFS-layout QEMU verification. The historical signed snapshot needs a security refresh. [Image verification](BOARD-IMAGE.md#dev5-ufs-layout-check-2026-11-19) |
 | Kernel/DT/initramfs | Historical pinned recipe; no new kernel/image rebuilt by this milestone |
 | Board firmware | Local provenance retained; missing sensor firmware and redistribution review remain |
 | Boot-success marking | Existing board lifecycle is not modified by this package; no new slot-success writer is introduced |

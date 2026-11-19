@@ -1,0 +1,105 @@
+#!/usr/bin/python3
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk
+
+
+SCALE = "/Gdk/WindowScalingFactor"
+CHINESE = GLib.get_language_names()[0].startswith("zh")
+
+
+def label(english, chinese):
+    return chinese if CHINESE else english
+
+
+def xfconf(*args):
+    return subprocess.check_output(
+        ["xfconf-query", "--channel", "xsettings", *args],
+        encoding="utf-8",
+        timeout=5,
+    ).strip()
+
+
+class ScaleWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title=label("Tablet display scale", "平板显示缩放"))
+        self.set_default_size(420, -1)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_resizable(False)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content.set_border_width(24)
+        self.add(content)
+        hint = Gtk.Label(
+            label=label(
+                "Changes Xfce and compatible apps. Reopen apps that keep their old size.",
+                "调整 Xfce 和兼容应用的界面大小。仍使用原大小的应用可重新打开。",
+            ),
+            wrap=True,
+            xalign=0,
+        )
+        content.add(hint)
+
+        choices = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, homogeneous=True)
+        content.add(choices)
+        self.buttons = {}
+        for factor, title in (
+            ("1", label("100% Standard", "100% 标准")),
+            ("2", label("200% Larger controls", "200% 大控件")),
+        ):
+            button = Gtk.ToggleButton(label=title)
+            button.set_size_request(-1, 72)
+            button.connect("clicked", self.set_scale, factor)
+            self.buttons[factor] = button
+            choices.add(button)
+
+        self.status = Gtk.Label(wrap=True, xalign=0)
+        self.status.set_no_show_all(True)
+        self.status.get_accessible().set_name(label("Display scale status", "显示缩放状态"))
+        content.add(self.status)
+        self.refresh()
+        self.show_all()
+
+    def refresh(self):
+        try:
+            properties = xfconf("--list").splitlines()
+            current = xfconf("--property", SCALE) if SCALE in properties else "1"
+        except (OSError, subprocess.SubprocessError):
+            self.show_error(label("Could not read the Xfce scale.", "无法读取 Xfce 缩放设置。"))
+            return
+        for factor, button in self.buttons.items():
+            button.handler_block_by_func(self.set_scale)
+            button.set_active(factor == current)
+            button.handler_unblock_by_func(self.set_scale)
+        self.status.hide()
+
+    def show_error(self, message):
+        self.status.set_text(message)
+        self.status.show()
+
+    def set_scale(self, button, factor):
+        try:
+            xfconf("--property", SCALE, "--create", "--type", "int", "--set", factor)
+        except (OSError, subprocess.SubprocessError):
+            self.refresh()
+            self.show_error(label("Could not save the Xfce scale.", "无法保存 Xfce 缩放设置。"))
+            return
+        self.refresh()
+
+
+def activate(app):
+    window = app.get_active_window() or ScaleWindow(app)
+    window.present()
+
+
+if __name__ == "__main__":
+    if not os.environ.get("DISPLAY") or os.environ.get("XDG_SESSION_TYPE", "x11") != "x11":
+        sys.exit("Run this setting inside an Xfce X11 session.")
+    app = Gtk.Application(application_id="org.y700.TabletScale")
+    app.connect("activate", activate)
+    sys.exit(app.run(sys.argv))

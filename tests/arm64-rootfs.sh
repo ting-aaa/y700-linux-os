@@ -11,6 +11,7 @@ for path in etc/y700/maintenance.env etc/y700/maintenance-sshd.conf \
     test ! -e "$root/$path" && test ! -L "$root/$path"
 done
 test ! -e "$root/var/lib/y700/ssh"
+test ! -e "$root/etc/y700/bluetooth-address" && test ! -L "$root/etc/y700/bluetooth-address"
 temp=$(mktemp -d)
 cleanup() {
     rm -rf -- "$temp" "$root/var/lib/y700/ssh"
@@ -41,7 +42,10 @@ test "$(readlink "$root/etc/systemd/system/ssh.socket")" = /dev/null
 test "$(stat -c %a "$root/usr/lib/systemd/system/y700-usb-maintenance.service")" = 644
 chroot "$root" apt-get check
 test -z "$(chroot "$root" dpkg --audit)"
-systemd-analyze --root="$root" verify y700-usb-maintenance.service y700-maintenance-sshd.service
+test -s "$root/usr/share/alsa/ucm2/ucm.conf"
+ucm_audit=$(chroot "$root" dpkg -V alsa-ucm-conf)
+test -z "$ucm_audit" || { printf '%s\n' "$ucm_audit"; exit 1; }
+systemd-analyze --root="$root" verify y700-usb-maintenance.service y700-maintenance-sshd.service y700-bluetooth-identity.service
 chroot "$root" env XDG_RUNTIME_DIR=/run/y700-build-test dbus-run-session -- sh -c 'gsettings set org.onboard.window.landscape dock-height 420; test "$(gsettings get org.onboard.window.landscape dock-height)" = 420'
-echo 'PASS: ARM64 package dependencies, SSH effective policy/host-key persistence, systemd units, keyboard settings.'
+echo 'PASS: ARM64 package dependencies, ALSA UCM files, SSH effective policy/host-key persistence, systemd units, keyboard settings.'
 echo 'No listener, desktop, USB gadget, GPU, sensor or board boot was exercised.'

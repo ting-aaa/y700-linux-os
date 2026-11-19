@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export LC_ALL=C
+for (( attempt = 0; attempt < 6; attempt++ )); do
+    if samples=$(timeout -k 1s 8s ssccli --sensor accelerometer --timeout 1 2>&1) &&
+            grep -q '^Accelerometer sensor measurement:' <<< "$samples"; then
+        exit 0
+    fi
+    sleep 1
+done
+echo 'SSC accelerometer did not publish a measurement.' >&2
+exit 1

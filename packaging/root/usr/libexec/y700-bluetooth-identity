@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Supply the device's original public address to an unconfigured controller.
+set -euo pipefail
+export LC_ALL=C
+shopt -s nullglob
+
+config=${1:-/etc/y700/bluetooth-address}
+fail() { printf 'Y700 Bluetooth: %s\n' "$*" >&2; exit 1; }
+
+[[ -r /proc/device-tree/compatible ]] || exit 0
+grep -zFxq 'lenovo,asphalt' /proc/device-tree/compatible || exit 0
+[[ -f $config && ! -L $config ]] || fail 'expected a private regular address file'
+mode=$(stat -c '%u:%a' "$config")
+[[ $mode == 0:600 || $mode == 0:400 ]] || fail 'address file must be owned by root and private'
+address=$(cat "$config")
+address=${address^^}
+[[ $address =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || fail 'invalid address format'
+[[ $address != 00:00:00:00:00:00 && $address != FF:FF:FF:FF:FF:FF ]] || fail 'invalid public address'
+
+management() {
+    # BlueZ's management CLI exits on stdin EOF even with a command argument.
+    timeout 2s btmgmt --index "$index" "$@" < <(sleep 2) 2>/dev/null
+}
+configured_address() { management info | awk '$1 == "addr" { print toupper($2) }'; }
+
+for attempt in {1..12}; do
+    controllers=()
+    for controller in /sys/class/bluetooth/hci*; do
+        hci=${controller##*/}
+        [[ $hci =~ ^hci[0-9]+$ && -r $controller/device/of_node/compatible ]] || continue
+        if grep -zFxq 'qcom,wcn6855-bt' "$controller/device/of_node/compatible"; then
+            controllers+=("${hci#hci}")
+        fi
+    done
+    ((${#controllers[@]} <= 1)) || fail 'multiple matching controllers'
+    if ((${#controllers[@]} == 1)); then
+        index=${controllers[0]}
+        current=$(configured_address) || current=
+        if [[ -n $current && $current != 00:00:00:00:00:00 ]]; then
+            echo 'Y700 Bluetooth: controller already configured'
+            exit 0
+        fi
+        flags=$(management config) || flags=
+        if [[ $flags =~ missing\ options:\ public-address[[:blank:]]*$ ]]; then
+            management public-addr "$address" >/dev/null || fail 'public-address command failed'
+            current=$(configured_address) || current=
+            [[ $current == "$address" ]] || fail 'public address was not confirmed by the kernel'
+            echo 'Y700 Bluetooth: board public address provisioned'
+            exit 0
+        fi
+    fi
+    sleep 0.5
+done
+fail 'board controller did not report a missing public address'

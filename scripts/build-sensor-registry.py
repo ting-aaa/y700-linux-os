@@ -15,7 +15,7 @@ pin = json.loads((repo/'upstream.lock.json').read_text())['asphalt']
 upstream = repo/pin['path']
 
 
-def build(output):
+def build(output, upstream=upstream):
     head = subprocess.check_output(['git', '-C', str(upstream), 'rev-parse', 'HEAD'], text=True).strip()
     dirty = subprocess.check_output(['git', '-C', str(upstream), 'status', '--porcelain'], text=True)
     if head != pin['commit'] or dirty:
@@ -42,4 +42,6 @@ def build(output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path)
-    build(parser.parse_args().output)
+    parser.add_argument('--asphalt-checkout', type=Path, default=upstream)
+    args = parser.parse_args()
+    build(args.output, args.asphalt_checkout)

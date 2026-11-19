@@ -5,6 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from camera_layer import load_camera_lock, validate_camera_lock
+
 
 def inventory(directory):
     result = []
@@ -30,17 +32,25 @@ if __name__ == '__main__':
     parser.add_argument('operation', choices=['record', 'verify'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('lock', type=Path)
+    parser.add_argument('--camera-layer', action='store_true', help='Use the camera dependency provenance')
     args = parser.parse_args()
+    kind = 'camera-layer' if args.camera_layer else 'repair'
     actual = inventory(args.directory)
     if args.operation == 'record':
+        scope = ('optional-camera-runtime-and-debian-dependencies' if args.camera_layer
+                 else 'desktop-repair-only-not-full-rootfs')
+        record = {'format': 1, 'scope': scope, 'packages': actual}
+        if args.camera_layer:
+            validate_camera_lock(record)
         with args.lock.open('x', encoding='utf-8', newline='\n') as output:
-            json.dump({'format': 1, 'scope': 'desktop-repair-only-not-full-rootfs',
-                       'packages': actual}, output, indent=2)
+            json.dump(record, output, indent=2)
             output.write('\n')
     else:
         def content(items):
             return sorted(({key: value for key, value in item.items() if key != 'filename'}
                            for item in items), key=lambda item: item['package'])
-        if content(actual) != content(json.loads(args.lock.read_text())['packages']):
-            raise SystemExit('Repair archive set differs from lock (package/version/architecture/size/hash)')
-    print(f'{args.operation}: {len(actual)} repair packages')
+        expected = (load_camera_lock(args.lock) if args.camera_layer
+                    else json.loads(args.lock.read_text())['packages'])
+        if content(actual) != content(expected):
+            raise SystemExit(f'{kind.capitalize()} archive set differs from lock (package/version/architecture/size/hash)')
+    print(f'{args.operation}: {len(actual)} {kind} packages')

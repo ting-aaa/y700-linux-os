@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+seed=$1
+state=$2
+umask 027
+
+exec 9>"$state/.seed.lock"
+flock --exclusive 9
+if [[ -e $state/registry || -L $state/registry ]]; then
+    [[ -d $state/registry && ! -L $state/registry ]] || {
+        echo 'Existing SSC registry is not a directory.' >&2
+        exit 1
+    }
+    exit 0
+fi
+
+[[ -d $seed/registry && -s $seed/sns_reg_version ]]
+stage=$(mktemp -d "$state/.seed.XXXXXXXX")
+trap 'rm -rf -- "$stage"' EXIT
+cp -a "$seed/." "$stage/"
+mv -T -- "$stage" "$state/registry"

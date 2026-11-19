@@ -27,6 +27,7 @@ reference/y700-linux/tools/
 *known_hosts*
 *known-hosts*
 authorized_keys
+bluetooth-address
 id_ed25519*
 id_rsa*
 .env

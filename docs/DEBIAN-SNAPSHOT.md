@@ -1,6 +1,6 @@
 # Authenticated Debian inputs and fresh package-base builder
 
-The project now has an exact **962-package historical base lock** and a separately authenticated **30-package desktop repair lock**. These describe package inputs, not a bit-identical filesystem image, current security update coverage or board support.
+The current lock selects **963 base packages** from authenticated historical Debian metadata. This is the original 962-package inventory plus `alsa-ucm-conf`, which supplies the top-level configuration required to load the Y700 speaker profile. The separate desktop repair lock still selects 30 packages. The package locks cover the selected archives. Filesystem reproducibility, security freshness and board support have separate checks.
 
 ## Provenance recovered and checked
 
@@ -32,9 +32,36 @@ sudo /path/to/uv run --python 3.13 --no-project python scripts/build-debian-base
 sudo bash scripts/configure-debian-base.sh /build/fresh-base
 bash scripts/build-platform.sh
 sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
-  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev2_all.deb
+  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev5_all.deb
 sudo env UV_BIN=/path/to/uv bash tests/arm64-rootfs.sh /build/fresh-base
 ```
+
+### Optional camera development layer
+
+The default integration adds no camera archives and keeps the 994-package dev5 inventory. The fourth argument enables a separate seven-package layer for the private `/opt/y700-camera` runtime. Obtain the six Debian archives from the authenticated camera lock and add the reviewed runtime archive to that directory. The integration checks each archive's Debian package name, version, architecture, size and SHA-256. It records the selected lock alongside the package inventory for image assembly. [Camera archive lock](../config/camera-layer.lock.json) [Authenticated Debian source indexes](../config/camera-debian-auth.lock.json)
+
+```sh
+uv run --python 3.13 --no-project python scripts/fetch-debian-inputs.py \
+  --lock config/camera-debian-auth.lock.json --cache /build/camera-debs
+cp /private/reviewed/y700-camera-runtime_0.7.2-1~bpo13+1.y7001_arm64.deb /build/camera-debs/
+sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
+  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev5_all.deb /build/camera-debs
+uv run --python 3.13 --no-project python scripts/verify-image-packages.py /build/fresh-base
+```
+
+The default camera lock binds the exact development runtime used for the initial hardware capture. A source rebuild generates a new IPA signing key and may change package length and SHA-256. After checking the rebuilt package with its matching `cam`, IPA signature and GStreamer plugin, explicitly record a separate reviewed lock. An override can change the camera archive length and hash for this pinned runtime version. The six Debian archive tuples and digests remain fixed. [Private camera build and validation](CAMERA-SENSORS.md#bring-up-capture-and-desktop-camera-access)
+
+```sh
+uv run --python 3.13 --no-project python scripts/repair-inputs.py \
+  record /build/camera-debs /build/camera-rebuilt.lock.json --camera-layer
+sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
+  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev5_all.deb \
+  /build/camera-debs /build/camera-rebuilt.lock.json
+uv run --python 3.13 --no-project python scripts/verify-image-packages.py \
+  /build/fresh-base --camera-lock /build/camera-rebuilt.lock.json
+```
+
+An offline ARM64 integration test on a disposable dev5 overlay verified 1,001 installed tuples with digest `3ca13e620ff650d3b6e84dc6d539ee65c2cce450429e88ed8351306e660738c2`, a clean dpkg audit and startup of the private libcamera CLI. The lower dev5 root retained its exact 994-package inventory and dpkg status hash. No camera-layer image was built or booted for this test.
 
 The downloader publishes an archive atomically only after checking length/hash, revalidates cached files, and refuses a mismatched existing file. Tested network retrieval covered the five missing base packages and all 30 repair packages; all 962 base artifacts were additionally revalidated in the independent local pool. Future availability of every canonical URL is not guaranteed: use a reviewed historical Debian mirror/snapshot while retaining the exact content hashes if an archive is retired. Do not silently choose another version.
 

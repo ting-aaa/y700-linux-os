@@ -18,6 +18,8 @@
 
 完整区分已验证、临时缓解和未知项，见 [硬件与系统状态](docs/STATUS.md) 和 [脱敏实机基线](docs/BASELINE.md)。
 
+11 月 19 日，实机上的 Debian 桌面通过 PipeWire 完成了内置扬声器播放，BlueZ 识别并启用了 WCN6855，三颗摄像头通过 libcamera 枚举，后置主摄返回了全分辨率 RAW 帧。临时自动登录验证了横屏桌面、屏幕键盘显隐和缩放设置入口。后续再次启动 Xorg 时，原始内核出现 Adreno 卡死。当前进度及待验证的实体键鼠、声音和传感器见[外设实测](docs/PERIPHERALS.md)和[摄像头与传感器](docs/CAMERA-SENSORS.md)。
+
 ## 仓库内容
 
 | 路径 | 用途 |

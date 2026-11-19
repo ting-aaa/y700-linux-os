@@ -13,6 +13,14 @@ if [[ -n ${6:-} ]]; then overlay=$(realpath -e "$6"); fi
 mkdir -m700 -- "$vm"
 cd "$images"
 sha256sum -c SHA256SUMS
+package_count=$(sed -n 's/^package_count=//p' identity.txt)
+package_digest=$(sed -n 's/^package_digest=//p' identity.txt)
+if [[ -z $package_count && -z $package_digest ]]; then
+    # Historical candidate 03 predates the package receipt in identity.txt.
+    package_count=993
+    package_digest=af07f62e90d1eb88cf0173225b92778d759af652241e8a67fea6d73b8a68c85c
+fi
+[[ $package_count =~ ^[1-9][0-9]*$ && $package_digest =~ ^[0-9a-f]{64}$ ]]
 test "$(stat -c %s linux-boot.fat)" = 1073741824
 test "$(stat -c %s root.ext4)" = 6442450944
 cd "$board"
@@ -70,7 +78,8 @@ fi
     echo '#!/bin/sh'
     echo 'exec >/dev/ttyAMA0 2>&1'
     echo 'set -eu'
-    cat "$images/identity.txt"
+    sed -n '/^image_id=/p; /^root_uuid=/p' "$images/identity.txt"
+    printf 'package_count=%s\npackage_digest=%s\n' "$package_count" "$package_digest"
     echo "split=$split"
     echo "esp_label=$label"
     cat <<'PROBE'
@@ -91,10 +100,11 @@ if [ "$split" = 1 ]; then
 else
     test -s /boot/EFI/BOOT/BOOTAA64.EFI
 fi
-test "$(dpkg-query -W -f='${Version}' y700-platform)" = '0.1.0~dev2'
 test -z "$(dpkg --audit)"
-test "$(dpkg-query -W -f='${db:Status-Status}\n' | grep -cx installed)" = 993
-printf 'Y700_BOOT_PASS image=%s root=%s esp=%s kernel=%s pid1=%s packages=993 split=%s\n' "$image_id" "$rootdev" "$bootdev" "$(uname -r)" "$(cat /proc/1/comm)" "$split"
+records=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' | sed -n 's/^installed\t//p' | LC_ALL=C sort)
+test "$(printf '%s\n' "$records" | wc -l)" = "$package_count"
+test "$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)" = "$package_digest"
+printf 'Y700_BOOT_PASS image=%s root=%s esp=%s kernel=%s pid1=%s packages=%s split=%s\n' "$image_id" "$rootdev" "$bootdev" "$(uname -r)" "$(cat /proc/1/comm)" "$package_count" "$split"
 PROBE
 } > probe.sh
 mcopy -i "$esp" probe.sh ::/probe.sh
@@ -106,4 +116,4 @@ if [[ "$sector" = 4096 ]]; then
 fi
 cmp -n 6442450944 "$images/root.ext4" disk.gpt 0 1074790400
 "${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python "$repo/tests/boot-efi-guest.py" \
-    "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$vm" "$(sed -n 's/^image_id=//p' "$images/identity.txt")" "$label" "$sector" "$split"
+    "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$vm" "$(sed -n 's/^image_id=//p' "$images/identity.txt")" "$label" "$sector" "$split" "$package_count"

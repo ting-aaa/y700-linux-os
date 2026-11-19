@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Linux root, private build host, regular output files only.
 set -euo pipefail
+if (( $# != 4 )); then
+    echo 'Usage: build-board-image.sh INTEGRATED_ROOT BOARD_DIRECTORY PRC_BOOT NEW_OUTPUT_DIRECTORY' >&2
+    exit 2
+fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 base=$(realpath -e "${1:?integrated Debian root}")
 board=$(realpath -e "${2:?board component directory}")
@@ -11,6 +15,10 @@ test "$base" != /
 test -f "$base/.y700-base-packages-complete"
 test -f "$base/etc/y700/base-configured"
 test ! -d "$base/run/systemd/system"
+test -s "$base/usr/share/alsa/ucm2/ucm.conf" || {
+    echo 'Missing ALSA UCM entry point. Rebuild the base with the current Debian package lock.' >&2
+    exit 1
+}
 test -f "$boot"
 for input in "$base" "$board" "$repo/reference"; do [[ "$out/" != "$input/"* ]]; done
 mkdir -m700 -- "$out"
@@ -24,7 +32,7 @@ test "$(find board-firmware "$mods" -type l | LC_ALL=C sort)" = "$(printf '%s\n'
 test "$(readlink board-firmware/spk2-cs35l45-dsp1-spk-prot.wmfw)" = spk1-cs35l45-dsp1-spk-prot.wmfw
 test "$(sha256sum "$boot" | cut -d' ' -f1)" = f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8
 py=("${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python)
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$base"
+package_receipt=$("${py[@]}" "$repo/scripts/verify-image-packages.py" "$base")
 dtb="$board/linux-7.3.4/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dtb"
 "${py[@]}" "$repo/reference/y700-linux/asphalt-debian/verify-dtb.py" "$dtb"
 src="$repo/reference/y700-linux/asphalt-upstream"
@@ -38,9 +46,10 @@ mkdir stage initrd esp
 rsync -aHAX --numeric-ids --one-file-system --exclude='/run/*' --exclude='/tmp/*' \
     --exclude='/var/log/*' --exclude='/root/.config' --exclude='.ssh' --exclude='/etc/ssh/ssh_host_*' \
     --exclude='/var/lib/systemd/random-seed' --exclude='/var/lib/systemd/credential.secret' \
-    --exclude='/var/lib/y700/ssh' --exclude='/.y700-*' "$base/" stage/
+    --exclude='/var/lib/y700/ssh' --exclude='/var/lib/bluetooth/*' \
+    --exclude='/etc/y700/bluetooth-address' --exclude='/.y700-*' "$base/" stage/
 chmod 755 stage
-for secret in stage/etc/y700/maintenance* stage/root/.ssh stage/etc/NetworkManager/system-connections/*; do
+for secret in stage/etc/y700/maintenance* stage/etc/y700/bluetooth-address stage/root/.ssh stage/etc/NetworkManager/system-connections/*; do
     test ! -e "$secret"
 done
 : > stage/etc/machine-id
@@ -52,6 +61,8 @@ ucm=stage/usr/share/alsa/ucm2
 install -d "$ucm/Lenovo-Y700" "$ucm/conf.d/sm8475"
 install -m644 HiFi.conf Lenovo-Y700.conf "$ucm/Lenovo-Y700/"
 ln -sfn ../../Lenovo-Y700/Lenovo-Y700.conf "$ucm/conf.d/sm8475/Lenovo-Y700.conf"
+# ASoC uses the PRC firmware's DMI long name for the UCM card lookup.
+ln -sfn Lenovo-Y700.conf "$ucm/conf.d/sm8475/lenovo-LenovoLegionY7002ndgen.conf"
 printf '%s\n' 'ACTION=="add|change", SUBSYSTEM=="devfreq", KERNEL=="1d84000.ufshc", ATTR{max_freq}="75000000"' > stage/etc/udev/rules.d/80-asphalt-ufs.rules
 printf '%s\n' 'SUBSYSTEM=="block", KERNEL=="sd*", KERNELS=="1d84000.ufshc", ENV{UDISKS_IGNORE}="1"' > stage/etc/udev/rules.d/81-asphalt-internal-ufs.rules
 uuid=$(cat /proc/sys/kernel/random/uuid)
@@ -87,6 +98,6 @@ fsck.fat -vn linux-boot.fat
 mkdir esp-readback
 mcopy -s -i linux-boot.fat ::/EFI ::/loader esp-readback/
 diff -qr esp esp-readback
-sha256sum asphalt-prc-u-boot.img linux-boot.fat root.ext4 > SHA256SUMS
-printf 'image_id=%s\nroot_uuid=%s\n' "$imageid" "$uuid" > identity.txt
+printf 'image_id=%s\nroot_uuid=%s\n%s\n' "$imageid" "$uuid" "$package_receipt" > identity.txt
+sha256sum asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt > SHA256SUMS
 echo 'Candidate files built and read back.'

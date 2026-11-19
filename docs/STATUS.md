@@ -1,23 +1,24 @@
 # Hardware and system status
 
-Baseline date: 2026-11-18. Scope: one TB320FC_PRC, 16 GiB RAM, 512 GB storage, original CN350 firmware background. Product status: pre-alpha development.
+Evidence through 2026-11-19 covers one TB320FC_PRC with 16 GiB RAM, 512 GB storage and the CN350 Android firmware. This is a pre-alpha development system.
 
 | Area | Evidence / current status | Remaining acceptance |
 | --- | --- | --- |
 | Native boot/UFS | Physical Debian boot, expanded root filesystem, EFI chain; B slot successful/bootable confirmed | Repeated cold starts, recovery and update rollback |
-| Display | Native 1600×2560 panel and Xfce desktop work | Brightness, refresh modes, power transitions, external display |
+| Display | Native 1600×2560 panel and Xfce desktop work. The PRC kernel exposed `ktz8866-backlight` with maximum 2047 and observed value 102 | Visible brightness changes, refresh modes, power transitions, external display |
 | Touch | Portrait and left-rotated 2560×1600 manually confirmed; X11 mapping helper running | Other rotations, relogin/reboot persistence, suspend/resume, multitouch gestures |
 | Wi-Fi | Real hotspot association, DHCP/DNS, 12 gateway probes without loss and 3 HTTPS successes; browser confirmed | GUI discovery issue, roaming, reconnect, longer stability and measured throughput |
 | USB maintenance | ACM/NCM enumeration and key-authenticated SSH verified | Portable host setup, per-install credentials/identity, reconnect/resume coverage |
-| Desktop basics | Terminal, Polkit agent, network applet, screen keyboard and time sync present | Unified touch UX, discoverable settings, notifications, localization/IME and accessibility |
+| Desktop basics | Temporary LightDM autologin started the real Xfce session. Onboard showed and hid over D-Bus. The tablet scale control opened on the 2560×1600 left-rotated screen | Touch-only enrollment and password login, finger interaction with applications, localization/IME and accessibility |
 | Chromium | User confirmed websites with software rendering | Hardware acceleration without GPU faults, browser workload regression coverage |
 | GPU | GMU timeout / Adreno fault / hangcheck reproduced during desktop/browser use | Root cause, stable OpenGL/Vulkan, video acceleration, performance and thermal evidence |
 | Accelerometer/gyro | Not accepted on Debian | Inventory actual sensors, driver/firmware interfaces, orientation service and calibration |
-| Audio/microphone | Source/firmware recipe exists; current Debian operation not accepted | Playback, recording, routing, volume safety and suspend/resume |
-| Bluetooth | Not accepted on current Debian | Discovery, pairing, keyboards/audio and reconnect/resume |
-| Battery/charging/thermals | No product acceptance | Reporting, charging modes, thermal policy, idle drain and sustained load |
+| Audio/microphone | Two-second playback completed on the real ALSA PCM and via the signed-in user's PipeWire default speaker sink with CS35L45 protection | Audible output from each side, microphone capture, everyday volume and suspend/resume |
+| Bluetooth | WCN6855 powered and discovery started after provisioning this board's original public address. The installed dev5 systemd service verified the configured adapter | Actual keyboard and mouse pairing, key, pointer and scroll events, reconnect and resume |
+| Battery/charging/thermals | Linux `qcom-battmgr-bat` reported Full and 100% with USB attached | Charging/discharging transitions, measurement accuracy, thermal policy, idle drain and sustained load |
 | Suspend/wake/poweroff | No product acceptance | Repeated cycles, wake sources, USB/Wi-Fi/audio/touch recovery |
-| Cameras/video/external I/O | Unverified | Hardware inventory and explicit support or documented limitation |
+| Cameras | Three camera IDs accessible through native Debian libcamera. The rear HI1339 returned full-resolution RAW frames as the desktop user | See [current per-camera tests](CAMERA-SENSORS.md) for motion, software-ISP and application coverage |
+| Video codecs/external I/O | No product acceptance | Hardware decode/encode, external displays and both USB interfaces |
 | Updates/security/recovery | Experimental install plus local backups | Reproducible build, authenticated updates, rollback, credential provisioning and proven recovery |
 
 The current display helper follows a display rotation chosen in Xfce; it is not accelerometer-based autorotation. Its autostart and saved landscape profile were configured but not re-tested across a new login/reboot in the baseline session.
@@ -28,6 +29,6 @@ No claim of complete hardware support, maximum performance, all-day battery life
 
 Candidate 03 now boots to systemd in the PC EFI tests. The trial entry and test card exercise the same kernel, initramfs and root in a two-disk simulation. The device currently runs the previous baseline. See the [candidate receipts and attended trial](BOARD-IMAGE.md).
 
-The existing tablet installation now also has the candidate's `y700-platform 0.1.0~dev2`. All 30 repair package versions already matched the image inputs. The [online installation receipt](PLATFORM-BUILD.md#connected-tablet-package-check-2026-11-18) records exact package and live session checks. Future package changes use this device-level check with image inputs following the package.
+The installed platform package progressed from dev2 on November 18 to dev5 on November 19. The newer build adds the tablet scale launcher and the per-unit Bluetooth identity helper. The private camera runtime was tested as a separate package on the existing tablet installation. [Original dev2 installation](PLATFORM-BUILD.md#connected-tablet-package-check-2026-11-18) · [Current peripheral evidence](PERIPHERALS.md)
 
-The [authenticated Debian snapshot stage](DEBIAN-SNAPSHOT.md) now builds a fresh 962-package ARM64 base without copying the historical root. Integration with 30 repair packages and platform dev2 produced 993 packages and passed the same userspace checks. This historical snapshot requires a security refresh; kernel/image assembly and physical acceptance remain open.
+The [authenticated Debian snapshot stage](DEBIAN-SNAPSHOT.md) now builds a 963-package ARM64 base including Debian's global ALSA UCM configuration. The base, the 30 repair packages and platform dev5 produced the 994-package image tested under EFI/QEMU. Physical image acceptance and refreshing the historical security snapshot remain open. [Image receipt](BOARD-IMAGE.md)

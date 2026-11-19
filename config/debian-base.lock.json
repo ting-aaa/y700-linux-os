@@ -48,8 +48,8 @@
       ]
     }
   ],
-  "installed_count": 962,
-  "authenticated_count": 962,
+  "installed_count": 963,
+  "authenticated_count": 963,
   "repository_signature_chain_revalidated": true,
   "unmatched": [],
   "packages": [
@@ -70,6 +70,15 @@
       "sha256": "f60b0577aee314d43d6908ca7f0b8f07dc48e2bb766e7e25035330817e0e827c",
       "uri": "https://deb.debian.org/debian/pool/main/a/adwaita-icon-theme/adwaita-icon-theme_48.1-1_all.deb",
       "repository_path": "pool/main/a/adwaita-icon-theme/adwaita-icon-theme_48.1-1_all.deb"
+    },
+    {
+      "package": "alsa-ucm-conf",
+      "version": "1.2.14-1",
+      "architecture": "all",
+      "size": 92476,
+      "sha256": "bbf96c1597e8cfad375b3045715adc1db46819996a3fe760ce042dbde8701655",
+      "uri": "https://deb.debian.org/debian/pool/main/a/alsa-ucm-conf/alsa-ucm-conf_1.2.14-1_all.deb",
+      "repository_path": "pool/main/a/alsa-ucm-conf/alsa-ucm-conf_1.2.14-1_all.deb"
     },
     {
       "package": "alsa-utils",

@@ -1,0 +1,106 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "deb.debian.org_debian_dists_trixie-updates_InRelease",
+      "sha256": "956718d8a45011572372ec8b6ada7473238fde4b6ab7af1bab4ecaecae965727",
+      "date": "Thu, 19 Nov 2026 02:12:54 UTC",
+      "valid_until": "Thu, 26 Nov 2026 02:12:54 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "7f1dd99bbd1a0416d39499892ec12ff38d80637029114d234c38972bba8ae041",
+          "size": 2351
+        }
+      ]
+    },
+    {
+      "file": "deb.debian.org_debian_dists_trixie_InRelease",
+      "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+          "size": 56162922
+        }
+      ]
+    },
+    {
+      "file": "security.debian.org_debian-security_dists_trixie-security_InRelease",
+      "sha256": "26ce960ef9ae5c2dd6c407b134524ec06e213bdc976c15c76415931a2a3b2aea",
+      "date": "Wed, 18 Nov 2026 22:17:43 UTC",
+      "valid_until": "Wed, 25 Nov 2026 22:17:43 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "db014ed0b3bfd29487e74d7eaed5c66032c6e1b5b76d61b5294a7099178d968e",
+          "size": 2667923
+        }
+      ]
+    }
+  ],
+  "installed_count": 6,
+  "authenticated_count": 6,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "libevent-2.1-7t64",
+      "version": "2.1.13-stable-1~deb13u1",
+      "architecture": "arm64",
+      "size": 170804,
+      "sha256": "27669a5555ca1d3bd97806dfdbc2d838eae41f27a6b1a122a5d87659973672f0",
+      "uri": "https://security.debian.org/debian-security/pool/updates/main/libe/libevent/libevent-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb",
+      "repository_path": "pool/updates/main/libe/libevent/libevent-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb"
+    },
+    {
+      "package": "libevent-core-2.1-7t64",
+      "version": "2.1.13-stable-1~deb13u1",
+      "architecture": "arm64",
+      "size": 126560,
+      "sha256": "6e278da8ab4c1b4e15689483a0727f76146d7b9d9b11df4cd53f90034a649517",
+      "uri": "https://security.debian.org/debian-security/pool/updates/main/libe/libevent/libevent-core-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb",
+      "repository_path": "pool/updates/main/libe/libevent/libevent-core-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb"
+    },
+    {
+      "package": "libevent-pthreads-2.1-7t64",
+      "version": "2.1.13-stable-1~deb13u1",
+      "architecture": "arm64",
+      "size": 55244,
+      "sha256": "a3d8272a08c30a0c64b5758dd12f67062a962d3e12127eb187b5d0bccaa31a9c",
+      "uri": "https://security.debian.org/debian-security/pool/updates/main/libe/libevent/libevent-pthreads-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb",
+      "repository_path": "pool/updates/main/libe/libevent/libevent-pthreads-2.1-7t64_2.1.13-stable-1~deb13u1_arm64.deb"
+    },
+    {
+      "package": "libgstreamer-plugins-base1.0-0",
+      "version": "1.26.2-1+deb13u2",
+      "architecture": "arm64",
+      "size": 897596,
+      "sha256": "fa937f08b9a1c7f868a8c6e997b0d7205440bf85429ad1f9a87e62cba99c748e",
+      "uri": "https://security.debian.org/debian-security/pool/updates/main/g/gst-plugins-base1.0/libgstreamer-plugins-base1.0-0_1.26.2-1+deb13u2_arm64.deb",
+      "repository_path": "pool/updates/main/g/gst-plugins-base1.0/libgstreamer-plugins-base1.0-0_1.26.2-1+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libgstreamer1.0-0",
+      "version": "1.26.2-2",
+      "architecture": "arm64",
+      "size": 1294408,
+      "sha256": "77d44e8bc93793f815ea7b8cdb9c1b0b0bf6fd5797e2e69a7ef95bb37f249a86",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gstreamer1.0/libgstreamer1.0-0_1.26.2-2_arm64.deb",
+      "repository_path": "pool/main/g/gstreamer1.0/libgstreamer1.0-0_1.26.2-2_arm64.deb"
+    },
+    {
+      "package": "liborc-0.4-0t64",
+      "version": "1:0.4.41-1",
+      "architecture": "arm64",
+      "size": 170796,
+      "sha256": "e69ee68606246657ff19bfe13058a9aef177e686b97638728f9e0e911af07680",
+      "uri": "https://deb.debian.org/debian/pool/main/o/orc/liborc-0.4-0t64_0.4.41-1_arm64.deb",
+      "repository_path": "pool/main/o/orc/liborc-0.4-0t64_0.4.41-1_arm64.deb"
+    }
+  ]
+}

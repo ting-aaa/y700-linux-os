@@ -12,9 +12,11 @@ label, sector = sys.argv[5:7]
 if (label, sector) not in {('linux-boot', '4096'), ('y700-test-esp', '512')}:
     raise ValueError('Unsupported test media')
 split = sys.argv[7] == '1'
+package_count = str(int(sys.argv[8])).encode()
 expected = re.compile(b'Y700_BOOT_PASS image=' + re.escape(sys.argv[4].encode()) +
                       rb' root=/dev/(?P<disk>vd[ab])2 esp=/dev/(?P=disk)1 '
-                      rb'kernel=7\.3\.4-asphalt-prc pid1=systemd packages=993 split=' + str(int(split)).encode())
+                      rb'kernel=7\.3\.4-asphalt-prc pid1=systemd packages=' + package_count +
+                      rb' split=' + str(int(split)).encode())
 lib = bundle / 'usr/lib/x86_64-linux-gnu'
 env = dict(os.environ, LD_LIBRARY_PATH=str(lib), QEMU_MODULE_DIR=str(lib / 'qemu'))
 args = [bundle / 'usr/bin/qemu-system-aarch64', '-L', bundle / 'usr/share/qemu',

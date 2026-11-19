@@ -1,0 +1,29 @@
+[Unit]
+Description=Y700 SLPI sensor-domain FastRPC listener
+ConditionPathExists=/dev/fastrpc-sdsp
+Requires=dev-fastrpc\x2dsdsp.device
+After=dev-fastrpc\x2dsdsp.device
+Before=iio-sensor-proxy.service
+Upholds=iio-sensor-proxy.service
+
+[Service]
+Type=exec
+StateDirectory=y700-ssc
+StateDirectoryMode=0750
+ExecStartPre=/usr/libexec/y700-ssc/seed /usr/share/y700/ssc/seed/registry /var/lib/y700-ssc
+ExecStart=/usr/libexec/y700-ssc/sdsprpcd sensorspd
+Environment="LD_LIBRARY_PATH=/usr/lib/y700/ssc"
+Environment="ADSP_LIBRARY_PATH=;/vendor/etc/sensors;/vendor/dsp;/usr/lib/firmware"
+BindReadOnlyPaths=/usr/share/y700/ssc/etc/sensors:/vendor/etc/sensors
+BindReadOnlyPaths=/usr/share/y700/ssc/etc/sensors:/system/vendor/etc/sensors
+BindReadOnlyPaths=/usr/share/y700/ssc/dsp:/vendor/dsp
+BindPaths=/var/lib/y700-ssc:/persist/sensors /var/lib/y700-ssc:/mnt/vendor/persist/sensors
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+Restart=on-failure
+RestartSec=3s
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -32,6 +32,7 @@ mesa-utils
 pipewire
 pipewire-pulse
 wireplumber
+alsa-ucm-conf
 alsa-utils
 onboard
 at-spi2-core

@@ -5,6 +5,16 @@ repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 root=$(realpath -e "${1:?disposable ARM64 rootfs directory}")
 debs=$(realpath -e "${2:?locked repair archive directory}")
 package=$(realpath -e "${3:?y700-platform deb}")
+camera_debs=''
+camera_lock=''
+if [[ $# -gt 5 || ( -n ${5:-} && -z ${4:-} ) ]]; then
+    echo 'Usage: integrate-rootfs.sh ROOT REPAIR_ARCHIVES PLATFORM_DEB [CAMERA_ARCHIVES [CAMERA_LOCK]]' >&2
+    exit 2
+fi
+if [[ -n ${4:-} ]]; then
+    camera_debs=$(realpath -e "$4")
+    camera_lock=$(realpath -e "${5:-$repo/config/camera-layer.lock.json}")
+fi
 test "$(id -u)" -eq 0
 # Keep build-only proc/sys mounts private to this process and its children.
 if [[ ${Y700_PRIVATE_MOUNTS:-0} != 1 ]]; then
@@ -16,7 +26,15 @@ test ! -L "$root/.y700-disposable-build-root"
 test ! -d "$root/run/systemd/system"
 test "$(chroot "$root" dpkg --print-architecture)" = arm64
 test ! -e "$root/usr/sbin/policy-rc.d"
-"${UV_BIN:-uv}" run --python "${UV_PYTHON:-3.13}" --no-project python "$repo/scripts/repair-inputs.py" verify "$debs" "$repo/config/desktop-repair.lock.json"
+uv_python=("${UV_BIN:-uv}" run --python "${UV_PYTHON:-3.13}" --no-project python)
+"${uv_python[@]}" "$repo/scripts/repair-inputs.py" verify "$debs" "$repo/config/desktop-repair.lock.json"
+if [[ -n $camera_debs ]]; then
+    "${uv_python[@]}" "$repo/scripts/repair-inputs.py" verify "$camera_debs" "$camera_lock" --camera-layer
+elif [[ -e $root/var/lib/y700/build/camera-layer.lock.json ||
+        -L $root/var/lib/y700/build/camera-layer.lock.json ]]; then
+    echo 'The supplied root already has a camera layer. Use a separate base for a camera-free build.' >&2
+    exit 1
+fi
 # Work entirely in this disposable directory. Service starts are prohibited.
 stage=''
 cleanup() {
@@ -37,6 +55,13 @@ cp "$debs/"*.deb "$package" "$stage/"
 # Install only this verified invocation's archives, never old cache leftovers.
 archives=()
 for archive in "$stage/"*.deb; do archives+=("${archive#"$root"}"); done
+if [[ -n $camera_debs ]]; then
+    mkdir "$stage/camera"
+    cp "$camera_debs/"*.deb "$stage/camera/"
+    cp "$camera_lock" "$stage/camera-layer.lock.json"
+    "${uv_python[@]}" "$repo/scripts/repair-inputs.py" verify "$stage/camera" "$stage/camera-layer.lock.json" --camera-layer
+    for archive in "$stage/camera/"*.deb; do archives+=("${archive#"$root"}"); done
+fi
 chroot "$root" env DEBIAN_FRONTEND=noninteractive dpkg -i "${archives[@]}"
 chroot "$root" apt-get check
 audit=$(chroot "$root" dpkg --audit)
@@ -49,6 +74,7 @@ for unit in ssh.service ssh.socket asphalt-usb-status.service asphalt-usb-mainte
     ln -sfn /dev/null "$root/etc/systemd/system/$unit"
 done
 systemctl --root="$root" enable y700-usb-maintenance.service y700-maintenance-sshd.service systemd-timesyncd.service
+systemctl --root="$root" enable y700-bluetooth-identity.service
 # Seed early boot time from the deterministic build epoch; network NTP still
 # performs the actual synchronization. Never move an existing newer seed back.
 epoch=$(cat "$root/usr/lib/y700/build-epoch")
@@ -66,4 +92,8 @@ done < <(find "$root/home" -path '*/xfce-perchannel-xml/xfwm4.xml' -type f -prin
 install -d "$root/var/lib/y700/build"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$root/var/lib/y700/build/packages.tsv"
 cp "$repo/config/desktop-repair.lock.json" "$root/var/lib/y700/build/"
+if [[ -n $camera_debs ]]; then
+    install -m644 "$stage/camera-layer.lock.json" "$root/var/lib/y700/build/camera-layer.lock.json"
+    "${uv_python[@]}" "$repo/scripts/verify-image-packages.py" "$root" --camera-lock "$stage/camera-layer.lock.json"
+fi
 echo 'Candidate integration complete; identity finalization and boot/hardware gates remain.'

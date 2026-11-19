@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Tablet display scale
+Name[zh_CN]=平板显示缩放
+Exec=/usr/libexec/y700-tablet-scale
+Icon=preferences-desktop-display
+Categories=GTK;Settings;DesktopSettings;
+OnlyShowIn=XFCE;
+Terminal=false
