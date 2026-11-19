@@ -1,0 +1,89 @@
+#!/usr/bin/python3
+"""Choose one of the locales generated in the Y700 image for this user."""
+import os
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gio, GLib, Gtk
+
+
+ACCOUNTS = "org.freedesktop.Accounts"
+USER = ACCOUNTS + ".User"
+PATH = "/org/freedesktop/Accounts"
+CHOICES = {"en_US.UTF-8": "English", "zh_CN.UTF-8": "简体中文"}
+
+
+def label(english, chinese):
+    return chinese if GLib.get_language_names()[0].startswith("zh") else english
+
+
+class LanguageWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title=label("Display language", "显示语言"))
+        self.set_default_size(400, -1)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_resizable(False)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_border_width(20)
+        self.add(box)
+        box.add(Gtk.Label(label=label("Language for your next sign-in", "下次登录使用的语言"), xalign=0))
+        self.buttons = Gtk.Box(spacing=12, homogeneous=True)
+        box.add(self.buttons)
+        for locale, name in CHOICES.items():
+            button = Gtk.Button(label=name)
+            button.set_size_request(-1, 60)
+            button.connect("clicked", self.choose, locale)
+            self.buttons.add(button)
+        self.status = Gtk.Label(wrap=True, xalign=0)
+        self.status.get_accessible().set_name(label("Language setting", "语言设置状态"))
+        box.add(self.status)
+        self.show_all()
+        try:
+            self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            result = self.bus.call_sync(ACCOUNTS, PATH, ACCOUNTS, "FindUserById",
+                                        GLib.Variant("(x)", (os.getuid(),)), GLib.VariantType.new("(o)"),
+                                        Gio.DBusCallFlags.NONE, 3000, None)
+            self.user_path = result.unpack()[0]
+            saved = self.read_language()
+            self.status.set_text(label("Saved language: ", "已保存的语言：") +
+                                 (CHOICES.get(saved, saved) or label("System default", "系统默认")))
+        except GLib.Error:
+            self.buttons.set_sensitive(False)
+            self.status.set_text(label("Could not read your account settings.", "无法读取你的账户设置。"))
+
+    def read_language(self):
+        result = self.bus.call_sync(ACCOUNTS, self.user_path, "org.freedesktop.DBus.Properties", "Get",
+                                    GLib.Variant("(ss)", (USER, "Language")), GLib.VariantType.new("(v)"),
+                                    Gio.DBusCallFlags.NONE, 3000, None)
+        return result.unpack()[0]
+
+    def choose(self, _button, locale):
+        self.buttons.set_sensitive(False)
+        self.bus.call(ACCOUNTS, self.user_path, USER, "SetLanguage", GLib.Variant("(s)", (locale,)),
+                      None, Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, 30000, None,
+                      self.saved, locale)
+
+    def saved(self, bus, result, locale):
+        try:
+            bus.call_finish(result)
+            # Some account backends normalize '.UTF-8' to '.utf8'.
+            if self.read_language().split(".")[0] != locale.split(".")[0]:
+                self.status.set_text(label("The account did not save this language.", "账户未保存所选语言。"))
+            else:
+                self.status.set_text(label("Next sign-in: ", "下次登录：") + CHOICES[locale])
+        except GLib.Error:
+            self.status.set_text(label("Could not save your language.", "无法保存你的语言设置。"))
+        self.buttons.set_sensitive(True)
+
+
+def activate(app):
+    window = app.get_active_window() or LanguageWindow(app)
+    window.present()
+
+
+if __name__ == "__main__":
+    application = Gtk.Application(application_id="org.y700.DisplayLanguage")
+    application.connect("activate", activate)
+    sys.exit(application.run(sys.argv))

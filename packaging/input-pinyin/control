@@ -1,0 +1,10 @@
+Package: y700-input-pinyin
+Version: 0.1.0~dev2
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
+Section: x11
+Priority: optional
+Depends: accountsservice, im-config, ibus, ibus-gtk3, ibus-libpinyin, fonts-noto-cjk, python3-gi, gir1.2-gtk-3.0
+Description: English and Simplified Chinese input on the Y700 tablet
+ Offers a per-user Xfce display language setting and a language menu in
+ the GTK greeter. Includes Intelligent Pinyin in the initial IBus menu.

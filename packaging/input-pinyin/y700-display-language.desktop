@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Display language
+Name[zh_CN]=显示语言
+Comment=Choose the language for your next desktop session
+Comment[zh_CN]=选择下次登录桌面时使用的语言
+Exec=/usr/libexec/y700-display-language
+Icon=preferences-desktop-locale
+Categories=GTK;Settings;DesktopSettings;
+OnlyShowIn=XFCE;
+Terminal=false
