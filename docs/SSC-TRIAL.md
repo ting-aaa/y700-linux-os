@@ -10,7 +10,23 @@ One authorized start on the test tablet brought SLPI online, bound the Qualcomm 
 
 On November 19, the owner authorized a second single activation of the same PRC tablet. The QRTR baseline contained no sensor service. Relative to the kernel power-up message, SLPI reported up after 273 ms, the protection domain reported UP after 318 ms, and the coordinator observed service 400, instance 1, after 573 ms. Debian's installed `ssccli` opened the accelerometer, returned 78 finite three-axis readings, disabled its subscription and exited successfully. The first vector was (−3.201345, 0.311545, 9.086595) m/s², with magnitude 9.6391 m/s². The trial included no calibration reference or orientation changes.
 
-The kernel recorded one power-up and one stop 3.880 seconds apart. PID 1 finished cleanup. A fresh USB SSH connection verified the original boot and SSH, LightDM and Bluetooth service invocations, ADSP running, SLPI offline, no SDSP device and no temporary mounts. The persistent SLPI firmware path was absent. The remaining sensor channels, desktop rotation and suspend/resume await physical qualification.
+The kernel recorded one power-up and one stop 3.880 seconds apart. PID 1 finished cleanup. A fresh USB SSH connection verified the original boot and SSH, LightDM and Bluetooth service invocations, ADSP running, SLPI offline, no SDSP device and no temporary mounts. The persistent SLPI firmware path was absent. At that point the other sensor channels had not yet been sampled.
+
+## Seven-channel physical survey
+
+A third single activation on November 19 used the same PRC tablet, original kernel, private CN350 firmware and imported factory registry. The local sensor service appeared 498 ms after the power-up message. The native collectors accepted one reading from each channel. The six typed libssc clients each acknowledged discovery, subscription and close. The Hall listener accepted one report and rejected zero.
+
+| Channel | First accepted measurement |
+| --- | --- |
+| Accelerometer | (−3.215710, 0.316334, 9.100960) m/s² |
+| Gyroscope | (−0.002696, 0.006190, −0.004260) in the libssc gyro axes |
+| Magnetometer | (−53.987873, −9.225600, 75.453781) µT |
+| Ambient light | 109.714256 lux |
+| Proximity | Far (`near_boolean=0`) |
+| Fused compass | 115.178192° |
+| Cover Hall | `FAR` |
+
+The coordinator exited successfully. The kernel recorded one power-up and one stop, 5.018 seconds apart. A fresh USB SSH session verified the same boot and service invocations, running ADSP, offline SLPI, empty QRTR service-400 listing and zero temporary mounts. These readings establish data delivery from the seven real channels. Accuracy against a reference, response to motion or light changes, near/far cover transitions, automatic desktop rotation and resume still require separate measurements. [Collector semantics](../tests/ssc-sample.md) · [Hall events](SSC-HALL.md)
 
 ## Prepare and inspect
 

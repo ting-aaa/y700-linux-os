@@ -13,6 +13,8 @@ cc -std=c11 -O2 -Wall -Wextra -Werror src/sensors/ssc-hall.c \
 ./ssc-hall --count 4 --timeout 30
 ```
 
-For the physical test, record the open and closed positions separately and correlate changes with at least two deliberate cover cycles. Retain event text and counts. Exit 3 means discovery was unavailable, exit 4 means too few valid events arrived, and exit 5 means a subscription or library interface failed. Wake from suspend needs a separate test after the awake transitions are established.
+The seven-channel PRC survey received one physical `FAR` report from the Hall listener. No one moved a cover during that run. [Measured survey](SSC-TRIAL.md#seven-channel-physical-survey)
+
+For the transition test, record the open and closed positions separately and correlate changes with at least two deliberate cover cycles. Retain event text and counts. Exit 3 means discovery was unavailable, exit 4 means too few valid events arrived, and exit 5 means a subscription or library interface failed. Wake from suspend needs a separate test after the awake transitions are established.
 
 The networkless ARM64 VM fixture uses the existing libssc QRTR test environment and adds the [Hall sensor metadata](../tests/ssc-hall-sensor.json), [mock reports](../tests/ssc-hall-mock.py) and [guest assertions](../tests/ssc-hall-qrtr.sh). It verified discovery without a subscription, the on-change request, accepted `NEAR` and `FAR` events, five rejected Hall payloads and timeout cleanup when no Hall event arrived. The fixture also supplied an unrelated sensor's SUID and a proximity event to check that the reader ignores both. It leaves hardware cover direction and power behavior open for the attended test. [Base QRTR fixture](../tests/ssc-sample.md)
