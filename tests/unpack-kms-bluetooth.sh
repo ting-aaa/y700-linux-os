@@ -36,6 +36,7 @@ for name in "dev8" "dev9"; do
 done
 printf 'Synthetic qcam fixture\n' > "$bundle/$qcam"
 printf 'Synthetic Blueman fixture\n' > "$bundle/$blueman"
+printf 'Synthetic offline IME fixture\n' > "$bundle/chinese-ime.tar"
 printf 'Synthetic bootloader fixture\n' > "$base/asphalt-prc-u-boot.img.zst"
 printf 'Synthetic ESP fixture\n' > "$base/linux-boot.fat.zst"
 printf 'Synthetic identity fixture\n' > "$bundle/identity.txt"
@@ -91,6 +92,14 @@ manifest dev9 "$qcam"
 unpack --verify >/dev/null
 manifest dev9 "$qcam" "$blueman"
 unpack --verify >/dev/null
+manifest dev9 "$qcam" "$blueman" chinese-ime.tar
+unpack --verify >/dev/null
+printf 'Corrupted offline archive\n' >> "$bundle/chinese-ime.tar"
+reject 'chinese-ime.tar: FAILED' --verify
+manifest dev9 "$qcam" chinese-ime.tar
+reject 'Unsupported update manifest' --verify
+manifest dev9 "$qcam" chinese-ime.tar "$blueman"
+reject 'Unsupported update manifest' --verify
 manifest dev9 "$blueman"
 reject 'Unsupported update manifest' --verify
 manifest dev9 "$blueman" "$qcam"
@@ -197,4 +206,4 @@ debugfs -w -R 'symlink /etc/y700 /lost+found' "$base/root.ext4.zst" >> "$work/de
 manifest dev9 "$qcam"
 reject 'Unexpected directory metadata' --bluetooth-address "$seed" "$work/rejected"
 unpack --verify >/dev/null
-echo 'Personalized ext4, rollback, and all four portable manifest layouts passed'
+echo 'Personalized ext4, rollback, and all five portable manifest layouts passed'
