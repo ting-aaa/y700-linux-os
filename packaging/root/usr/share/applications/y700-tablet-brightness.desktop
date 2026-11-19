@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Tablet brightness
+Name[zh_CN]=平板屏幕亮度
+Comment=Adjust the internal display brightness
+Comment[zh_CN]=调节内置屏幕亮度
+Exec=/usr/libexec/y700-tablet-brightness
+Icon=display-brightness-symbolic
+Categories=GTK;Settings;HardwareSettings;X-XFCE-SettingsDialog;X-XFCE-HardwareSettings;
+OnlyShowIn=XFCE;
+Terminal=false
