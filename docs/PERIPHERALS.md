@@ -20,6 +20,8 @@ After the dev7 rotation update, the real WCN6855 remained powered and `/dev/uhid
 
 ### Keyboard and mouse regression tests
 
+On the real tablet, WCN6855 connected to a Windows host advertising a Bluetooth LE keyboard and mouse. BlueZ discovered both HID input report characteristics and requested numeric confirmation. Test results include the physical radio and GATT setup. Keystrokes, pointer events and bonded reconnect still require a paired accessory. [Physical link and consent](BLUETOOTH-HID-RADIO.md)
+
 | Component under test | Observed result | Test environment |
 | --- | --- | --- |
 | BlueZ 5.82 host libraries | Six HID-over-GATT ATT cases and six UHID command/callback cases passed | The Debian-patched source used scripted ATT, socketpairs and a placeholder UHID endpoint |
