@@ -101,3 +101,9 @@ The documentation addresses above are examples. Choose a dedicated USB subnet th
 | Runtime | New login/cold boot, Onboard auto-show, newly provisioned USB identity and actual SSH authentication require attended tests |
 
 The fresh candidate still contains build-generated state requiring finalization. Earlier copied-root candidates also contain historical base state. These are private test materials, **not distributable images**. The old `reference/` image packager remains historical and must not be used to bypass these gates.
+
+## Touch mapping in dev10
+
+The X11 watcher now includes the desktop framebuffer size in its change detection. It compares the live XInput Coordinate Transformation Matrix against the matrix read back after mapping. Connecting an adjacent output, removing it or resetting the matrix on the same layout triggers a new mapping to DSI-1. Each poll uses `xrandr --current` to read the cached configuration. The watcher leaves the separate libinput calibration property intact.
+
+On the physical TB320FC_PRC, the active desktop reported a left-rotated 2560×1600 output at 120 Hz and the matching XInput matrix. RandR's dry-run planner accepted normal, left, inverted and right from this session. A read-only evdev query on the active NT36523N reported direct touch, BTN_TOUCH, ten slots, single- and multitouch axes 0–16000 by 0–25600, contact width 0–255 and pressure 0–1000. On the independent ARM64 dual-screen regression, the old helper sent a contact at native x=1055.9 to x=2111.8 after attaching an adjacent output. The installed dev10 helper kept it on the internal display, restored its mapping on removal and recovered a deliberately reset matrix. Across three stable polling intervals it issued zero extra mapping writes. [Dual-output test and environment](../tests/display-touch-topology/README.md)

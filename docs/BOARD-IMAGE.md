@@ -221,6 +221,24 @@ Two independent read-only streams of the 6 GiB filesystem matched the generic SH
 
 A full-system ARM64 guest booted the same generic root through EFI. The ordinary user set a password on the KMS enrollment keyboard and signed in through LightDM. From the English Xfce session the user selected Simplified Chinese. After logout a separate ordinary LightDM session inherited `LANG=zh_CN.UTF-8` and `LANGUAGE=zh_CN:zh`, and the standard GTK Cancel button displayed `取消(C)`. The system-wide default remained English. [Language selection and reproduction](DEBIAN-SNAPSHOT.md#optional-simplified-chinese-input)
 
+### Dev10 touch mapping
+
+The local `out/combined-kms-dev10-touch` bundle updates `y700-platform` from dev9 to `0.1.0~dev10` on the 1,112-package Chinese-input image. A full ARM64 package database comparison found exactly one changed version. The image retains the KMS boot components, qcam y7002, Blueman y7001, SSC runtime and per-user language support. The development build used `SOURCE_DATE_EPOCH=1795046400` for the platform archive. [Touch regression](../tests/display-touch-topology/README.md) · [Four-way gesture tests](TOUCH-GESTURES.md)
+
+| File or receipt | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `9faa0b12280184338903afb1441e3bde05b936dea097a22848d293824dbb9250` |
+| Portable `dev10.qcow2` (326,041,600 bytes) | `2415356acdfbc0396a59eb831c88be136f669f5f39e80b0ed184ff4f11d33d2e` |
+| Generic 6 GiB `root.ext4` | `48c468f461dabfd4e262614776a5997ebe8cb3ecd8834d49860c01968fd8f55e` |
+| Installed package tuples | `14bdfb7ef19baf5ea6c58cdf3d307fb385eeca368f1ac01bddb5210353d61fc8` |
+| `y700-platform_0.1.0~dev10_all.deb` | `8a670313ed52c48f7615b415246757fa069cd99527c65c0a16309ac56f884233` |
+
+On Linux, copy the bundle together with `base/`. Run `sha256sum --strict -c TOOLS-SHA256SUMS`, then `bash unpack.sh --verify` and `bash unpack.sh /absolute/path/to/fresh-directory`. Allow 7.5 GiB at the destination. Full generic extraction reproduced the partition hashes and the installed display helper byte for byte. The ext4 root and FAT passed filesystem checks. A second extraction using the tablet's original Bluetooth address passed private readback and retained the unpersonalized checksums. [Per-tablet identity option](PERIPHERALS.md#prepare-a-fresh-installation)
+
+A one-package update installed dev10 on the existing physical tablet. The new helper runs with the signed-in user's X authority and holds its singleton lock. A transient service tied to that X11 login replaced its background watcher until logout. Future graphical logins start the package's ordinary Xfce autostart. The boot, session, display mode, touch matrix, LightDM, network, SSH and Bluetooth service invocations matched before and after the change. Physical boot of the combined image remains open.
+
+This generic root also booted through U-Boot and ARM64 EFI on the board kernel in QEMU. A locked account completed the KMS touchscreen password flow and two ordinary LightDM logins. The user selected Simplified Chinese in the first English desktop, and the second session displayed the translated GTK Cancel button before a normal poweroff. The guest recomputed all 1,112 package tuples. A separate VM using the same sealed root passed all 12 Chromium virtual direct-touch checks through the installed rotation helper and a test DSI connector. [Language observer](../tests/display-language/README.md) · [Gesture measurements](TOUCH-GESTURES.md)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
