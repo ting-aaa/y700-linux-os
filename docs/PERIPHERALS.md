@@ -34,14 +34,17 @@ The Y700 kernel includes BR/EDR, LE and Qualcomm UART support, and builds UHID, 
 
 ### Prepare a fresh installation
 
-The common image omits per-unit identities. From the same tablet's private Android backup, use `data/misc/bluedroid/bt_config.conf` and saved `getprop` output on the build host. The importer reads the local `[Adapter]` address, checks the original TB320FC property in displayed order, and writes a new private file. Pairing keys and peer records stay in the backup.
+The common image omits per-unit identities. Before switching a TB320FC to Debian, connect its stock Android system to an authorized ADB host. On a Linux host with `adb` on its PATH, select the tablet's serial and generate a private file. The tool makes one read-only shell call for the vendor model, vendor device, Lenovo adapter address and Android Bluetooth service address.
 
 ```sh
 umask 077
 uv run --no-project --python 3.13 python scripts/prepare-bluetooth-identity.py \
-  --android-config "$PRIVATE_ANDROID_CONFIG" --getprop "$PRIVATE_GETPROP" \
-  --output "$PRIVATE_DIR/bluetooth-address"
+  --adb-serial "$ADB_SERIAL" --output "$PRIVATE_DIR/bluetooth-address"
 ```
+
+If the tablet already runs Debian, replace `--adb-serial "$ADB_SERIAL"` with `--getprop "$PRIVATE_GETPROP"` to use a saved stock Android property listing from that same tablet. The property-only route requires TB320FC as both vendor model and device, plus agreement between `ro.odm.lenovo.btaddr` and `persist.vendor.service.bdroid.bdaddr`. A capture without both addresses can use `--android-config "$PRIVATE_ANDROID_CONFIG"` with the original `data/misc/bluedroid/bt_config.conf`. That route reads only the local `[Adapter]` identity. An additional `--getprop` can cross-check the Bluetooth service address. The output has mode 0600 on Linux and creation requires a new filename.
+
+On the tested CN350 unit, the two stock properties agreed with Android's recorded `androidboot.btaddr` bootconfig entry in display order. An earlier stock capture also held the same Lenovo property. A fresh USB SSH connection compared the resulting private file with both the installed identity and the powered WCN6855 as reported by BlueZ. This validation used the saved Android records. The local hardware test covered the existing Debian controller. The current Debian device tree and boot arguments expose no Bluetooth address, and the tested internal persist filesystem lacks the Qualcomm `.bt_nv.bin` file. The original hardware storage for the value is unresolved. [Android boot property import](https://android.googlesource.com/platform/system/core/+/refs/tags/android-15.0.0_r1/init/property_service.cpp#1395) · [Qualcomm NV file definition](https://github.com/tadiphone-caf/vendor_qcom_proprietary/blob/9a79e3c6b709ced2c53befa46628395989d8892b/bluetooth/hidl_transport/bt/1.0/default/bt_nv.h#L35-L39)
 
 On a fresh per-device installation, install that one file as `/etc/y700/bluetooth-address` with owner root and mode 0600. The enabled unit runs at BlueZ startup. After provisioning an already running tablet, start `y700-bluetooth-identity.service` and check controller power using `scripts/check-bluetooth-hid.sh`.
 
