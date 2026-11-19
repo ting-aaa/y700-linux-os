@@ -11,6 +11,40 @@
 
 enum { X_MAX = 16000, Y_MAX = 25600, SLOTS = 10 };
 
+struct point {
+    int x;
+    int y;
+};
+
+struct gesture {
+    struct point start[2];
+    struct point end[2];
+};
+
+struct trace {
+    const char *rotation;
+    struct gesture scroll;
+    struct gesture pinch;
+};
+
+/* Literal native-axis samples. The browser oracle uses separate screen targets. */
+static const struct trace traces[] = {
+    {"normal",
+     {{{5440, 18688}, {7680, 18688}}, {{5440, 8192}, {7680, 8192}}},
+     {{{7680, 12032}, {10560, 12032}}, {{4800, 12032}, {13440, 12032}}}},
+    {"left",
+     {{{11680, 16896}, {11680, 13312}}, {{5120, 16896}, {5120, 13312}}},
+     {{{7520, 13312}, {7520, 8704}}, {{7520, 17920}, {7520, 4096}}}},
+    {"inverted",
+     {{{10560, 6912}, {8320, 6912}}, {{10560, 17408}, {8320, 17408}}},
+     {{{8320, 13568}, {5440, 13568}}, {{11200, 13568}, {2560, 13568}}}},
+    {"right",
+     {{{4320, 8704}, {4320, 12288}}, {{10880, 8704}, {10880, 12288}}},
+     {{{8480, 12288}, {8480, 16896}}, {{8480, 7680}, {8480, 21504}}}},
+};
+
+static int tracking_id = 1;
+
 static void require(bool condition, const char *operation)
 {
     if (!condition) {
@@ -56,23 +90,20 @@ static void event(int fd, unsigned short type, unsigned short code, int value)
     require(write(fd, &e, sizeof(e)) == sizeof(e), "write input event");
 }
 
-/* Screen coordinates in thousandths. Raw SPI-panel coordinates stay portrait. */
-static void contact(int fd, int slot, int id, bool left, int screen_x, int screen_y)
+static void contact(int fd, int slot, int id, struct point point)
 {
-    const int x = (left ? screen_y : screen_x) * X_MAX / 1000;
-    const int y = (left ? 1000 - screen_x : screen_y) * Y_MAX / 1000;
     event(fd, EV_ABS, ABS_MT_SLOT, slot);
     if (id != 0)
         event(fd, EV_ABS, ABS_MT_TRACKING_ID, id);
     if (id < 0)
         return;
-    event(fd, EV_ABS, ABS_MT_POSITION_X, x);
-    event(fd, EV_ABS, ABS_MT_POSITION_Y, y);
+    event(fd, EV_ABS, ABS_MT_POSITION_X, point.x);
+    event(fd, EV_ABS, ABS_MT_POSITION_Y, point.y);
     event(fd, EV_ABS, ABS_MT_TOUCH_MAJOR, 10 + slot);
     event(fd, EV_ABS, ABS_MT_PRESSURE, 98 + slot);
     if (slot == 0) {
-        event(fd, EV_ABS, ABS_X, x);
-        event(fd, EV_ABS, ABS_Y, y);
+        event(fd, EV_ABS, ABS_X, point.x);
+        event(fd, EV_ABS, ABS_Y, point.y);
     }
 }
 
@@ -81,31 +112,44 @@ static void frame(int fd)
     event(fd, EV_SYN, SYN_REPORT, 0);
 }
 
-static void gesture(int fd, bool left, bool pinch)
+static void tap(int fd)
+{
+    /* One fixed, asymmetric raw contact in every display orientation. */
+    event(fd, EV_KEY, BTN_TOUCH, 1);
+    contact(fd, 0, tracking_id++, (struct point){3920, 16896});
+    frame(fd);
+    usleep(90000);
+    contact(fd, 0, -1, (struct point){0});
+    event(fd, EV_KEY, BTN_TOUCH, 0);
+    frame(fd);
+}
+
+static void gesture(int fd, const struct gesture *trace)
 {
     enum { FRAMES = 32 };
-    static int tracking_id = 1;
-    const int start_y = pinch ? 470 : 730;
-    const int start_span = pinch ? 50 : 90;
 
     event(fd, EV_KEY, BTN_TOUCH, 1);
-    contact(fd, 0, tracking_id++, left, 500 - start_span, start_y);
-    frame(fd);
-    usleep(60000);
-    contact(fd, 1, tracking_id++, left, 500 + start_span, start_y);
-    frame(fd);
-    usleep(60000);
+    for (int slot = 0; slot < 2; slot++) {
+        contact(fd, slot, tracking_id++, trace->start[slot]);
+        frame(fd);
+        usleep(60000);
+    }
 
     for (int step = 1; step <= FRAMES; step++) {
-        const int span = start_span + (pinch ? 180 * step / FRAMES : 0);
-        const int y = start_y - (pinch ? 0 : 410 * step / FRAMES);
-        contact(fd, 0, 0, left, 500 - span, y);
-        contact(fd, 1, 0, left, 500 + span, y);
+        for (int slot = 0; slot < 2; slot++) {
+            struct point start = trace->start[slot];
+            struct point end = trace->end[slot];
+            struct point point = {
+                start.x + (end.x - start.x) * step / FRAMES,
+                start.y + (end.y - start.y) * step / FRAMES,
+            };
+            contact(fd, slot, 0, point);
+        }
         frame(fd);
         usleep(20000);
     }
-    contact(fd, 0, -1, left, 0, 0);
-    contact(fd, 1, -1, left, 0, 0);
+    contact(fd, 0, -1, (struct point){0});
+    contact(fd, 1, -1, (struct point){0});
     event(fd, EV_KEY, BTN_TOUCH, 0);
     frame(fd);
 }
@@ -125,14 +169,24 @@ int main(void)
     printf("READY %s\n", name);
     fflush(stdout);
     while (fgets(line, sizeof(line), stdin)) {
-        if (!strcmp(line, "portrait scroll\n"))
-            gesture(fd, false, false);
-        else if (!strcmp(line, "portrait pinch\n"))
-            gesture(fd, false, true);
-        else if (!strcmp(line, "landscape scroll\n"))
-            gesture(fd, true, false);
-        else if (!strcmp(line, "landscape pinch\n"))
-            gesture(fd, true, true);
+        char rotation[16], action[16], extra;
+        if (sscanf(line, "%15s %15s %c", rotation, action, &extra) != 2)
+            return EXIT_FAILURE;
+        const struct trace *trace = NULL;
+        for (size_t i = 0; i < sizeof(traces) / sizeof(traces[0]); i++) {
+            if (!strcmp(rotation, traces[i].rotation)) {
+                trace = &traces[i];
+                break;
+            }
+        }
+        if (!trace)
+            return EXIT_FAILURE;
+        if (!strcmp(action, "tap"))
+            tap(fd);
+        else if (!strcmp(action, "scroll"))
+            gesture(fd, &trace->scroll);
+        else if (!strcmp(action, "pinch"))
+            gesture(fd, &trace->pinch);
         else
             return EXIT_FAILURE;
         puts("DONE");

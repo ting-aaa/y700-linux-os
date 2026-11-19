@@ -5,11 +5,13 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 grep -qw y700.touch_gesture_fixture=1 /proc/cmdline
 grep -zFxq linux,dummy-virt /proc/device-tree/compatible
 test "$(uname -m)" = aarch64
-case $(dpkg-query -W -f='${Version}' y700-platform) in
+version=$(dpkg-query -W -f='${Version}' y700-platform)
+case $version in
     '0.1.0~dev8') factor=1 ;;
-    '0.1.0~dev9') factor=2 ;;
-    *) echo 'Expected the dev8 or dev9 test image' >&2; exit 1 ;;
+    '0.1.0~dev9'|'0.1.0~dev10') factor=2 ;;
+    *) echo 'Expected the dev8, dev9 or dev10 test image' >&2; exit 1 ;;
 esac
+printf 'TOUCH_PLATFORM version=%s scale=%s\n' "$version" "$factor"
 
 fixture=$(cd -- "$(dirname -- "$0")" && pwd)
 work=$(mktemp -d /run/y700-touch-gestures.XXXXXXXX)
@@ -26,8 +28,8 @@ chrome= browser_pid= xorg= wm= settings= input= web=
 cleanup() {
     local rc=$?
     if (( rc != 0 )); then
-        for log in Xorg chrome wm settings udev input; do
-            if [[ -f $work/$log.log ]]; then tail -40 "$work/$log.log"; fi
+        for log in Xorg.stderr Xorg.log chrome.log wm.log settings.log udev.log input.log; do
+            if [[ -f $work/$log ]]; then tail -40 "$work/$log"; fi
         done
         if [[ -n $xorg ]]; then
             xprop -root _NET_ACTIVE_WINDOW _NET_CLIENT_LIST_STACKING || :
@@ -52,15 +54,59 @@ wait_for() {
     done
 }
 
-cat > "$work/xorg.conf" <<'XORG'
+ip link set lo up
+mkdir -p /dev/shm /run/dbus
+mount -t tmpfs -o mode=1777 tmpfs /dev/shm
+dbus-daemon --system --fork
+runuser -u y700 -- unshare --user --map-root-user true
+echo "Verified Chromium user namespace prerequisite as y700. $(chromium --version)"
+mkdir -p /run/udev
+/usr/lib/systemd/systemd-udevd --daemon >"$work/udev.log" 2>&1
+
+backend=dummy
+xorg_vt=()
+if [[ -f $fixture/vkms.ko ]]; then
+    backend=vkms
+    xorg_vt=(vt1 -novtswitch)
+    vkms_args=(enable_writeback=0)
+    if modinfo -p "$fixture/vkms.ko" | grep -q '^fixture_type:'; then
+        # The lab geometry module exposes a DSI connector only under QEMU virt.
+        vkms_args+=(fixture_type=16 fixture_width=118 fixture_height=190 fixture_edid=0)
+    fi
+    insmod "$fixture/vkms.ko" "${vkms_args[@]}"
+    udevadm trigger --subsystem-match=drm
+    udevadm settle --timeout=10
+    shopt -s nullglob
+    connectors=(/sys/class/drm/card*-{DSI,Virtual}-1/status)
+    shopt -u nullglob
+    test "${#connectors[@]}" = 1
+    grep -Fxq connected "${connectors[0]}"
+    connector=${connectors[0]%/status}
+    kms_device=/dev/dri/${connector##*/}
+    kms_device=${kms_device%%-*}
+    test -c "$kms_device"
+else
+    dpkg-deb -x "$fixture/dummy.deb" /
+fi
+{
+cat <<'XORG'
 Section "ServerFlags"
     Option "AutoAddGPU" "false"
 EndSection
 Section "Device"
-    Identifier "Dummy"
+    Identifier "Fixture display"
+XORG
+if [[ $backend == vkms ]]; then
+    printf '    Driver "modesetting"\n    Option "kmsdev" "%s"\n' "$kms_device"
+    printf '    Option "AccelMethod" "none"\n    Option "ShadowFB" "true"\n    Option "SWcursor" "true"\n'
+else
+    cat <<'XORG'
     Driver "dummy"
     DacSpeed 400
     VideoRam 65536
+XORG
+fi
+cat <<'XORG'
 EndSection
 Section "Monitor"
     Identifier "Fixture monitor"
@@ -71,7 +117,7 @@ Section "Monitor"
 EndSection
 Section "Screen"
     Identifier "Fixture screen"
-    Device "Dummy"
+    Device "Fixture display"
     Monitor "Fixture monitor"
     DefaultDepth 24
     SubSection "Display"
@@ -81,16 +127,8 @@ Section "Screen"
     EndSubSection
 EndSection
 XORG
+} > "$work/xorg.conf"
 
-dpkg-deb -x "$fixture/dummy.deb" /
-ip link set lo up
-mkdir -p /dev/shm /run/dbus
-mount -t tmpfs -o mode=1777 tmpfs /dev/shm
-dbus-daemon --system --fork
-runuser -u y700 -- unshare --user --map-root-user true
-echo "Verified Chromium user namespace prerequisite as y700. $(chromium --version)"
-mkdir -p /run/udev
-/usr/lib/systemd/systemd-udevd --daemon >"$work/udev.log" 2>&1
 mkfifo "$work/input.fifo"
 exec 8<> "$work/input.fifo"
 "$fixture/evdev-touch" <&8 > "$work/input.log" &
@@ -104,20 +142,35 @@ event=${devices[0]##*/}
 udevadm info -q property -n "/dev/input/$event" | grep -Fx 'ID_INPUT_TOUCHSCREEN=1'
 
 "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" \
+    axes "/dev/input/$event"
+"$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" \
     xauthority "$XAUTHORITY" "${DISPLAY#:}"
 chown y700:y700 "$XAUTHORITY"
-Xorg "$DISPLAY" -config "$work/xorg.conf" -logfile "$work/Xorg.log" -auth "$XAUTHORITY" -nolisten tcp -noreset >"$work/Xorg.stderr" 2>&1 &
+/usr/lib/xorg/Xorg "$DISPLAY" "${xorg_vt[@]}" -config "$work/xorg.conf" -logfile "$work/Xorg.log" \
+    -auth "$XAUTHORITY" -nolisten tcp -noreset >"$work/Xorg.stderr" 2>&1 &
 xorg=$!
 wait_for 30 xrandr --query >/dev/null 2>&1
 device='NT36523N Capacitive Touchscreen'
 wait_for 20 xinput list --id-only "$device"
 test "$(xinput list --id-only "$device" | wc -l)" = 1
 xinput list-props "$device" | grep -F 'libinput Calibration Matrix'
-xinput list --long "$device" | grep -i -E 'touch|direct'
+touch_info=$(xinput list --long "$device")
+grep -E '^[[:space:]]*Touch mode: direct$' <<< "$touch_info"
+grep -E '^[[:space:]]*Max number of touches: 10$' <<< "$touch_info"
 grep -F "Using input driver 'libinput' for '$device'" "$work/Xorg.log"
+output=$(xrandr --query | awk '$2 == "connected" { print $1 }')
+[[ $output =~ ^[A-Za-z0-9-]+$ ]]
+if [[ $backend == vkms ]]; then
+    # A single portrait modeline stays in use while the real CRTC rotates.
+    if ! xrandr --query | grep -Eq '^ +1600x2560-fixture '; then
+        xrandr --newmode 1600x2560-fixture 349.32 1600 1728 1896 2192 2560 2563 2573 2656 -HSync +VSync
+        xrandr --addmode "$output" 1600x2560-fixture
+    fi
+    xrandr --output "$output" --mode 1600x2560-fixture --pos 0x0
+fi
 
 if (( factor == 2 )); then
-    # DUMMY0 is a virtual monitor. Use the profile selected on the physical DSI-1.
+    # This minimal X11 login fixture applies the packaged tablet profile.
     export XDG_CONFIG_DIRS=/usr/share/y700/tablet-xdg:/etc/xdg XDG_CURRENT_DESKTOP=XFCE
 fi
 runuser -u y700 -- dbus-run-session -- bash -ec '
@@ -139,6 +192,7 @@ from gi.repository import Gdk
 raise SystemExit(Gdk.Display.get_default().get_monitor(0).get_scale_factor() != 2)'
     }
     wait_for 25 gtk_scaled
+    echo 'GTK monitor scale verified: 2'
 fi
 "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" serve &
 web=$!
@@ -148,7 +202,7 @@ verify() {
     local phase=$1
     curl -fsS http://127.0.0.1:8937/record > "$work/record"
     "$fixture/uv" run --offline --no-project --python /usr/bin/python3 python -B "$fixture/fixture.py" \
-        "$phase" "$width" "$height" "$factor" < "$work/record" > "$work/assert.log" 2>&1
+        "$phase" "$orientation" "$width" "$height" "$factor" < "$work/record" > "$work/assert.log" 2>&1
 }
 
 assert_renderer_sandbox() {
@@ -167,23 +221,41 @@ assert_renderer_sandbox() {
 
 injections=0
 trace_complete() { [[ $(grep -c '^DONE$' "$work/input.log") == "$injections" ]]; }
-for orientation in portrait landscape; do
-    if [[ $orientation == portrait ]]; then
-        width=1600 height=2560 matrix=(1 0 0 0 1 0 0 0 1)
+for orientation in normal left inverted right; do
+    case "$orientation" in
+        normal)   width=1600 height=2560 matrix=(1 0 0 0 1 0 0 0 1) ;;
+        left)     width=2560 height=1600 matrix=(0 -1 1 1 0 0 0 0 1) ;;
+        inverted) width=1600 height=2560 matrix=(-1 0 1 0 -1 1 0 0 1) ;;
+        right)    width=2560 height=1600 matrix=(0 1 0 -1 0 1 0 0 1) ;;
+    esac
+    if [[ $backend == vkms && $output == DSI-1 ]]; then
+        runuser -u y700 -- y700-display --rotate "$orientation"
+        method=installed-y700-display
+    elif [[ $backend == vkms ]]; then
+        xrandr --output "$output" --rotate "$orientation"
+        xinput map-to-output "$device" "$output"
+        method=xinput-map-to-output
     else
-        width=2560 height=1600 matrix=(0 -1 1 1 0 0 0 0 1)
+        xrandr --output "$output" --mode "${width}x${height}-fixture" --pos 0x0
+        xinput set-prop "$device" 'Coordinate Transformation Matrix' "${matrix[@]}"
+        method=explicit-matrix
     fi
-    xrandr --output DUMMY0 --mode "${width}x${height}-fixture" --pos 0x0
-    xinput set-prop "$device" 'Coordinate Transformation Matrix' "${matrix[@]}"
+    printf 'TOUCH_ROTATION backend=%s output=%s direction=%s mapping=%s\n' "$backend" "$output" "$orientation" "$method"
+    state=$(xrandr --query | grep -E "^$output connected.*\b${width}x${height}\+0\+0")
+    printf '%s\n' "$state"
+    if [[ $backend == vkms && $orientation != normal ]]; then
+        active=${state%% (*}
+        [[ ${active##* } == "$orientation" ]]
+    fi
     xinput list-props "$device" | grep -F 'Coordinate Transformation Matrix'
     runuser -u y700 -- chromium --user-data-dir="$user_dir/$orientation" --kiosk --no-first-run \
         --no-default-browser-check --disable-background-networking --disable-gpu --ozone-platform=x11 \
-        http://127.0.0.1:8937/ > "$work/chrome.log" 2>&1 &
+        "http://127.0.0.1:8937/?rotation=$orientation" > "$work/chrome.log" 2>&1 &
     chrome=$!
-    if ! wait_for 100 verify ready; then cat "$work/record" "$work/assert.log"; exit 1; fi
+    if ! wait_for 150 verify ready; then cat "$work/record" "$work/assert.log"; exit 1; fi
     printf 'VIEWPORT %s %s\n' "$orientation" "$(cat "$work/record")"
     wait_for 15 assert_renderer_sandbox
-    for gesture in scroll pinch; do
+    for gesture in tap scroll pinch; do
         injections=$((injections+1))
         printf '%s %s\n' "$orientation" "$gesture" >&8
         wait_for 10 trace_complete
