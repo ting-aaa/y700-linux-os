@@ -51,6 +51,24 @@ uv run --python 3.13 --no-project python scripts/verify-image-packages.py /build
 
 The default camera lock binds the exact development runtime used for the initial hardware capture. A source rebuild generates a new IPA signing key and may change package length and SHA-256. After checking the rebuilt package with its matching `cam`, IPA signature and GStreamer plugin, explicitly record a separate reviewed lock. An override can change the camera archive length and hash for this pinned runtime version. The six Debian archive tuples and digests remain fixed. [Private camera build and validation](CAMERA-SENSORS.md#bring-up-capture-and-desktop-camera-access)
 
+```sh
+uv run --python 3.13 --no-project python scripts/repair-inputs.py \
+  record /build/camera-debs /build/camera-rebuilt.lock.json --camera-layer
+sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
+  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev5_all.deb \
+  /build/camera-debs /build/camera-rebuilt.lock.json
+uv run --python 3.13 --no-project python scripts/verify-image-packages.py \
+  /build/fresh-base --camera-lock /build/camera-rebuilt.lock.json
+```
+
+An offline ARM64 integration test on a disposable dev5 overlay verified 1,001 installed tuples with digest `3ca13e620ff650d3b6e84dc6d539ee65c2cce450429e88ed8351306e660738c2`, a clean dpkg audit and startup of the private libcamera CLI. The lower dev5 root retained its exact 994-package inventory and dpkg status hash. No camera-layer image was built or booted for this test.
+
+The downloader publishes an archive atomically only after checking length/hash, revalidates cached files, and refuses a mismatched existing file. Tested network retrieval covered the five missing base packages and all 30 repair packages; all 962 base artifacts were additionally revalidated in the independent local pool. Future availability of every canonical URL is not guaranteed: use a reviewed historical Debian mirror/snapshot while retaining the exact content hashes if an archive is retired. Do not silently choose another version.
+
+The builder creates a local repository exclusively from verified locked archives, then uses mmdebstrap with exact versions. Its `trusted=yes` applies only to this generated local repository; it is not used for a remote source. An empty suite is necessary for this flat repository, and the `copy:` transport puts archives into the chroot cache. These details fixed two observed failed builds (no essential packages selected, then inaccessible file-mirror archives). The builder checks the resulting installed package tuples against the entire lock before writing a success marker and restores normal authenticated runtime APT sources.
+
+The configuration stage adds a locked local account, locales, default services and the existing console password setup. It deliberately does not claim touch-only graphical enrollment. It clears the base machine ID; later SSH package installation and test activity still require final identity/log cleanup before distribution.
+
 ### Optional Simplified Chinese input
 
 The `chinese-ime` layer adds 15 Debian packages and the local `y700-input-pinyin` defaults package to the 1,096-package dev9 Bluetooth image. The dependency calculation used the installed ARM64 package database, the signed Trixie indexes and `--no-install-recommends`. It selected IBus 1.5.32-2, its GTK 3 input module, ibus-libpinyin 1.15.8-2 and im-config 0.57-2. The IBus archive includes the X11 input-method server. The base image supplies the Noto CJK fonts and its Qt 6 IBus input plugin. [Authenticated Debian archives](../config/chinese-ime-debian-auth.lock.json) · [Complete layer lock](../config/chinese-ime.lock.json)
@@ -69,23 +87,19 @@ sudo env UV_BIN=/path/to/uv bash scripts/add-board-layer.sh chinese-ime "$root" 
 
 Debian's im-config defaults to automatic selection on Xfce, including English-language sessions. It honors a user's `~/.xinputrc`. The local package supplies a direct US keyboard and the `libpinyin` engine as its default input-source list. Installing this optional layer leaves the system locale and existing user preferences in place.
 
+To choose the desktop display language, open **Display language** in Xfce or run `gio launch /usr/share/applications/y700-display-language.desktop`. Select **简体中文**, log out, and sign in through LightDM. In a terminal in the new desktop session, run the following checks. To switch back, open **显示语言**, choose **English** and sign in again.
+
 ```sh
-uv run --python 3.13 --no-project python scripts/repair-inputs.py \
-  record /build/camera-debs /build/camera-rebuilt.lock.json --camera-layer
-sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
-  /build/fresh-base downloads/desktop-repair out/packages/y700-platform_0.1.0~dev5_all.deb \
-  /build/camera-debs /build/camera-rebuilt.lock.json
-uv run --python 3.13 --no-project python scripts/verify-image-packages.py \
-  /build/fresh-base --camera-lock /build/camera-rebuilt.lock.json
+loginctl show-session "$XDG_SESSION_ID" -p Service -p Type -p Active
+printf 'LANG=%s\nLANGUAGE=%s\n' "$LANG" "$LANGUAGE"
+busctl --system get-property org.freedesktop.Accounts \
+    "/org/freedesktop/Accounts/User$(id -u)" org.freedesktop.Accounts.User Language
+cat /etc/default/locale
 ```
 
-An offline ARM64 integration test on a disposable dev5 overlay verified 1,001 installed tuples with digest `3ca13e620ff650d3b6e84dc6d539ee65c2cce450429e88ed8351306e660738c2`, a clean dpkg audit and startup of the private libcamera CLI. The lower dev5 root retained its exact 994-package inventory and dpkg status hash. No camera-layer image was built or booted for this test.
+The desktop selector saves the current user's choice in AccountsService. Debian's LightDM PAM configuration rereads `/etc/default/locale` at login. The `35y700_account_language` Xsession script applies the saved language before `~/.xsessionrc` runs. A user who overrides it there can set both `LANG` and `LANGUAGE`, or set `LANG` and unset `LANGUAGE` so gettext follows `LANG`.
 
-The downloader publishes an archive atomically only after checking length/hash, revalidates cached files, and refuses a mismatched existing file. Tested network retrieval covered the five missing base packages and all 30 repair packages; all 962 base artifacts were additionally revalidated in the independent local pool. Future availability of every canonical URL is not guaranteed: use a reviewed historical Debian mirror/snapshot while retaining the exact content hashes if an archive is retired. Do not silently choose another version.
-
-The builder creates a local repository exclusively from verified locked archives, then uses mmdebstrap with exact versions. Its `trusted=yes` applies only to this generated local repository; it is not used for a remote source. An empty suite is necessary for this flat repository, and the `copy:` transport puts archives into the chroot cache. These details fixed two observed failed builds (no essential packages selected, then inaccessible file-mirror archives). The builder checks the resulting installed package tuples against the entire lock before writing a success marker and restores normal authenticated runtime APT sources.
-
-The configuration stage adds a locked local account, locales, default services and the existing console password setup. It deliberately does not claim touch-only graphical enrollment. It clears the base machine ID; later SSH package installation and test activity still require final identity/log cleanup before distribution.
+On 2026-11-20 the 1,112-package dev9 image with `y700-input-pinyin 0.1.0~dev3` booted via U-Boot EFI in ARM64 QEMU. After touch enrollment, LightDM authenticated the account into English Xfce session 2. A virtual touchscreen contact selected **简体中文** in the installed desktop app. The user logged out through Xfce, signed in again through Arctica, and received active X11 session 5 with `LANG=zh_CN.UTF-8` and `LANGUAGE=zh_CN:zh`. GLib returned `zh_CN`, GTK rendered its standard Cancel button as **取消(C)**, and the system locale file still specified English. The guest powered off normally. The complete root SHA-256 was `08a42daf79b0742a9d01c4e750b914d3886c60b08e5adfc51c6692ec9ef65a73`. The private receipt and screenshots are in `out/dev9-ime-language-efi-verified/`. [Repeat the two-session test](../tests/display-language/README.md)
 
 ## Verified fresh build, 2026-11-18
 
