@@ -3,21 +3,13 @@ set -euo pipefail
 [[ ${XDG_SESSION_TYPE:-x11} == x11 ]] || exit 0
 state=${XDG_STATE_HOME:-$HOME/.local/state}/y700
 mkdir -p "$state"
-# Apply usability defaults once, preserving later user preferences.
+# Initialize the panel once. Onboard reads its defaults from GSettings.
 initialize_defaults() {
-    gsettings set org.onboard.window.portrait dock-height 520
-    gsettings set org.onboard.window.landscape dock-height 420
-    gsettings set org.onboard.window docking-enabled true
-    gsettings set org.onboard show-status-icon true
-    gsettings set org.onboard start-minimized false
-    gsettings set org.onboard.icon-palette in-use true
-    gsettings set org.onboard.auto-show enabled true
-    gsettings set org.onboard.auto-show hide-on-key-press false
     xfconf-query -c xfce4-panel -p /panels/panel-1/size -n -t uint -s 64
     xfconf-query -c xfce4-panel -p /panels/panel-1/icon-size -n -t uint -s 40
 }
 if [[ ! -f "$state/desktop-defaults-v1" ]]; then
-    # A missing schema or busy settings daemon must not prevent touch mapping.
+    # A busy settings daemon must not prevent touch mapping.
     set +e
     (set -e; initialize_defaults)
     result=$?

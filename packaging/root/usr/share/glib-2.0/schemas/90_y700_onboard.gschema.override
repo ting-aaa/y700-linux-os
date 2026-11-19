@@ -1,0 +1,23 @@
+# Use the toolkit setting Onboard checks before subscribing to AT-SPI.
+[org.gnome.desktop.interface:XFCE]
+toolkit-accessibility=true
+
+[org.onboard:XFCE]
+show-status-icon=true
+start-minimized=false
+
+[org.onboard.window:XFCE]
+docking-enabled=true
+
+[org.onboard.window.portrait:XFCE]
+dock-height=520
+
+[org.onboard.window.landscape:XFCE]
+dock-height=420
+
+[org.onboard.icon-palette:XFCE]
+in-use=true
+
+[org.onboard.auto-show:XFCE]
+enabled=true
+hide-on-key-press=false

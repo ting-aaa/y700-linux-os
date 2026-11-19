@@ -14,6 +14,14 @@ The same physical PRC tablet upgraded from platform dev6 to dev7 over USB SSH. A
 
 The dev7 archive SHA-256 is `484f2ba489f59423d4d10daa5f75b6916c6f44dbf3f0a2d2df8e606583b4d0ae` at build epoch `1794969749`. Applying it to a private overlay of the combined KMS root ran the stock GLib trigger and matched the full 1,069-package set, digest `11dbe979be7212b2a36285ef0cee0a72bada9b64b0c26c557d3684135dc543f1`. Downgrading to dev6 in that overlay restored the original package and removed the rotation client. The downloadable local raw image still contains dev6. [Rotation behavior and tests](CAMERA-SENSORS.md#xfce-screen-rotation)
 
+## Onboard accessibility update, 2026-11-19
+
+Touchscreen enrollment followed by the first Xfce desktop sign-in on dev7 showed Onboard's accessibility confirmation. Onboard checks `org.gnome.desktop.interface toolkit-accessibility` when auto-show is enabled. Dev8 compiles that setting and the tablet's Onboard preferences as Xfce-specific GSettings defaults. They are available when the desktop starts, and saved per-user GSettings values take precedence. [Onboard 1.4.1-10 accessibility check](https://sources.debian.org/src/onboard/1.4.1-10/Onboard/Config.py/#L1140)
+
+The physical PRC tablet upgraded to `0.1.0~dev8` with a single package transaction and the standard GLib trigger. Using an empty preferences backend as the ordinary account, the device reported `toolkit-accessibility=true` for Xfce and `false` for GNOME. The tablet stayed at the ordinary sign-in screen with the same boot and USB, SSH, LightDM and BlueZ service invocations. The drive retains the prior dev7 package for rollback. The deterministic dev8 archive SHA-256 is `840bf029136b287b0f71de2f216603855f10337c999af32d1097ed796e478bac` at build epoch `1795092371`.
+
+In a disposable Debian 13 ARM64 X11 session, Xfce started Onboard through its packaged autostart without a confirmation dialog. Focusing Thunar's address bar showed the keyboard and closing Thunar hid it. A separate session preserved explicit choices for accessibility, automatic show, startup visibility and dock height. Reproduce with the installed package, Xvfb and xdotool by running `bash tests/onboard-xfce-x11.sh fresh` and `bash tests/onboard-xfce-x11.sh opt-out` as an ordinary user.
+
 ## Package build and checks
 
 ```sh
@@ -24,7 +32,7 @@ uv run --python 3.13 --no-project python -m unittest discover -s tests -v
 
 Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz, glib-compile-schemas and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp. Source archives without Git metadata must supply an explicit valid epoch. Future epochs are rejected to protect the early-boot clock. This establishes determinism of the package on the tested builder.
 
-The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, USB ACM/NCM, the dedicated maintenance SSH service and optional Bluetooth controller address provisioning. The offline image builder enables service ordering. The package installs the unit files for local activation. `y700-onboard.desktop` has its own name to avoid replacing Debian's Onboard-owned autostart file. The session defaults are applied once per user; touch alignment still starts if settings initialization fails.
+The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, USB ACM/NCM, the dedicated maintenance SSH service and optional Bluetooth controller address provisioning. The offline image builder enables service ordering. The package installs the unit files for local activation. `y700-onboard.desktop` provides the Onboard autostart for Xfce. The Xfce session prepares panel size settings once per user. Touch alignment starts even if that initialization fails.
 
 The USB descriptor class and function combination follow the repaired prototype. Serial and locally administered MAC addresses are generated separately per installation. Host recognition of those new identities is **not physically tested**. The current tablet continues using its existing tested maintenance service.
 
