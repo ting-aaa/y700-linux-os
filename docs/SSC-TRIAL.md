@@ -46,6 +46,28 @@ The first `SSC first fault` entry comes from the matching SLPI, ADSP or sensor-d
 
 A Qualcomm firmware fault can interrupt the kernel or USB transport. A postmarketOS-era SDM845 report records repeated `sensor_process` watchdog resets on a Pocophone F1 and a reported hang on a OnePlus 6 during SLPI bring-up. Those are different devices and firmware. PID 1 cleanup depends on Linux continuing to run. The kernel's existing remoteproc recovery can run independently, and a hang can require local recovery. This trial covers initial startup and a sample. Suspend, resume and repeated physical cycles are separate tests. [SDM845 failure report](https://gitlab.com/sdm845-mainline/linux/-/issues/28) · [Qualcomm PAS and remoteproc stop](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/remoteproc/qcom_q6v5_pas.c?h=v7.3.4)
 
+## Optional seven-channel survey
+
+For a separately authorized physical start, the same coordinator can collect one initial reading for each of accelerometer, gyroscope, magnetometer, light, proximity, fused compass and cover Hall. Use the survey command in place of the accelerometer trial for that activation. The worker stages private copies of the two ARM64 collectors and checks their exact hashes before mounting firmware or requesting power.
+
+```sh
+bash /path/to/trial-ssc.sh --survey "$cn350_deb" "$private_state" "$reviewed_state_sha256" \
+    "$native_ssc_sample" "$native_ssc_hall"
+```
+
+| Collector | SHA-256 |
+| --- | --- |
+| `ssc-sample.arm64` | `ccb1de8f83004e9a9034ffa1e5bb92490b3da003c1383c9ffd5ae564a6eb9a49` |
+| `ssc-hall.arm64` | `1f02ccf4c056e71c754e6749d1eb290b60899e7bfe621857b904cd299e25a2c2` |
+
+The survey requires an initially empty QRTR service-400 listing. After starting SLPI it subscribes to service announcements, waits up to 13 seconds for a unique endpoint and keeps that subscription through the last collector. Each channel runs sequentially with a three-second sampling deadline and a six-second outer timeout, followed by up to one second for forced termination. The temporary listener has a 65-second runtime cap and the coordinator has a 75-second cap including preparation. The original accelerometer-only trial retains its 38-second runtime cap.
+
+Read the coordinator journal for each `SSC survey-CHANNEL` block. It includes combined collector output and the process exit code. For the six typed channels, `SSC_RESULT` distinguishes discovery, subscription, valid data and close. For Hall, look for `Hall sensor measurement: NEAR` or `FAR` and its accepted/rejected counts. Exit 3 indicates a discovery or availability problem; exit 4 means the requested reading was missing. A healthy channel that returns an error leaves the subsequent checks enabled, and any incomplete result gives the overall survey a failing status. A lost or replaced QRTR endpoint, new matching kernel fault, missing SDSP device, stopped listener or unhealthy remote processor aborts the remaining checks. Cleanup journals partial output from an interrupted collector and marks unattempted channels `not run`. An interrupted process whose exit status could not be reaped reports `exit=unavailable`. [Typed collectors](../tests/ssc-sample.md) · [Hall reader](SSC-HALL.md)
+
+The survey was exercised in a networkless Debian ARM64 guest with the real pinned libssc and a simulated QRTR service. It collected seven initial readings in one run. With magnetometer removed and an acknowledged light subscription producing no samples, it preserved exits 3 and 4 and still obtained proximity, compass and Hall data. With service 400 withdrawn during gyro collection, it stopped that collector and recorded the five remaining channels as unattempted. A file-backed host test separately injected a running-state fault. Physical non-accelerometer evidence and deliberate motion or cover changes remain pending.
+
 ## Host checks
 
 `bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. In the ARM64 QRTR guest, the nameservice gate rejected a missing or already-present service and admitted a delayed mock registration. The installed `ssccli 0.4.4` registered an SSC client, subscribed, emitted finite UTF-8 accelerometer rows and requested unsubscription. Reproduce with the existing native libssc test payload, placing the scripts in `/opt/ssc-test/scripts` and `/opt/ssc-test/tests`, and running `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture`.
+
+For the survey regression, also stage the two collectors as `ssc-sample.arm64` and `ssc-hall`, the Hall QRTR extension as `hall-mock.py` and its Hall sensor fixture alongside the gyroscope fixture in `ssc_server/data/`. Run `bash /opt/ssc-test/tests/trial-ssc.sh --survey-qrtr-fixture`. The guest rejects an existing SDSP node and requires the isolated fixture's kernel command line.

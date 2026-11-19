@@ -4,6 +4,95 @@ set -euo pipefail
 repo=$(cd "$(dirname -- "$0")/.." && pwd)
 source "$repo/scripts/trial-ssc.sh"
 
+if [[ ${1:-} == --survey-qrtr-fixture ]]; then
+    grep -qw y700.ssc_fixture=1 /proc/cmdline
+    [[ ! -e /dev/fastrpc-sdsp ]]
+    cd /opt/ssc-test
+    export PYTHONPATH=$PWD:$PWD/ssc_server:$PWD/python PYTHONUNBUFFERED=1
+    uv=$PWD/uv
+    export UV_CACHE_DIR=/run/ssc-survey-uv
+    run=$(mktemp -d /run/ssc-survey-trust.XXXXXXXX)
+    if stage_survey_tools "$PWD/ssc-sample.arm64" "$PWD/ssc-sample.arm64" > "$run/rejected" 2>&1; then exit 1; fi
+    grep -Fxq 'ssc-sample: OK' "$run/rejected"
+    grep -Fxq 'ssc-hall: FAILED' "$run/rejected"
+    server=
+    stop_server() {
+        if [[ -n $server ]]; then
+            kill -TERM -- "-$server" 2>/dev/null || :
+            wait "$server" 2>/dev/null || :
+            server=
+        fi
+    }
+    trap stop_server EXIT
+    check_running() { :; }
+    sdsp_present() { :; }
+    for scenario in normal mixed transport-loss; do
+        run=$(mktemp -d /run/ssc-survey.XXXXXXXX)
+        : > "$run/survey-requested"
+        stage_survey_tools "$PWD/ssc-sample.arm64" "$PWD/ssc-hall"
+        (qrtr_lookup baseline 2)
+        setsid "$uv" run --offline --no-project --python /usr/bin/python3 python -B - "$scenario" > "$run/mock" 2>&1 <<'PY' &
+import multiprocessing
+import os
+import runpy
+import signal
+import sys
+from ssc_server.ssc import SSC
+
+scenario = sys.argv[1]
+sample = runpy.run_path("mock.py")
+hall = runpy.run_path("hall-mock.py")
+if scenario == "mixed":
+    original = SSC._read_data
+    SSC._read_data = staticmethod(lambda: [row for row in original() if row["sensor"]["data_type"] != "mag"])
+    sys.argv[1] = "silent-light"
+
+class Combined(sample["Server"]):
+    send_event = hall["HallServer"].send_event
+
+    def _sensor_measurement(self, high, low, *args):
+        if scenario == "transport-loss" and (high, low) == sample["GYRO_UID"]:
+            # The mock owns a dedicated process group, including report workers.
+            os.killpg(os.getpgrp(), signal.SIGTERM)
+        elif (high, low) == hall["HALL_UID"]:
+            hall["HallServer"]._sensor_measurement(self, high, low, *args)
+        else:
+            super()._sensor_measurement(high, low, *args)
+
+multiprocessing.set_start_method("fork")
+Combined().start()
+PY
+        server=$!
+        status=0
+        discover_and_survey > "$run/result" 2>&1 || status=$?
+        cat "$run/result"
+        case $scenario in
+            normal)
+                [[ $status == 0 ]]
+                for name in "${survey_channels[@]}"; do grep -Fxq "SSC survey-$name exit=0" "$run/result"; done
+                grep -Fxq 'Hall sensor measurement: NEAR' "$run/result"
+                [[ $(grep -c '^SSC_SAMPLE ' "$run/result") == 6 ]] ;;
+            mixed)
+                [[ $status != 0 ]]
+                grep -Fxq 'SSC survey-magnetometer exit=3' "$run/result"
+                grep -Fxq 'SSC survey-light exit=4' "$run/result"
+                grep -Fq 'sensor=light status=no-data' "$run/result"
+                for name in accelerometer gyroscope proximity compass hall; do grep -Fxq "SSC survey-$name exit=0" "$run/result"; done ;;
+            transport-loss)
+                [[ $status != 0 ]]
+                grep -Fq 'registered service 400 endpoint changed or disappeared' "$run/result"
+                grep -Fxq 'SSC survey-accelerometer exit=0' "$run/result"
+                grep -Fxq 'SSC survey-gyroscope output begins' "$run/result"
+                grep -Fxq 'SSC survey-hall not run' "$run/result"
+                [[ ! -e $run/survey-magnetometer ]] ;;
+        esac
+        stop_server
+        echo "SSC_SURVEY_QRTR_CASE=$scenario"
+    done
+    echo SSC_TRIAL_SURVEY_QRTR_PASS
+    exit 0
+fi
+
 if [[ ${1:-} == --qrtr-fixture ]]; then
     grep -qw y700.ssc_fixture=1 /proc/cmdline
     [[ ! -e /dev/fastrpc-sdsp ]]
@@ -278,3 +367,80 @@ COLLECTOR
 )
 
 echo 'PASS: delayed and absent service, finite first sample, exact collector failure and external-stop output'
+
+(
+    run=$scratch/rejected-tools
+    mkdir "$run"
+    printf 'unreviewed helper\n' > "$scratch/wrong-tool"
+    worker_context() { :; }; board() { :; }; locate() { :; }
+    check_baseline() { :; }; firmware_baseline() { :; }
+    verify_assets() { touch "$scratch/staged-assets"; }
+    start_once() { touch "$scratch/requested-start"; }
+    export Y700_TRIAL_UV=/bin/true
+    if (worker fake-firmware fake-state unused "$scratch/wrong-tool" "$scratch/wrong-tool") > "$run/rejected" 2>&1; then exit 1; fi
+    grep -Fq 'Survey tool verification failed before SLPI startup' "$run/rejected"
+    [[ ! -e $scratch/requested-start && ! -e $scratch/staged-assets && ! -e $run/firmware ]]
+    report_survey > "$run/skipped"
+    [[ $(grep -c ' not run$' "$run/skipped") == 7 ]]
+)
+
+(
+    run=$scratch/survey-fault
+    mkdir -p "$run/survey-tools"
+    : > "$run/survey-requested"
+    cat > "$run/survey-tools/ssc-sample" <<'COLLECT'
+#!/bin/bash
+set -eu
+echo "collector entered $1"
+if [[ $1 == accelerometer ]]; then exit 0; fi
+touch "$SURVEY_FAULT"
+exec sleep 12
+COLLECT
+    chmod 700 "$run/survey-tools/ssc-sample"
+    export SURVEY_FAULT=$run/first-fault
+    check_running() { [[ ! -e $SURVEY_FAULT ]]; }
+    sdsp_present() { :; }
+    qrtr_lookup() { echo 'SSC QRTR ready: service=400 instance=1 node=3 port=9'; exec sleep 30; }
+    if discover_and_survey > "$run/result" 2>&1; then exit 1; fi
+    grep -Fxq 'SSC survey-accelerometer exit=0' "$run/result"
+    grep -Fxq 'SSC survey interrupted during gyroscope' "$run/result"
+    grep -Fxq 'collector entered gyroscope' "$run/result"
+    [[ $(grep -c ' not run$' "$run/result") == 5 && ! -e $run/survey-magnetometer ]]
+    [[ -z $(report_survey) ]]
+)
+
+(
+    run=$scratch/survey-canceled
+    mkdir "$run"
+    : > "$run/survey-requested"
+    echo 'partial collector output' > "$run/survey-accelerometer"
+    worker_context() { :; }; mountpoint() { return 1; }
+    cleanup > "$run/result"
+    grep -Fxq 'SSC survey-accelerometer exit=unavailable' "$run/result"
+    grep -Fxq 'partial collector output' "$run/result"
+    [[ $(grep -c ' not run$' "$run/result") == 6 ]]
+    [[ -z $(report_survey) ]]
+)
+
+if (( EUID == 0 )); then
+(
+    board() { :; }; locate() { :; }; check_baseline() { :; }; firmware_baseline() { :; }
+    systemd-run() { printf '%s\n' "$@" > "$scratch/worker-arguments"; }
+    run=$scratch/absent
+    touch "$scratch/firmware" "$scratch/one" "$scratch/two"
+    mkdir "$scratch/state" "$scratch/bin"
+    ln -s /bin/true "$scratch/bin/uv"
+    export PATH=$scratch/bin:$PATH
+    printf -v digest '%064d' 0
+    inputs=("$scratch/firmware" "$scratch/state" "$digest")
+    main --trial "${inputs[@]}"
+    grep -Fxq 'RuntimeMaxSec=38s' "$scratch/worker-arguments"
+    [[ $(tail -n1 "$scratch/worker-arguments") == "$digest" ]]
+    if (main --survey "${inputs[@]}") >/dev/null 2>&1; then exit 1; fi
+    if (main --trial "${inputs[@]}" "$scratch/one" "$scratch/two") >/dev/null 2>&1; then exit 1; fi
+    main --survey "${inputs[@]}" "$scratch/one" "$scratch/two"
+    grep -Fxq 'RuntimeMaxSec=75s' "$scratch/worker-arguments"
+    [[ $(tail -n2 "$scratch/worker-arguments") == "$scratch/one"$'\n'"$scratch/two" ]]
+)
+fi
+echo 'PASS: survey opt-in, helper rejection, first health fault, partial output and skipped channels'

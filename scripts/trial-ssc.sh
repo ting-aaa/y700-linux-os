@@ -11,6 +11,7 @@ target=/usr/lib/firmware/$relative_fw
 dt=/sys/firmware/devicetree/base
 script=$(realpath -e -- "${BASH_SOURCE[0]}")
 assets=${script%/*}/trial-ssc-assets.py
+survey_channels=(accelerometer gyroscope magnetometer light proximity compass hall)
 
 die() { echo "SSC trial: $*" >&2; exit 1; }
 
@@ -82,6 +83,20 @@ check_baseline() {
 verify_assets() {
     UV_CACHE_DIR=$run/uv-cache "$uv" run --offline --no-project --python /usr/bin/python3 python -B \
         "$assets" "$2" --package "$1" --state-sha256 "$3" --dt-node "$slpi_node" --output "$run"
+}
+
+stage_survey_tools() {
+    [[ -f $1 && -f $2 ]] || { echo 'SSC survey: both native tools must be regular files' >&2; return 1; }
+    local dir=$run/survey-tools
+    install -d -m0700 -- "$dir" &&
+        install -m0500 -T -- "$1" "$dir/ssc-sample" &&
+        install -m0500 -T -- "$2" "$dir/ssc-hall" || return 1
+    # Execute only these private, verified copies even if the source changes.
+    (cd -- "$dir" && sha256sum --strict -c <<'HASHES'
+ccb1de8f83004e9a9034ffa1e5bb92490b3da003c1383c9ffd5ae564a6eb9a49  ssc-sample
+1f02ccf4c056e71c754e6749d1eb290b60899e7bfe621857b904cd299e25a2c2  ssc-hall
+HASHES
+    )
 }
 
 stash_phase() {
@@ -175,6 +190,7 @@ mode, limit = sys.argv[1:]
 deadline = time.monotonic() + int(limit)
 servers = set()
 listed = False
+watched = None
 try:
     with socket.socket(socket.AF_QIPCRTR, socket.SOCK_DGRAM) as client:
         control = (client.getsockname()[0], control_port)
@@ -197,16 +213,23 @@ try:
             if listed and mode == "baseline" and not servers:
                 print("SSC QRTR baseline: service 400 absent")
                 sys.exit(0)
+            if watched is not None and servers != {watched}:
+                sys.exit("SSC QRTR monitor: registered service 400 endpoint changed or disappeared")
             if listed and servers:
                 if mode == "baseline" or len(servers) != 1:
                     sys.exit(f"SSC QRTR {mode}: {len(servers)} existing service 400 endpoint(s)")
-                instance, node, port = next(iter(servers))
-                print(f"SSC QRTR ready: service=400 instance={instance} node={node} port={port}")
-                sys.exit(0)
+                if watched is None:
+                    instance, node, port = next(iter(servers))
+                    print(f"SSC QRTR ready: service=400 instance={instance} node={node} port={port}", flush=True)
+                    if mode != "monitor":
+                        sys.exit(0)
+                    watched = (instance, node, port)
 except TimeoutError:
     pass
 except OSError as exc:
     sys.exit(f"SSC QRTR {mode}: {exc}")
+if watched is not None:
+    sys.exit("SSC QRTR monitor exceeded its own deadline")
 reason = "service 400 not announced" if listed else "no nameservice listing response"
 sys.exit(f"SSC QRTR {mode} timeout: {reason}")
 PY
@@ -241,9 +264,9 @@ report_job() {
 }
 
 wait_job() {
-    local job=$1 pid=$2 rc=0 unhealthy=0
+    local job=$1 pid=$2 health=${3:-check_running} rc=0 unhealthy=0
     while kill -0 "$pid" 2>/dev/null; do
-        if ! check_running; then
+        if ! "$health"; then
             unhealthy=1
             kill -TERM "$pid" 2>/dev/null || :
             break
@@ -253,8 +276,11 @@ wait_job() {
     wait "$pid" || rc=$?
     printf '%s\n' "$rc" > "$run/$job.exit" || return 1
     report_job "$job" || return 1
-    (( unhealthy == 0 )) && check_running && return "$rc"
-    return 1
+    if (( unhealthy )) || ! "$health"; then
+        : > "$run/$job.unhealthy"
+        return 1
+    fi
+    return "$rc"
 }
 
 discover_and_sample() {
@@ -269,6 +295,74 @@ discover_and_sample() {
     wait_job sample "$!" || return 1
     first_sample >/dev/null || return 1
     echo 'SSC trial: one real accelerometer sample received'
+}
+
+survey_health() {
+    check_running || return 1
+    sdsp_present || { echo 'SSC survey: SDSP device disappeared' >&2; return 1; }
+    kill -0 "$guard_pid" 2>/dev/null || { echo 'SSC survey: QRTR monitor exited' >&2; return 1; }
+}
+
+report_survey() {
+    [[ -e $run/survey-requested ]] || return 0
+    local name job
+    for name in "${survey_channels[@]}"; do
+        job=survey-$name
+        if [[ -e $run/$job ]]; then
+            report_job "$job" || return 1
+        elif [[ ! -e $run/$job.reported ]]; then
+            printf 'SSC %s not run\n' "$job"
+            : > "$run/$job.reported" || return 1
+        fi
+    done
+}
+
+survey_collect() {
+    local deadline=$((SECONDS + 13)) name job rc partial=0
+    local -a args
+    until grep -q '^SSC QRTR ready: service=400 ' "$run/qrtr"; do
+        check_running && kill -0 "$guard_pid" 2>/dev/null || return 1
+        if (( SECONDS >= deadline )); then echo 'SSC survey: QRTR registration timed out' >&2; return 1; fi
+        sleep 0.2
+    done
+    grep -m1 '^SSC QRTR ready:' "$run/qrtr"
+    for name in "${survey_channels[@]}"; do
+        survey_health || { echo "SSC survey interrupted before $name" >&2; return 1; }
+        job=survey-$name
+        args=("$run/survey-tools/ssc-sample" "$name" 1 3)
+        if [[ $name == hall ]]; then args=("$run/survey-tools/ssc-hall" --count 1 --timeout 3); fi
+        (
+            ulimit -f 64
+            LC_ALL=C.UTF-8 exec timeout -k 1 6 stdbuf -oL -eL "${args[@]}"
+        ) > "$run/$job" 2>&1 &
+        rc=0
+        wait_job "$job" "$!" survey_health || rc=$?
+        if [[ -e $run/$job.unhealthy || ! -s $run/$job.exit || ! -e $run/$job.reported ]]; then
+            echo "SSC survey interrupted during $name" >&2
+            return 1
+        fi
+        if (( rc != 0 )); then partial=1; fi
+    done
+    survey_health || return 1
+    if (( partial )); then echo 'SSC survey: finished all channels with incomplete results'; return 1; fi
+    echo 'SSC survey: all seven channels returned one accepted reading'
+}
+
+discover_and_survey() {
+    local guard_pid result=0 guard_exit=0
+    qrtr_lookup monitor 62 > "$run/qrtr" 2>&1 &
+    guard_pid=$!
+    survey_collect || result=$?
+    if kill -TERM "$guard_pid" 2>/dev/null; then
+        echo 'SSC survey: closing QRTR monitor'
+    else
+        result=1
+    fi
+    wait "$guard_pid" || guard_exit=$?
+    if (( guard_exit != 143 )); then result=1; fi
+    printf '%s\n' "$guard_exit" > "$run/qrtr.exit" || return 1
+    report_job qrtr && report_survey || return 1
+    return "$result"
 }
 
 worker_context() {
@@ -290,7 +384,7 @@ arm_listener() {
     systemd-run --quiet --collect --unit="$listener" --service-type=exec --description="$description" \
         -p "Requisite=$unit" -p "PartOf=$unit" \
         -p "RootDirectory=$listener_root" -p MountAPIVFS=yes \
-        -p Restart=no -p RuntimeMaxSec=38s -p TimeoutStopSec=4s \
+        -p Restart=no -p "RuntimeMaxSec=${1:-38}s" -p TimeoutStopSec=4s \
         -p "BindReadOnlyPaths=/usr:/usr /etc:/etc /usr/share/y700/ssc/etc/sensors:/vendor/etc/sensors /usr/share/y700/ssc/etc/sensors:/system/vendor/etc/sensors /usr/share/y700/ssc/dsp:/vendor/dsp $run/armed:/run/trial-owner" \
         -p "BindPaths=/dev:/dev $run/state:/persist/sensors $run/state:/mnt/vendor/persist/sensors" \
         --setenv=LD_LIBRARY_PATH=/usr/lib/y700/ssc \
@@ -325,6 +419,7 @@ cleanup() {
     # PID 1 may have canceled the coordinator before it could reap a job.
     report_job qrtr || rc=1
     report_job sample || rc=1
+    report_survey || rc=1
     if [[ $rc == 0 ]]; then echo 'SSC trial: cleanup completed'; fi
     return "$rc"
 }
@@ -337,6 +432,12 @@ worker() {
     locate
     check_baseline
     firmware_baseline
+    local listener_limit=38
+    if (( $# == 5 )); then
+        : > "$run/survey-requested"
+        stage_survey_tools "$4" "$5" || die 'Survey tool verification failed before SLPI startup'
+        listener_limit=65
+    fi
     mkdir -m700 "$run/firmware"
     cp -a --reflink=auto "$target/." "$run/firmware/"
     verify_assets "$1" "$2" "$3"
@@ -347,11 +448,15 @@ worker() {
     firmware_baseline
     mount --bind -- "$run/firmware" "$target"
     mount -o remount,bind,ro -- "$target"
-    arm_listener
+    arm_listener "$listener_limit"
     (qrtr_lookup baseline 2) || die 'SSC QRTR baseline is not clear'
     start_once || die 'SLPI start was refused or failed'
     : > "$run/armed/owned"
-    discover_and_sample || die 'No verified accelerometer sample, inspect QRTR, collector, listener and kernel output'
+    if (( $# == 5 )); then
+        discover_and_survey || die 'Incomplete sensor survey, inspect per-channel and transport results'
+    else
+        discover_and_sample || die 'No verified accelerometer sample, inspect QRTR, collector, listener and kernel output'
+    fi
 }
 
 main() {
@@ -359,14 +464,12 @@ main() {
     if (( $# )); then shift; fi
     if [[ $mode == --help ]]; then
         echo 'Usage: trial-ssc.sh [--preflight | --trial FIRMWARE.deb STATE STATE_SHA256]'
+        echo '       trial-ssc.sh --survey FIRMWARE.deb STATE STATE_SHA256 SSC-SAMPLE SSC-HALL'
         return
     fi
     if [[ $mode == --_cleanup && $# == 0 ]]; then cleanup; return; fi
     board
     locate
-    if (( $# )); then
-        [[ $# == 3 && $3 =~ ^[0-9a-f]{64}$ ]] || die 'Expected firmware archive, state directory and reviewed state digest'
-    fi
     case $mode in
         --preflight)
             [[ $# == 0 ]] || die 'Read-only preflight takes no arguments'
@@ -375,8 +478,17 @@ main() {
             check_baseline
             firmware_baseline
             echo 'SSC preflight passed. No trial was started.' ;;
-        --trial)
-            [[ $# == 3 && $EUID == 0 ]] || die 'An explicit root trial requires all three reviewed inputs'
+        --trial|--survey)
+            local limit=38
+            local -a tools=()
+            [[ $EUID == 0 && ${3:-} =~ ^[0-9a-f]{64}$ ]] || die 'An explicit root trial requires the reviewed inputs'
+            if [[ $mode == --survey ]]; then
+                [[ $# == 5 && -f $4 && -f $5 ]] || die 'A survey requires both native tools'
+                tools=("$(realpath -e -- "$4")" "$(realpath -e -- "$5")")
+                limit=75
+            else
+                [[ $# == 3 ]] || die 'An accelerometer trial requires exactly three inputs'
+            fi
             uv=$(command -v uv) || die 'Put uv on the invoking root shell PATH'
             uv=$(realpath -e -- "$uv")
             [[ -x $uv ]] || die 'uv is required to validate the private assets'
@@ -386,11 +498,11 @@ main() {
             [[ ! -e $run ]] || die 'A trial runtime directory already exists'
             systemd-run --wait --collect --unit="$unit" --service-type=exec \
                 -p RuntimeDirectory=y700-ssc-first-trial -p RuntimeDirectoryMode=0700 \
-                -p RuntimeMaxSec=38s -p TimeoutStopSec=14s \
+                -p "RuntimeMaxSec=${limit}s" -p TimeoutStopSec=14s \
                 -p "ExecStopPost=/bin/bash $script --_cleanup" \
                 --setenv=PATH=/usr/sbin:/usr/bin:/sbin:/bin --setenv="Y700_TRIAL_UV=$uv" \
-                /bin/bash "$script" --_worker "$(realpath -e -- "$1")" "$(realpath -e -- "$2")" "$3" ;;
-        --_worker) [[ $# == 3 ]] || die 'Invalid worker invocation'; worker "$@" ;;
+                /bin/bash "$script" --_worker "$(realpath -e -- "$1")" "$(realpath -e -- "$2")" "$3" "${tools[@]}" ;;
+        --_worker) [[ ( $# == 3 || $# == 5 ) && $3 =~ ^[0-9a-f]{64}$ ]] || die 'Invalid worker invocation'; worker "$@" ;;
         *) die 'Unknown mode, see --help' ;;
     esac
 }
