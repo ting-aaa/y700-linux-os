@@ -24,12 +24,14 @@ Keep the final `SSC_RESULT` and its `SSC_SAMPLE` rows for each sensor. `SSC_DISC
 | Argument | SSC data type | Sample fields |
 | --- | --- | --- |
 | `accelerometer` | `accel` | Three axes in m/s² |
-| `gyroscope` | `gyro` | Three libssc velocity values |
+| `gyroscope` | `gyro` | Angular velocity in rad/s, SSC X, Y, Z order |
 | `magnetometer` | `mag` | Three magnetic field axes in µT |
 | `light` | `ambient_light` | Nonnegative lux |
 | `proximity` | `proximity` | `value=1` for near or `value=0` for far |
 | `compass` | `rotv` | Heading in degrees computed by libssc from the rotation-vector report |
 
-Each timestamp is monotonic Linux receipt time in microseconds. libssc 0.4.4's typed public measurement signals omit the firmware timestamp and accuracy, so this probe cannot measure sensor latency or calibration. Upstream 0.4.4 labels gyro velocity `m/s` in its CLI and proto. The probe preserves the three numeric values as `ssc_gyro_axis` without assuming a unit or axis calibration. Compass is a separate fused heading and can be unavailable even if magnetometer axes work. For a physical motion or on-change check, vary the input and compare the sample values.
+Qualcomm's SSC `gyro` stream specifies radians per second in X, Y, Z order. The pinned libssc subscribes to `gyro`, unpacks the standard event and forwards its first three floats directly. The libssc 0.4.4 CLI and its protobuf comment label them `m/s`. The probe preserves the wire values under the label `ssc_gyro_axis`. The SSC protocol establishes their units. Verifying gain and axis alignment on the tablet requires a reference movement. [Qualcomm QSH sensor reference](https://docs.qualcomm.com/bundle/publicresource/topics/80-70014-7) · [Qualcomm gyro protocol shipped on an Asus device](https://github.com/LordVicky/asus_i001_1_dump/blob/3674bbeca307461136ec356b51642287dd2d20d7/system/system/etc/sensors/proto/sns_gyro.proto#L18-L47) · [libssc event handling](https://sources.debian.org/src/libssc/0.4.4-2.1/src/libssc-sensor-gyroscope.c/#L79) · [libssc CLI formatting](https://sources.debian.org/src/libssc/0.4.4-2.1/src/libssc-cli.c/#L151)
+
+Each timestamp is monotonic Linux receipt time in microseconds. libssc 0.4.4's typed public measurement signals omit the firmware timestamp and accuracy, so this probe cannot measure sensor latency or calibration. Compass is a separate fused heading and can be unavailable even if magnetometer axes work. For a physical motion or on-change check, vary the input and compare the sample values.
 
 The integration fixture exercises the exact Debian 13 ARM64 pipe over an isolated virtual QRTR endpoint. `ssc-sample-qrtr.sh` drives the upstream libssc 0.4.4 mock. `ssc-sample-mock.py` adds a gyroscope with an initial NaN and a light channel that acknowledges enable while withholding all measurements. The standard upstream fixtures supply the other positive reports. Physical sampling requires the actual board.

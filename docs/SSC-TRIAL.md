@@ -19,14 +19,14 @@ A third single activation on November 19 used the same PRC tablet, original kern
 | Channel | First accepted measurement |
 | --- | --- |
 | Accelerometer | (−3.215710, 0.316334, 9.100960) m/s² |
-| Gyroscope | (−0.002696, 0.006190, −0.004260) in the libssc gyro axes |
+| Gyroscope | (−0.002696, 0.006190, −0.004260) rad/s in SSC X, Y, Z order |
 | Magnetometer | (−53.987873, −9.225600, 75.453781) µT |
 | Ambient light | 109.714256 lux |
 | Proximity | Far (`near_boolean=0`) |
 | Fused compass | 115.178192° |
 | Cover Hall | `FAR` |
 
-The coordinator exited successfully. The kernel recorded one power-up and one stop, 5.018 seconds apart. A fresh USB SSH session verified the same boot and service invocations, running ADSP, offline SLPI, empty QRTR service-400 listing and zero temporary mounts. These readings establish data delivery from the seven real channels. Accuracy against a reference, response to motion or light changes, near/far cover transitions, automatic desktop rotation and resume still require separate measurements. [Collector semantics](../tests/ssc-sample.md) · [Hall events](SSC-HALL.md)
+The coordinator exited successfully. The kernel recorded one power-up and one stop, 5.018 seconds apart. A fresh USB SSH session verified the same boot and service invocations, running ADSP, offline SLPI, empty QRTR service-400 listing and zero temporary mounts. The gyro unit comes from the SSC stream specification. The collector retained the three original floats under the label `ssc_gyro_axis`. Accuracy against a reference, response to motion or light changes, near/far cover transitions, automatic desktop rotation and resume still require separate measurements. [Collector semantics and gyro protocol](../tests/ssc-sample.md) · [Hall events](SSC-HALL.md)
 
 ## Prepare and inspect
 
@@ -80,7 +80,7 @@ The survey requires an initially empty QRTR service-400 listing. After starting 
 
 Read the coordinator journal for each `SSC survey-CHANNEL` block. It includes combined collector output and the process exit code. For the six typed channels, `SSC_RESULT` distinguishes discovery, subscription, valid data and close. For Hall, look for `Hall sensor measurement: NEAR` or `FAR` and its accepted/rejected counts. Exit 3 indicates a discovery or availability problem; exit 4 means the requested reading was missing. A healthy channel that returns an error leaves the subsequent checks enabled, and any incomplete result gives the overall survey a failing status. A lost or replaced QRTR endpoint, new matching kernel fault, missing SDSP device, stopped listener or unhealthy remote processor aborts the remaining checks. Cleanup journals partial output from an interrupted collector and marks unattempted channels `not run`. An interrupted process whose exit status could not be reaped reports `exit=unavailable`. [Typed collectors](../tests/ssc-sample.md) · [Hall reader](SSC-HALL.md)
 
-The survey was exercised in a networkless Debian ARM64 guest with the real pinned libssc and a simulated QRTR service. It collected seven initial readings in one run. With magnetometer removed and an acknowledged light subscription producing no samples, it preserved exits 3 and 4 and still obtained proximity, compass and Hall data. With service 400 withdrawn during gyro collection, it stopped that collector and recorded the five remaining channels as unattempted. A file-backed host test separately injected a running-state fault. Physical non-accelerometer evidence and deliberate motion or cover changes remain pending.
+The survey was exercised in a networkless Debian ARM64 guest with the real pinned libssc and a simulated QRTR service. It collected seven initial readings in one run. With magnetometer removed and an acknowledged light subscription producing no samples, it preserved exits 3 and 4 and still obtained proximity, compass and Hall data. With service 400 withdrawn during gyro collection, it stopped that collector and recorded the five remaining channels as unattempted. A file-backed host test separately injected a running-state fault. The physical survey above obtained the initial values on the tablet. Deliberate motion and cover changes remain pending.
 
 ## Host checks
 
