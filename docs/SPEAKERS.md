@@ -1,8 +1,8 @@
 # Y700 internal speaker routing and digital gain
 
-The dev11 platform profile corrects a mute setting on both CS35L45 amplifiers. The pinned board profile requested `-40dB` for each amplifier using a raw ALSA `cset`. On the real TB320FC_PRC with dev10, both digital controls returned raw 0 and ALSA's mute indicator. The dev11 profile writes raw 249, which the same Debian ALSA userspace reports as **−40.00 dB**. Actual sound from the left and right grilles still needs a listener. [Managed profile](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf) · [Original Asphalt profile](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/asphalt/HiFi.conf#L15-L47)
+The dev11 platform profile corrects a mute setting on both internal CS35L45 amplifiers. On the real TB320FC_PRC, both amplifiers moved from raw 0 (mute) to raw 249 (**−40.00 dB**) when the signed-in desktop reloaded the profile. Five seconds of digital silence then reached both protected speaker routes. Actual sound from the left and right grilles still needs a listener. [Managed profile](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf) · [Original Asphalt profile](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/asphalt/HiFi.conf#L15-L47)
 
-## Read-only observations on the tablet
+## Read-only observations with the dev10 profile
 
 | Part of the signal path | Observation |
 | --- | --- |
@@ -19,6 +19,14 @@ The original extracted Android `sku_cape/mixer_paths_waipio_mtp.xml` assigns rec
 Debian's ALSA UCM engine calls `snd_ctl_ascii_value_parse` for `cset`. Its integer path handles integer and percentage values. It reads the leading `-40` in `-40dB` and clamps it to the control's minimum of zero. For nonzero raw values on these amplifiers, the TLV gives `−102.25 + raw × 0.25` dB. Raw 249 therefore implements the board profile's intended attenuation. The profile retains the original analog gain, protection firmware, DSP inputs, amplifier enable sequence and disable sequence. This repair applies to the internal speaker profile. The observation exposed two playback PCMs and no capture PCM. Microphone capture, headphone output, maximum safe volume and acoustic tuning have separate evidence requirements. [ALSA UCM executor](https://github.com/alsa-project/alsa-lib/blob/v1.2.14/src/ucm/main.c#L456-L467) · [ALSA integer parser](https://github.com/alsa-project/alsa-lib/blob/v1.2.14/src/control/ctlparse.c#L51-L75) · [Cirrus control and TLV](https://github.com/torvalds/linux/blob/master/sound/soc/codecs/cs35l45.c)
 
 The ordinary platform package owns `/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf`. Its SHA-256 changes from `1ba9c514c4aae63f849e8bd64c1d90d2541ae45854379101db65896630770110` to `a3fa9c79d3c0233825d34c3dfd5376d0243e02e1af3445a80d73d50c8d09cd36`. The image builder retains the packaged file when staging the upstream card definition. Installing the file and applying its new settings are distinct operations. ALSA selects these settings when a client loads the new profile and enables the speaker device.
+
+## Physical dev11 activation and digital playback
+
+After package installation, the active X11 user still had the original PipeWire graph and both hardware gains read 0. The session had no existing streams or active links. Both PCM devices were closed and both amplifiers were suspended. One restart of that user's WirePlumber loaded the corrected profile. PipeWire and pipewire-pulse kept their existing invocations. ALSA reported `249 [54%] [-40.00dB]` independently for SPK1 and SPK2.
+
+The test supplied 960,000 zero bytes as two-channel S16_LE audio at 48 kHz to the existing default speaker sink. Exactly two PipeWire links became active, FL → FL and FR → FR. The board's MultiMedia1 playback PCM reported RUNNING, S16_LE, 48 kHz and two channels. Its hardware pointer advanced from 16,800 to 25,920 frames across consecutive observations. During that interval **Speaker Left** and **Speaker Right** both reported On in DAPM. The firmware selections, DSP inputs and `DSP_TX1` DAC routes matched the protective profile before and after playback.
+
+The stream drained successfully. The sink returned to suspended with zero streams and zero active links, both PCMs closed and both amplifiers runtime-suspended. The desktop volume remained 0.40, both channel volumes remained 0.063997 and the mute flags stayed clear. The boot, local X11 session, USB maintenance connection and default sink/profile remained intact. The kernel journal contained zero new matching audio-driver faults, and the new WirePlumber invocation contained zero matching audio errors. This run sent silence throughout and made no microphone recording. The local receipts are `out/speaker-ucm/physical-dev11-active.log` and `physical-dev11-after.log`.
 
 ## ARM64 reproduction
 
