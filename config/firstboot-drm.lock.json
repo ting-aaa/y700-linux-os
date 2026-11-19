@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "scope": "optional-y700-drm-first-password-enrollment",
+  "sources": {
+    "buffybox": "Debian signed sid Sources, 3.5.1+dfsg-2",
+    "builder": "scripts/build-firstboot-drm.sh",
+    "enrollment": "src/firstboot-drm"
+  },
+  "packages": [
+    {
+      "package": "y700-firstboot-drm",
+      "version": "0.1.0~dev1",
+      "architecture": "arm64",
+      "size": 260752,
+      "sha256": "e89b6cb3ec78ab6f75e1e258ab651f80edf6e258bd320a8e0fd5707f8e420497"
+    }
+  ]
+}

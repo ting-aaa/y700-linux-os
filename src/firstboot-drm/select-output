@@ -1,0 +1,28 @@
+#!/bin/bash
+# Print the DRM primary node index and connector object ID for the built-in screen.
+set -eu
+sys=${1:-/sys/class/drm}
+dev=${2:-/dev/dri}
+dt=${3:-/proc/device-tree/compatible}
+shopt -s nullglob
+for output in "$sys"/card*-DSI-* "$sys"/card*-*; do
+    name=${output##*/}
+    [[ $name =~ ^card([0-9]+)-(.+)$ ]] || continue
+    index=${BASH_REMATCH[1]}
+    connector=${BASH_REMATCH[2]}
+    [[ -c $dev/card$index && -r $output/status && -r $output/connector_id ]] || continue
+    status=$(<"$output/status")
+    if [[ ! $connector =~ ^DSI-[0-9]+$ ]]; then
+        # The EFI regression VM presents one simpledrm scanout on its RAM framebuffer.
+        grep -zFxq 'linux,dummy-virt' "$dt" || continue
+        [[ $(basename "$(readlink -f "$sys/card$index/device/driver")") == simple-framebuffer ]] || continue
+    fi
+    # Cold-start sysfs may say unknown until KMS probes. The private frontend
+    # checks this exact ID for DRM_MODE_CONNECTED and a usable mode before entry.
+    [[ $status == connected || $status == unknown ]] || continue
+    id=$(<"$output/connector_id")
+    [[ $id =~ ^[1-9][0-9]*$ ]] || continue
+    printf '%s %s\n' "$index" "$id"
+    exit 0
+done
+exit 1

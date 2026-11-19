@@ -16,6 +16,8 @@ sha256sum -c SHA256SUMS
 package_count=$(sed -n 's/^package_count=//p' identity.txt)
 package_digest=$(sed -n 's/^package_digest=//p' identity.txt)
 notes_digest=$(sed -n 's/^kernel_notes_sha256=//p' identity.txt)
+fbdev=$(sed -n 's/^fbdev_emulation=//p' identity.txt)
+[[ -z $fbdev || $fbdev == 0 ]]
 [[ -z $notes_digest || $notes_digest =~ ^[0-9a-f]{64}$ ]]
 if [[ -z $package_count && -z $package_digest ]]; then
     # Historical candidate 03 predates the package receipt in identity.txt.
@@ -46,10 +48,14 @@ else
     cp --sparse=always "$images/linux-boot.fat" "$esp"
 fi
 mcopy -i "$esp" ::/loader/entries/debian.conf debian.conf
+if [[ $fbdev == 0 ]]; then
+    grep -Eq '^options .* drm_kms_helper\.fbdev_emulation=0( |$)' debian.conf
+fi
 # Keep the candidate kernel, initrd and root. Supply the virtual board DT,
 # PL011 console, and a one-shot userspace verifier executed by systemd PID 1.
 sed -i -E 's|(^options rdinit=/init root=PARTLABEL=[^ ]+).*|\1 rw console=ttyAMA0 loglevel=5 systemd.show_status=yes systemd.unit=kernel-command-line.target systemd.run=/boot/probe.sh systemd.run_success_action=poweroff systemd.run_failure_action=poweroff|' debian.conf
 sed -i "/^options /s/$/ $media/" debian.conf
+if [[ $fbdev == 0 ]]; then sed -i '/^options /s/$/ drm_kms_helper.fbdev_emulation=0/' debian.conf; fi
 mcopy -o -i "$esp" debian.conf ::/loader/entries/debian.conf
 mcopy -o -i "$esp" "$board/efi/vm/board.dtb" ::/EFI/debian/board.dtb
 split=0
@@ -83,6 +89,7 @@ fi
     sed -n '/^image_id=/p; /^root_uuid=/p' "$images/identity.txt"
     printf 'package_count=%s\npackage_digest=%s\n' "$package_count" "$package_digest"
     printf 'kernel_notes_sha256=%s\n' "$notes_digest"
+    printf 'fbdev=%s\n' "$fbdev"
     echo "split=$split"
     echo "esp_label=$label"
     cat <<'PROBE'
@@ -91,6 +98,12 @@ test "$(cat /proc/1/comm)" = systemd
 test "$(uname -r)" = 7.3.4-asphalt-prc
 if [ -n "$kernel_notes_sha256" ]; then
     printf '%s  /sys/kernel/notes\n' "$kernel_notes_sha256" | sha256sum -c
+fi
+if [ "$fbdev" = 0 ]; then
+    test "$(cat /sys/module/drm_kms_helper/parameters/fbdev_emulation)" = N
+    test ! -c /dev/fb0
+    test -s /var/lib/y700/build/firstboot-drm.lock.json
+    echo 'Y700_KMS_BOOT framebuffer_emulation=off fb0=absent'
 fi
 rootdev=$(findmnt -nro SOURCE /)
 bootdev=$(findmnt -nro SOURCE /boot)

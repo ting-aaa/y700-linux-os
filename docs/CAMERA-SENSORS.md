@@ -39,6 +39,8 @@ bash scripts/build-camera-backport.sh "$sources" "$asphalt" "$out"
 
 The optional [Y700 Camera desktop application](QCAM.md) launches upstream qcam against the private runtime with the CPU software ISP and Qt raster viewfinder. On the physical tablet its Qt viewfinder received live frames from each sensor using the offscreen platform. An attended test covers the picture on the panel, in-app camera switching, touch controls and still capture.
 
+Lenovo specifies autofocus on the rear main camera, fixed focus on the front and rear macro cameras, and a single rear LED. On the tested Debian installation, `cam --list-controls` returned only Contrast and Gamma for each sensor. Main-camera autofocus and rear flash remain driver gaps. [Lenovo TB320FC specifications](https://psref.lenovo.com/Product/Lenovo_Tablets/Legion_Tab) · [Asphalt camera implementation](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/docs/asphalt/hardware.md#cameras)
+
 ## SSC on Debian
 
 The same boot reported SLPI remoteproc present and `-2` (`ENOENT`) for `qcom/sm8475/lenovo/tb320fc/slpi.mdt`. The retained kernel includes Qualcomm PAS, FastRPC and the in-kernel PD mapper as modules. The driver path is SLPI remoteproc → `fastrpc-sdsp` → the native FastRPC `sdsprpcd sensorspd` listener, with QRTR/QMI to libssc and iio-sensor-proxy. Android's framework obtains readings from vendor services and the sensor HAL. Linux desktop rotation can subscribe to the standard `net.hadess.SensorProxy` D-Bus API with the existing [observe-only bridge](../src/sensors/y700-auto-rotate.py).

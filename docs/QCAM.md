@@ -22,10 +22,18 @@ sudo dpkg -i "$qcam_deps"/*.deb "$out"/y700-camera-qcam_0.7.2-1~bpo13+1.y7001_ar
 sudo apt-get check
 ```
 
+To include the app in a new image, start with a disposable ARM64 build root that already has the [camera runtime layer](CAMERA-SENSORS.md#bring-up-capture-and-desktop-camera-access). Place the reviewed app archive and all 17 Debian archives together in an empty staging directory. Hard links work when the archives and staging directory share a filesystem. The installer checks the package tuples, sizes and SHA-256 against the [image layer lock](../config/camera-qcam.lock.json) and records the package inventory. A rebuild with a different archive hash requires a reviewed lock update.
+
+```sh
+mkdir "$qcam_layer"
+ln -- "$qcam_archive" "$qcam_deps"/*.deb "$qcam_layer/"
+sudo env UV_BIN=/path/to/uv bash scripts/add-board-layer.sh camera-qcam "$root" "$qcam_layer"
+```
+
 ## Verification
 
-The package installed offline in a disposable overlay of the 1050-package image. In a camera-free ARM64 Xvfb session the `y700` user opened the installed desktop entry. The chooser appeared and closed in response to Cancel. The process mapped the private libcamera and Qt's Xcb platform plugin without loading an Xcb GL integration plugin. Package removal preserved the existing `cam --list` entry point. Run the fixture with `xvfb` and `xdotool` installed in the disposable environment. [X11 fixture](../tests/camera-qcam-x11.sh)
+The optional layer installed offline in a disposable overlay of the 1050-package image. The full 1068-package inventory matched the input locks, and the installer rejected a modified archive before installing any packages. In a separate camera-free ARM64 Xvfb session the `y700` user opened the installed desktop entry. The chooser appeared and closed in response to Cancel. The process mapped the private libcamera and Qt's Xcb platform plugin without loading an Xcb GL integration plugin. Package removal preserved the existing `cam --list` entry point. Run the fixture with `xvfb` and `xdotool` installed in the disposable environment. [X11 fixture](../tests/camera-qcam-x11.sh)
 
-The final app archive has SHA-256 `a89c0b4bc3793c36359c45cf7c0840ea03e9de219128715785c73bff113444b0`. On the tablet it installed alongside 17 new dependencies. The package audit, APT dependency check and original LightDM invocation passed after installation. The app remains a separate install for the combined image.
+The final app archive has SHA-256 `a89c0b4bc3793c36359c45cf7c0840ea03e9de219128715785c73bff113444b0`. On the tablet it installed alongside 17 new dependencies. The package audit, APT dependency check and original LightDM invocation passed after installation.
 
 In an unattended hardware run, the current greeter seat's unprivileged account started the installed launcher with Qt's offscreen platform and the CPU ISP. Seven-second runs received 95 main, 202 front and 202 macro viewfinder frames, each 640×480 ABGR8888. The test checked buffer lengths and sequence order and closed each app cleanly. It saved no photographs. The visible camera picker and preview on the internal panel, touch operation, still-image quality and switching within a single session need an attended test. [Hardware viewfinder fixture](../tests/qcam-tablet-preview.sh)

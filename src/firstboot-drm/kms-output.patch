@@ -1,0 +1,55 @@
+--- a/shared/display.c
++++ b/shared/display.c
+@@ -6,6 +6,9 @@
+ #include "display.h"
+ #include "log.h"
+
++#include <limits.h>
++#include <stdlib.h>
++#include <string.h>
+ #include <stdio.h>
+ #include <stdbool.h>
+ #include <unistd.h>
+@@ -44,22 +47,20 @@
+             return NULL;
+         }
+
+-        char drm_path[16];
+-        bool found = false;
+-        for (int i = 0; i < 9; i++) {
+-            sprintf(drm_path, "/dev/dri/card%d", i);
+-
+-            if (access(drm_path, F_OK) == 0) {
+-                found = true;
+-                break;
+-            }
+-        }
+-        if (!found) {
+-            bbx_log(BBX_LOG_LEVEL_ERROR, "/dev/dri/card* are not available");
++        const char *card = getenv("Y700_DRM_CARD");
++        const char *connector = getenv("Y700_DRM_CONNECTOR");
++        if (!card || !*card || strspn(card, "0123456789") != strlen(card) ||
++            !connector || !*connector || strspn(connector, "0123456789") != strlen(connector)) {
++            bbx_log(BBX_LOG_LEVEL_ERROR, "Missing Y700 panel selection");
+             return NULL;
+         }
+-
+-        lv_linux_drm_set_file(disp, drm_path, -1);
++        char drm_path[32];
++        unsigned long id = strtoul(connector, NULL, 10);
++        if (snprintf(drm_path, sizeof(drm_path), "/dev/dri/card%s", card) >= (int)sizeof(drm_path) ||
++            !id || id > UINT_MAX || lv_linux_drm_set_file(disp, drm_path, id) != LV_RESULT_OK) {
++            bbx_log(BBX_LOG_LEVEL_ERROR, "Could not open the selected Y700 DRM panel");
++            return NULL;
++        }
+         break;
+ #endif /* LV_USE_LINUX_DRM */
+
+--- a/lvgl/src/drivers/display/drm/lv_linux_drm.c
++++ b/lvgl/src/drivers/display/drm/lv_linux_drm.c
+@@ -576,4 +576,5 @@
+         if(connector_id >= 0 && conn->connector_id != connector_id) {
+             drmModeFreeConnector(conn);
++            conn = NULL;
+             continue;
+         }

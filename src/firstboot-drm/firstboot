@@ -1,0 +1,43 @@
+#!/bin/bash
+set -eu
+bin=/usr/libexec/y700-firstboot-drm
+marker=/etc/y700/user-configured
+mkdir -p /run/lock
+exec 9>/run/lock/y700-firstboot.lock
+flock 9
+retry=()
+while [[ ! -e $marker ]]; do
+    case $("$bin/enroll" --state) in
+        active)
+            install -d -m0755 /etc/y700
+            touch "$marker"
+            exit 0 ;;
+        new) ;;
+        *)
+            echo 'Y700 first boot requires an unconfigured local account. Contact the owner for access.' >&2
+            exit 1 ;;
+    esac
+    if ! grep -qx N /sys/module/drm_kms_helper/parameters/fbdev_emulation 2>/dev/null; then
+        exec /usr/libexec/y700-firstboot/with-keyboard
+    fi
+    selection=
+    for _ in {1..40}; do
+        if selection=$("$bin/select-output"); then break; fi
+        sleep 0.25
+    done
+    if [[ -z $selection ]]; then
+        exec /usr/local/sbin/y700-firstboot
+    fi
+    read -r Y700_DRM_CARD Y700_DRM_CONNECTOR <<<"$selection"
+    export Y700_DRM_CARD Y700_DRM_CONNECTOR
+    rc=0
+    "$bin/enroll" "${retry[@]}" || rc=$?
+    case $rc in
+        0) ;;
+        65) retry=(--retry) ;;
+        69)
+            echo 'The touch password screen is unavailable. Use the console keyboard.' >&2
+            exec /usr/local/sbin/y700-firstboot ;;
+        *) exit "$rc" ;;
+    esac
+done

@@ -2,12 +2,12 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|warm-greeter|ssc DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|warm-greeter|ssc) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -19,10 +19,21 @@ test ! -d "$root/run/systemd/system"
 test "$(chroot "$root" dpkg --print-architecture)" = arm64
 test -d "$root/tmp"
 test ! -L "$root/tmp"
-if [[ $layer == firstboot-touch ]]; then
-    test -x "$root/usr/local/sbin/y700-firstboot"
-    test -f "$root/etc/systemd/system/y700-firstboot.service"
-fi
+record=$root/var/lib/y700/build
+case $layer in
+    firstboot-touch|firstboot-drm)
+        test -x "$root/usr/local/sbin/y700-firstboot"
+        test -f "$root/etc/systemd/system/y700-firstboot.service"
+        if [[ $layer == firstboot-drm ]]; then
+            test -s "$record/firstboot-touch.lock.json"
+            test -x "$root/usr/libexec/y700-firstboot/with-keyboard"
+        fi
+        ;;
+    camera-qcam)
+        test -s "$record/camera-layer.lock.json"
+        test -x "$root/opt/y700-camera/bin/cam"
+        ;;
+esac
 py=("${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python)
 stage=$(mktemp -d "$root/tmp/y700-board-layer.XXXXXXXX")
 policy=$root/usr/sbin/policy-rc.d
@@ -47,6 +58,13 @@ case $layer in
         test -x "$root/usr/libexec/y700-firstboot/with-keyboard"
         test -x "$root/usr/libexec/y700-firstboot/buffyboard"
         ;;
+    firstboot-drm)
+        test -x "$root/usr/libexec/y700-firstboot-drm/firstboot"
+        test -x "$root/usr/libexec/y700-firstboot-drm/unl0kr"
+        test -x "$root/usr/libexec/y700-firstboot-drm/enroll"
+        grep -Fxq 'ExecStart=/usr/libexec/y700-firstboot-drm/firstboot' \
+            "$root/usr/lib/systemd/system/y700-firstboot.service.d/60-drm-keyboard.conf"
+        ;;
     warm-greeter)
         test -s "$root/usr/share/xgreeters/arctica-greeter.desktop"
         selection=$(chroot "$root" /usr/sbin/lightdm --show-config 2>&1)
@@ -57,8 +75,12 @@ case $layer in
         test -s "$root/usr/lib/firmware/qcom/sm8475/lenovo/tb320fc/slpi.mdt"
         test ! -L "$root/etc/systemd/system/multi-user.target.wants/y700-ssc.service"
         ;;
+    camera-qcam)
+        test -x "$root/usr/bin/y700-camera"
+        test -x "$root/opt/y700-camera/bin/qcam"
+        test -s "$root/usr/share/applications/org.y700.Camera.desktop"
+        ;;
 esac
-record=$root/var/lib/y700/build
 install -d "$record"
 install -m644 "$lock" "$stage/$layer.lock.json"
 mv -T -- "$stage/$layer.lock.json" "$record/$layer.lock.json"

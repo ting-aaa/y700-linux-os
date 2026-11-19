@@ -1,0 +1,136 @@
+{
+  "format": 1,
+  "scope": "optional-y700-camera-qcam-and-debian-runtime",
+  "sources": {
+    "application": "scripts/build-camera-backport.sh --qcam",
+    "debian": "config/camera-qcam-debian-auth.lock.json"
+  },
+  "packages": [
+    {
+      "package": "libb2-1",
+      "version": "0.98.1-1.1+b2",
+      "architecture": "arm64",
+      "size": 16344,
+      "sha256": "e6255eb2e49677fb7d127b2b48baa7850adb950cd08b415d57e90a37bca6360e"
+    },
+    {
+      "package": "libmd4c0",
+      "version": "0.5.2-2+b1",
+      "architecture": "arm64",
+      "size": 46052,
+      "sha256": "fbeaf1abceacb4b081355e16deb7c41e23df719754b10525c35320d808050bda"
+    },
+    {
+      "package": "libopengl0",
+      "version": "1.7.0-1+b2",
+      "architecture": "arm64",
+      "size": 32148,
+      "sha256": "1880bc8e29a9dfd2823fc0b88f514eb65699d961ec967d2ed2ba692c241fa09a"
+    },
+    {
+      "package": "libpcre2-16-0",
+      "version": "10.46-1~deb13u3",
+      "architecture": "arm64",
+      "size": 247336,
+      "sha256": "6aefea24fc8345e56bdf69a3f36190a4b852d8d000a4ea960888ee3ebedeb13b"
+    },
+    {
+      "package": "libqt6core6t64",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 1680380,
+      "sha256": "9a357f28ace917f65d114aaa26aed4ee67e2858797f0a2d01130f299350df208"
+    },
+    {
+      "package": "libqt6dbus6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 247376,
+      "sha256": "8b638af64728b15c4aee768abed39ab96d40063edde17fa0f633253fdc5bce92"
+    },
+    {
+      "package": "libqt6gui6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 2853124,
+      "sha256": "665de7d3d4ef9376797b5123a6169cd63a55e3f4f26d338ebf58fee227582d75"
+    },
+    {
+      "package": "libqt6opengl6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 386260,
+      "sha256": "edbc333ff0d23f1e635a4c6c678ddef4c9ff06fb9cc963cebae88f2542d2e8ba"
+    },
+    {
+      "package": "libqt6openglwidgets6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 49652,
+      "sha256": "a5e263a7ced863398417a9b2f3feb8d9df78c43e1d8d8f8fa0b76ffd1ff65f5f"
+    },
+    {
+      "package": "libqt6widgets6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 2473232,
+      "sha256": "04176b005896051fe0210a40766427daf9e7bc512214b929cd28e559514d947a"
+    },
+    {
+      "package": "libts0t64",
+      "version": "1.22-1.1+b1",
+      "architecture": "arm64",
+      "size": 61616,
+      "sha256": "9d8809fef3271377d95fbf976716802b0c99a0ce6143117547e4eedf44271ea0"
+    },
+    {
+      "package": "libxcb-cursor0",
+      "version": "0.1.5-1",
+      "architecture": "arm64",
+      "size": 17096,
+      "sha256": "1cb16052bb33d6d2479b4b1dde95b1252a7fcdc5672d0fff72676b3bdf5e66e1"
+    },
+    {
+      "package": "libxcb-icccm4",
+      "version": "0.4.2-1",
+      "architecture": "arm64",
+      "size": 27208,
+      "sha256": "4f9b048b98cd9cd7b0a553c8eff05bcd25cfc4fbfddbe4f83e9d6a9c82e2d876"
+    },
+    {
+      "package": "libxcb-image0",
+      "version": "0.4.0-2+b2",
+      "architecture": "arm64",
+      "size": 21924,
+      "sha256": "25ea3790081635a5f69c96afa2d44efbd04ad4e4c02d0357bf98ff000f12702a"
+    },
+    {
+      "package": "libxcb-keysyms1",
+      "version": "0.4.1-1",
+      "architecture": "arm64",
+      "size": 16776,
+      "sha256": "aa1d09f42d23dc8fb4d7e6069d8d15fe20080f8574321220bcf0d028c8e7a57f"
+    },
+    {
+      "package": "libxcb-render-util0",
+      "version": "0.3.10-1",
+      "architecture": "arm64",
+      "size": 18456,
+      "sha256": "f4a33bcc7780f404623a608823b48b91d9ac776a1396d56e9916cbfee49b182c"
+    },
+    {
+      "package": "libxcb-xinput0",
+      "version": "1.17.0-2+b1",
+      "architecture": "arm64",
+      "size": 129924,
+      "sha256": "ebc39f2f1940a03963b0c1db916b19178e8078132adb669a27cfa8dd38c5d3c3"
+    },
+    {
+      "package": "y700-camera-qcam",
+      "version": "0.7.2-1~bpo13+1.y7001",
+      "architecture": "arm64",
+      "size": 105716,
+      "sha256": "a89c0b4bc3793c36359c45cf7c0840ea03e9de219128715785c73bff113444b0"
+    }
+  ]
+}

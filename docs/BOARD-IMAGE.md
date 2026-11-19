@@ -74,6 +74,29 @@ Readback of the actual FAT entry also confirmed the default console framebuffer 
 | `asphalt-prc-u-boot.img` | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
 | `identity.txt` | `c29f005148c77f784e699d0074a2340a7b869bec231cc162f5a0852c95c31140` |
 
+## KMS touchscreen build
+
+To build for the framebuffer setting used in the long Adreno trials, begin with the integrated root containing the camera runtime, framebuffer keyboard, SSC stack and warm greeter. Apply the qcam and DRM enrollment packages, then select the KMS profile explicitly. The builder checks the enrollment receipt and helper before creating the output directory. Its EFI entry passes `drm_kms_helper.fbdev_emulation=0` to the selected queue-fix kernel.
+
+```sh
+bash scripts/add-board-layer.sh camera-qcam "$ROOT" "$QCAM_DEBS"
+bash scripts/add-board-layer.sh firstboot-drm "$ROOT" "$DRM_ENROLLMENT_DEB"
+bash scripts/build-board-image.sh "$ROOT" "$BOARD" "$PRC_UBOOT" "$DEST" \
+  --gmu-queue-kernel "$GPU_BUILD" --kms-enrollment
+bash tests/board-image-vm.sh "$DEST" "$BOARD" "$QEMU" "$NEW_VM_DIRECTORY"
+```
+
+`QCAM_DEBS` and `DRM_ENROLLMENT_DEB` are directories of locked archives. The EFI guest verifier checks the live fbdev parameter and absence of `/dev/fb0`. A read-only check on the tablet selected the integrated 1600×2560 DSI panel on `/dev/dri/card1`, DRM connector 36, while DisplayPort was disconnected. Taking over this physical display, using the touchscreen to enroll and handing the panel to the login manager require a physical boot of the KMS image.
+
+Image `y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f` booted in the ARM64 EFI test with systemd PID 1, root on `/dev/vda2` and ESP on `/dev/vda1`. The running kernel notes matched the Adreno candidate. The guest reported fbdev emulation disabled and no framebuffer device. The 1,069 installed package/version/architecture tuples matched SHA-256 `ccb8ce6783262f6fe0bc5a159a3d71ef8a37d1c6bc0962da1fc466e794ab8bef`. The [DRM enrollment](FIRSTBOOT-DRM.md), [camera app](QCAM.md), private SSC firmware and existing warm greeter are included.
+
+| KMS image artifact | SHA-256 |
+| --- | --- |
+| `root.ext4` | `7936f7c964628ef816bc1ac64aff47dcd9ae61f23bfcbd06f0649e04e8de412f` |
+| `linux-boot.fat` | `9c7dbadfe9dca55f6a5da34d564a6004a99f90ad403d1323ec6bf561ec196a22` |
+| `asphalt-prc-u-boot.img` | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
+| `identity.txt` | `2c4c34193f039e0061a2fb7156a913d65bf0b0d90eb81b32c89d3505ecc0d74b` |
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

@@ -32,6 +32,12 @@ test "$(tr -d '\000' < /proc/device-tree/region_country)" = PRC || fail 'Wrong b
 test "$(uname -r)" = 7.3.4-asphalt-prc || fail 'Unexpected kernel'
 if [ -f "$identity" ]; then
     notes_digest=$(sed -n 's/^kernel_notes_sha256=//p' "$identity")
+    fbdev=$(sed -n 's/^fbdev_emulation=//p' "$identity")
+    case "$fbdev" in
+        '') ;;
+        0) test "$(cat /sys/module/drm_kms_helper/parameters/fbdev_emulation)" = N && test ! -c /dev/fb0 || fail 'Expected the KMS enrollment boot profile' ;;
+        *) fail 'Unexpected framebuffer mode in identity' ;;
+    esac
     if [ -n "$notes_digest" ]; then
         printf '%s\n' "$notes_digest" | grep -Exq '[0-9a-f]{64}' || fail 'Invalid kernel notes digest'
         printf '%s  /sys/kernel/notes\n' "$notes_digest" | sha256sum -c || fail 'Running kernel differs from the selected build'

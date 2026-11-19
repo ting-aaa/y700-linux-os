@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Linux root, private build host, regular output files only.
 set -euo pipefail
-if (( $# != 4 )) && { (( $# != 6 )) || [[ $5 != --gmu-queue-kernel ]]; }; then
-    echo 'Usage: build-board-image.sh INTEGRATED_ROOT BOARD_DIRECTORY PRC_BOOT NEW_OUTPUT_DIRECTORY [--gmu-queue-kernel DIRECTORY]' >&2
+usage() {
+    echo 'Usage: build-board-image.sh INTEGRATED_ROOT BOARD_DIRECTORY PRC_BOOT NEW_OUTPUT_DIRECTORY [--gmu-queue-kernel DIRECTORY [--kms-enrollment]]' >&2
     exit 2
-fi
+}
+(( $# >= 4 )) || usage
 repo=$(cd "$(dirname "$0")/.." && pwd)
 base=$(realpath -e "${1:?integrated Debian root}")
 board=$(realpath -e "${2:?board component directory}")
@@ -12,17 +13,33 @@ boot=$(realpath -e "${3:?PRC U-Boot Android container}")
 out=$(realpath -m "${4:?new dedicated output directory}")
 kernel=$board/linux-7.3.4/arch/arm64/boot/Image
 notes_digest=
-if (( $# == 6 )); then
-    candidate=$(realpath -e -- "$6")
+kms_enrollment=false
+shift 4
+if (( $# )); then
+    [[ $# -ge 2 && $1 == --gmu-queue-kernel ]] || usage
+    candidate=$(realpath -e -- "$2")
     (cd "$candidate"; sha256sum --quiet -c "$repo/config/gmu-queue-kernel.sha256")
     kernel=$candidate/Image
     notes_digest=$(awk '$2=="notes" {print $1}' "$repo/config/gmu-queue-kernel.sha256")
+    shift 2
+    if (( $# )); then
+        [[ $# == 1 && $1 == --kms-enrollment ]] || usage
+        kms_enrollment=true
+    fi
 fi
 test "$(id -u)" = 0
 test "$base" != /
 test -f "$base/.y700-base-packages-complete"
 test -f "$base/etc/y700/base-configured"
 test ! -d "$base/run/systemd/system"
+if $kms_enrollment; then
+    # This boot profile needs a first-boot keyboard that can draw without fbdev.
+    if [[ ! -s "$base/var/lib/y700/build/firstboot-drm.lock.json" ||
+          ! -x "$base/usr/libexec/y700-firstboot-drm/firstboot" ]]; then
+        echo 'Install the verified firstboot-drm layer before selecting --kms-enrollment.' >&2
+        exit 1
+    fi
+fi
 test -s "$base/usr/share/alsa/ucm2/ucm.conf" || {
     echo 'Missing ALSA UCM entry point. Rebuild the base with the current Debian package lock.' >&2
     exit 1
@@ -100,6 +117,15 @@ install -m644 "$dtb" esp/EFI/debian/board.dtb
 install -m644 "$board/efi/esp/EFI/BOOT/BOOTAA64.EFI" esp/EFI/BOOT/
 for name in charger mobile-boot-action; do install -m644 "$board/efi/esp/EFI/android-devices/$name.efi" esp/EFI/android-devices/; done
 for name in debian android bootloader recovery-b; do install -m644 "$board/efi/esp/loader/entries/$name.conf" esp/loader/entries/; done
+if $kms_enrollment; then
+    entry=esp/loader/entries/debian.conf
+    test "$(grep -c '^options ' "$entry")" = 1
+    if grep -q 'drm_kms_helper.fbdev_emulation=' "$entry"; then
+        echo 'The source EFI entry already specifies a framebuffer mode.' >&2
+        exit 1
+    fi
+    sed -i '/^options /s/$/ drm_kms_helper.fbdev_emulation=0/' "$entry"
+fi
 install -m644 "$board/efi/esp/loader/loader.conf" esp/loader/
 install -m644 "$boot" asphalt-prc-u-boot.img
 truncate -s 1G linux-boot.fat
@@ -111,5 +137,6 @@ mcopy -s -i linux-boot.fat ::/EFI ::/loader esp-readback/
 diff -qr esp esp-readback
 printf 'image_id=%s\nroot_uuid=%s\n%s\n' "$imageid" "$uuid" "$package_receipt" > identity.txt
 if [[ -n $notes_digest ]]; then printf 'kernel_notes_sha256=%s\n' "$notes_digest" >> identity.txt; fi
+if $kms_enrollment; then printf 'fbdev_emulation=0\n' >> identity.txt; fi
 sha256sum asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt > SHA256SUMS
 echo 'Candidate files built and read back.'
