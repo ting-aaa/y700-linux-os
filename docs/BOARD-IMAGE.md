@@ -167,6 +167,16 @@ The private `out/combined-kms-dev9-camera2-ssc` variant contains the 200% Xfce p
 
 The bundle uses the same hard-linked compressed dev7 base and includes both standalone upgrade packages. Run `bash unpack.sh --verify` and `bash unpack.sh /path/to/new-directory` on Linux. Allow 7.09 GiB at the destination. [Image unpacker](../scripts/unpack-kms-update.sh)
 
+To provision one tablet before first boot, prepare its private Bluetooth address file from its own stock Android identity and install `e2fsprogs` on the Linux extraction host. Use a single regular file owned by the invoking user with mode `0600` or `0400`. [Prepare the per-tablet address](PERIPHERALS.md#prepare-a-fresh-installation)
+
+```sh
+bash unpack.sh --bluetooth-address "$PRIVATE_ADDRESS_FILE" /path/to/new-private-directory
+```
+
+Extraction verifies the generic image before provisioning `/etc/y700/bluetooth-address` as `root:root` with mode `0600` in the new root. Existing identity files are rejected. `SHA256SUMS` verifies the local extracted files and `UNPERSONALIZED-SHA256SUMS` preserves the original raw manifest. Keep the address file and personalized root private. The default extraction command still produces the generic root.
+
+A full reconstruction of this bundle on Linux with a synthetic address passed independent ext4 metadata, content and filesystem checks. The original manifest, FAT, U-Boot and identity file verified byte for byte. [Unpacker regression](../tests/unpack-kms-bluetooth.sh)
+
 | Dev9 with qcam y7002 artifact | SHA-256 |
 | --- | --- |
 | Distribution `SHA256SUMS` | `1975160678f175fb3d46277fa6c604fb90a2d59bebee0d3f1a16be1899f0462f` |
