@@ -1,0 +1,67 @@
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
+@@ -67,6 +67,9 @@
+ 	status = gmu_read(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO);
+ 	gmu_write(gmu, REG_A6XX_GMU_GMU2HOST_INTR_CLR, status);
+ 
++	if (status & A6XX_GMU_GMU2HOST_INTR_INFO_MSGQ)
++		dev_warn_ratelimited(gmu->dev, "HFI IRQ cleared MSGQ status=%#x\n", status);
++
+ 	if (status & A6XX_GMU_GMU2HOST_INTR_INFO_CM3_FAULT) {
+ 		dev_err_ratelimited(gmu->dev, "GMU firmware fault\n");
+ 
+--- a/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
+@@ -108,6 +108,31 @@
+ 	return 0;
+ }
+ 
++/* Observe the queue without consuming a packet or clearing the doorbell. */
++static void a6xx_hfi_log_vote_timeout(struct a6xx_gmu *gmu, u32 seqnum, u32 intr)
++{
++	struct a6xx_hfi_queue *rx = &gmu->queues[HFI_RESPONSE_QUEUE];
++	struct a6xx_hfi_queue_header *tx = gmu->queues[HFI_COMMAND_QUEUE].header;
++	const u32 size = SZ_4K / sizeof(u32);
++	u32 rd = READ_ONCE(rx->header->read_index);
++	u32 wr = READ_ONCE(rx->header->write_index);
++	u32 head = 0, echo = 0;
++
++	/* Indices are dwords. Use the host allocation bound for the peek. */
++	if (rd < size && wr < size && rd != wr) {
++		dma_rmb();
++		head = READ_ONCE(rx->data[rd]);
++		if (HFI_HEADER_ID(head) == HFI_F2H_MSG_ACK &&
++		    HFI_HEADER_SIZE(head) >= 2 && CIRC_CNT(wr, rd, size) >= 2)
++			echo = READ_ONCE(rx->data[(rd + 1) % size]);
++	}
++
++	dev_err(gmu->dev,
++		"HFI vote snapshot seq=%u intr=%#x cmd_rd=%u cmd_wr=%u rx_rd=%u rx_wr=%u head=%#x echo=%#x perf=%u\n",
++		seqnum, intr, READ_ONCE(tx->read_index), READ_ONCE(tx->write_index),
++		rd, wr, head, echo, gmu->current_perf_index);
++}
++
+ static int a6xx_hfi_wait_for_msg_interrupt(struct a6xx_gmu *gmu, u32 id, u32 seqnum)
+ {
+ 	int ret;
+@@ -133,6 +158,8 @@
+ 	} while (true);
+ 
+ 	if (ret) {
++		if (id == HFI_H2F_MSG_GX_BW_PERF_VOTE)
++			a6xx_hfi_log_vote_timeout(gmu, seqnum, val);
+ 		DRM_DEV_ERROR(gmu->dev,
+ 			"Message %s id %d timed out waiting for response\n",
+ 			a6xx_hfi_msg_id[id], seqnum);
+@@ -188,8 +215,9 @@
+ 
+ 		if (seqnum != HFI_HEADER_SEQNUM(resp.ret_header)) {
+ 			DRM_DEV_ERROR(gmu->dev,
+-				"Unexpected message id %d on the response queue\n",
+-				HFI_HEADER_SEQNUM(resp.ret_header));
++				"Unexpected message id %d on the response queue (echo_cmd=%u wanted_cmd=%u wanted_seq=%u)\n",
++				HFI_HEADER_SEQNUM(resp.ret_header), HFI_HEADER_ID(resp.ret_header),
++				id, seqnum);
+ 			continue;
+ 		}
+ 

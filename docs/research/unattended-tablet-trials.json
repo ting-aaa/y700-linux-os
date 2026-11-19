@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-18",
+  "kernel_release": "7.3.4-asphalt-prc",
+  "candidate_elf_notes_sha256": "48f4eeb72d774d9a45e5f5f076189bd466f6f124ae1589d1faf617184d7b764d",
+  "baseline_elf_notes_sha256": "2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066",
+  "physical_runs": [
+    {
+      "scenario": "acknowledgement withheld",
+      "command_exit_codes": [],
+      "device_actions": [
+        "armed",
+        "start",
+        "deadline",
+        "finish"
+      ],
+      "candidate_boots": 2,
+      "baseline_returns": 1,
+      "result": "PASS",
+      "cleanup_confirmed": true,
+      "host_log_sha256": "271149cc074060ff591162ed75ac1dd2dd45d78ab2c5e3230635afe2d1021d23"
+    },
+    {
+      "scenario": "temporary command error",
+      "command_exit_codes": [
+        "75",
+        "0"
+      ],
+      "device_actions": [
+        "armed",
+        "start",
+        "retry",
+        "finish"
+      ],
+      "candidate_boots": 2,
+      "baseline_returns": 1,
+      "result": "PASS",
+      "cleanup_confirmed": true,
+      "host_log_sha256": "a29036be6823dc8ad90997e02496d2265031ab6d21de16e11592789149806440"
+    },
+    {
+      "scenario": "persistent command error",
+      "command_exit_codes": [
+        "75",
+        "75"
+      ],
+      "device_actions": [
+        "armed",
+        "start",
+        "retry",
+        "finish"
+      ],
+      "candidate_boots": 2,
+      "baseline_returns": 1,
+      "result": "FAIL",
+      "cleanup_confirmed": true,
+      "host_log_sha256": "211db01b52d47d83d076a1d19fed6e47ec65ab365be932757b4f9aed45acd7b7"
+    }
+  ],
+  "reset_observations": 9,
+  "hardware_watchdog_registered": false,
+  "whole_device_lockup_reset": "unverified",
+  "qemu": [
+    "kernel panic, timed reset",
+    "second candidate attempt",
+    "baseline selected after budget exhausted"
+  ]
+}

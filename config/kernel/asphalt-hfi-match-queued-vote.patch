@@ -1,0 +1,52 @@
+--- a/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
+@@ -108,6 +108,34 @@
+ 	return 0;
+ }
+ 
++/* Inspect a published HFI v2 vote ACK without consuming it. The normal
++ * response reader validates the firmware result and advances the queue.
++ */
++static bool a6xx_hfi_vote_ack_ready(const struct a6xx_hfi_queue *queue, u32 seqnum)
++{
++	const u32 size = SZ_4K / sizeof(u32);
++	u32 rd = READ_ONCE(queue->header->read_index);
++	u32 wr = READ_ONCE(queue->header->write_index);
++	u32 head, echo, wanted;
++
++	/* V2 queue entries occupy whole groups of four dwords. */
++	if (READ_ONCE(queue->header->size) != size || rd >= size || wr >= size ||
++	    (rd | wr) % 4 || CIRC_CNT(wr, rd, size) < 4)
++		return false;
++
++	dma_rmb();
++	head = READ_ONCE(queue->data[rd]);
++	if (HFI_HEADER_ID(head) != HFI_H2F_MSG_GX_BW_PERF_VOTE ||
++	    ((head >> 16) & 0xf) != HFI_MSG_ACK || HFI_HEADER_SIZE(head) != 3)
++		return false;
++
++	echo = READ_ONCE(queue->data[rd + 1]);
++	wanted = (seqnum << 20) | (HFI_MSG_CMD << 16) |
++		 ((sizeof(struct a6xx_hfi_gx_bw_perf_vote_cmd) / sizeof(u32)) << 8) |
++		 HFI_H2F_MSG_GX_BW_PERF_VOTE;
++	return echo == wanted;
++}
++
+ static int a6xx_hfi_wait_for_msg_interrupt(struct a6xx_gmu *gmu, u32 id, u32 seqnum)
+ {
+ 	int ret;
+@@ -122,6 +150,14 @@
+ 		if (!ret)
+ 			break;
+ 
++		/* The fault IRQ may already have acknowledged MSGQ. */
++		if (id == HFI_H2F_MSG_GX_BW_PERF_VOTE &&
++		    adreno_is_a730(&a6xx_gpu->base) &&
++		    a6xx_hfi_vote_ack_ready(&gmu->queues[HFI_RESPONSE_QUEUE], seqnum)) {
++			dev_info_ratelimited(gmu->dev, "HFI queued vote ACK after missed MSGQ, seq=%u\n", seqnum);
++			return 0;
++		}
++
+ 		if (completion_done(&a6xx_gpu->base.fault_coredump_done))
+ 			break;
+ 

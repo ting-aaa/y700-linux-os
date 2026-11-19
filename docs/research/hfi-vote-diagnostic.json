@@ -1,0 +1,188 @@
+{
+  "date": "2026-11-18",
+  "scope": "Read-only running boot; PC-side diagnostic Image only",
+  "kernel_release": "7.3.4-asphalt-prc",
+  "baseline_build_id": "8032f7452420cd7f36dc6bf0084ff34ed6d2f25f",
+  "live_and_baseline_elf_notes_sha256": "2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066",
+  "journal_excerpt_sha256": "83841844fcea1a2ac0410cd754ead8717858b5c9d1be30e20a2200ae27e989ef",
+  "gmu_firmware": "4.0.7",
+  "timing_unit": "microseconds on the kernel journal monotonic clock; log-to-log, not firmware latency",
+  "matched_timeout_count": 26,
+  "unmatched_timeouts": 0,
+  "unmatched_stale_reads": 0,
+  "delta_us": {
+    "min": 1892,
+    "median": 2617.0,
+    "max": 26654
+  },
+  "pairs": [
+    {
+      "seq": 1468,
+      "timeout_us": 815870528,
+      "stale_read_us": 815873961,
+      "delta_us": 3433
+    },
+    {
+      "seq": 1917,
+      "timeout_us": 822529879,
+      "stale_read_us": 822532244,
+      "delta_us": 2365
+    },
+    {
+      "seq": 2446,
+      "timeout_us": 830190140,
+      "stale_read_us": 830192583,
+      "delta_us": 2443
+    },
+    {
+      "seq": 2599,
+      "timeout_us": 833115706,
+      "stale_read_us": 833117894,
+      "delta_us": 2188
+    },
+    {
+      "seq": 3404,
+      "timeout_us": 844791140,
+      "stale_read_us": 844793168,
+      "delta_us": 2028
+    },
+    {
+      "seq": 275,
+      "timeout_us": 859195843,
+      "stale_read_us": 859198320,
+      "delta_us": 2477
+    },
+    {
+      "seq": 323,
+      "timeout_us": 860809939,
+      "stale_read_us": 860812078,
+      "delta_us": 2139
+    },
+    {
+      "seq": 356,
+      "timeout_us": 862222627,
+      "stale_read_us": 862224844,
+      "delta_us": 2217
+    },
+    {
+      "seq": 1027,
+      "timeout_us": 1365442770,
+      "stale_read_us": 1365444856,
+      "delta_us": 2086
+    },
+    {
+      "seq": 1100,
+      "timeout_us": 1635892819,
+      "stale_read_us": 1635905888,
+      "delta_us": 13069
+    },
+    {
+      "seq": 2718,
+      "timeout_us": 2059490391,
+      "stale_read_us": 2059510201,
+      "delta_us": 19810
+    },
+    {
+      "seq": 2831,
+      "timeout_us": 2068489879,
+      "stale_read_us": 2068492194,
+      "delta_us": 2315
+    },
+    {
+      "seq": 2936,
+      "timeout_us": 2076891319,
+      "stale_read_us": 2076894669,
+      "delta_us": 3350
+    },
+    {
+      "seq": 3049,
+      "timeout_us": 2085890874,
+      "stale_read_us": 2085894071,
+      "delta_us": 3197
+    },
+    {
+      "seq": 228,
+      "timeout_us": 2240600706,
+      "stale_read_us": 2240602598,
+      "delta_us": 1892
+    },
+    {
+      "seq": 675,
+      "timeout_us": 2247989693,
+      "stale_read_us": 2247991842,
+      "delta_us": 2149
+    },
+    {
+      "seq": 995,
+      "timeout_us": 2253016849,
+      "stale_read_us": 2253020110,
+      "delta_us": 3261
+    },
+    {
+      "seq": 3316,
+      "timeout_us": 2283318755,
+      "stale_read_us": 2283321251,
+      "delta_us": 2496
+    },
+    {
+      "seq": 3613,
+      "timeout_us": 2288067653,
+      "stale_read_us": 2288070362,
+      "delta_us": 2709
+    },
+    {
+      "seq": 1689,
+      "timeout_us": 2652932178,
+      "stale_read_us": 2652934703,
+      "delta_us": 2525
+    },
+    {
+      "seq": 3217,
+      "timeout_us": 14052428816,
+      "stale_read_us": 14052455470,
+      "delta_us": 26654
+    },
+    {
+      "seq": 3281,
+      "timeout_us": 14532604852,
+      "stale_read_us": 14532608130,
+      "delta_us": 3278
+    },
+    {
+      "seq": 626,
+      "timeout_us": 25333143983,
+      "stale_read_us": 25333163510,
+      "delta_us": 19527
+    },
+    {
+      "seq": 682,
+      "timeout_us": 25752434149,
+      "stale_read_us": 25752456928,
+      "delta_us": 22779
+    },
+    {
+      "seq": 1138,
+      "timeout_us": 29172533135,
+      "stale_read_us": 29172536415,
+      "delta_us": 3280
+    },
+    {
+      "seq": 1762,
+      "timeout_us": 33853269355,
+      "stale_read_us": 33853294085,
+      "delta_us": 24730
+    }
+  ],
+  "baseline_inputs_sha256": {
+    ".config": "a20e5eb808bce84a3f5beaea7f02a2182a5d21c6a8e937787b886963aea5aa56",
+    "drivers/gpu/drm/msm/adreno/a6xx_hfi.c": "3a545bcb6baf2505384b5cfd2e32464e5b8de04686af51d77a00917bb7d5343d",
+    "drivers/gpu/drm/msm/adreno/a6xx_gmu.c": "5944b93f6efcf9905423c1a40ac12315d16cefcb092cf133d572766b1d8ee634",
+    "arch/arm64/boot/Image": "9afa9b69763b33133f20d137047084343c5e5465cbb1a0bbfa56b01b9d76b4db"
+  },
+  "diagnostic_patch_sha256": "c357821a91abddb39786742eaeff220aca4c5d7bf3ae9bb3e7474879477d64dc",
+  "candidate_build_id": "0e8f5b28138d21537c136ac754f2548c082820f9",
+  "candidate_image_sha256": "b1d23cf8743f538130f7b1538ee136cdf4296c73a2265c1070fc5d063191d3ae",
+  "candidate_image_bytes": 39410176,
+  "build": "Independent copy of the compiled tree, identical config; incremental ARM64 LLVM Image build",
+  "physical_candidate_test": "pending; no install, boot or acceleration workload"
+}
