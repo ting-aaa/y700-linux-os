@@ -9,6 +9,14 @@ if [[ ${1:-} == --qcam ]]; then
     component=qcam
     shift
 fi
+sdk_output=
+if [[ -n ${CAMERA_SDK_OUTPUT:-} ]]; then
+    [[ $component == runtime && ! -e $CAMERA_SDK_OUTPUT && ! -L $CAMERA_SDK_OUTPUT ]] || {
+        echo 'CAMERA_SDK_OUTPUT must name a new directory for a runtime build.' >&2
+        exit 2
+    }
+    sdk_output=$(realpath -m -- "$CAMERA_SDK_OUTPUT")
+fi
 if [[ $# != 3 ]]; then
     echo 'Usage: build-camera-backport.sh [--qcam] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
@@ -90,6 +98,19 @@ else
     meson compile -C obj -j "$jobs"
     meson test -C obj --no-rebuild --print-errorlogs debayer-geometry
     DESTDIR="$build/$stage" meson install -C obj --no-rebuild
+    if [[ -n $sdk_output ]]; then
+        (
+            mkdir -p -- "$(dirname "$sdk_output")"
+            sdk_tmp=$(mktemp -d -- "$(dirname "$sdk_output")/.camera-sdk.XXXXXXXX")
+            trap 'rm -rf -- "$sdk_tmp"' EXIT
+            mkdir "$sdk_tmp/lib"
+            cp -a -- "$runtime/include" "$sdk_tmp/include"
+            cp -a -- "$runtime/lib/pkgconfig" "$sdk_tmp/lib/pkgconfig"
+            chmod 755 "$sdk_tmp"
+            mv -nT -- "$sdk_tmp" "$sdk_output"
+            [[ ! -e $sdk_tmp ]] || { echo 'SDK output appeared during build.' >&2; exit 1; }
+        )
+    fi
     rm -rf -- "$runtime/include" "$runtime/lib/pkgconfig"
     library_paths=(-l"$runtime/lib")
 fi

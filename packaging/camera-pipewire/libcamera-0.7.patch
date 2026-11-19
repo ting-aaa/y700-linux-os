@@ -1,0 +1,32 @@
+--- a/spa/plugins/libcamera/libcamera-device.cpp
++++ b/spa/plugins/libcamera/libcamera-device.cpp
+@@ -66,7 +66,7 @@
+ static std::string cameraModel(const Camera& camera)
+ {
+ 	if (auto model = camera.properties().get(properties::Model))
+-		return std::move(model.value());
++		return std::string(*model);
+ 
+ 	return camera.id();
+ }
+--- a/spa/plugins/libcamera/libcamera-utils.cpp
++++ b/spa/plugins/libcamera/libcamera-utils.cpp
+@@ -118,7 +118,7 @@
+ 	Stream *stream = impl->config->at(0).stream();
+ 	const std::vector<std::unique_ptr<FrameBuffer>> &bufs =
+ 			impl->allocator->buffers(stream);
+-	const std::vector<libcamera::FrameBuffer::Plane> &planes = bufs[0]->planes();
++	const auto &planes = bufs[0]->planes();
+ 	int fd = -1;
+ 	uint32_t buffers_blocks = 0;
+ 
+--- a/spa/plugins/libcamera/meson.build
++++ b/spa/plugins/libcamera/meson.build
+@@ -9,5 +9,7 @@
+   libcamera_sources,
+   include_directories : [ configinc ],
+   dependencies : [ spa_dep, libcamera_dep, pthread_lib  ],
++  install_rpath : '/opt/y700-camera/lib',
++  install_tag : 'y700-camera',
+   install : true,
+   install_dir : spa_plugindir / 'libcamera')

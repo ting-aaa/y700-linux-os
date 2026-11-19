@@ -1,0 +1,45 @@
+# Sourced by Debian's /usr/bin/chromium after its default flags. The board
+# rule disappears on dpkg --remove, even though this conffile is retained.
+if [ -r /usr/share/wireplumber/wireplumber.conf.d/65-y700-camera.conf ] &&
+   [ -x /usr/libexec/xdg-desktop-portal ] && [ -x /usr/libexec/xdg-desktop-portal-gtk ]; then
+    y700_camera_enabled() {
+        case ",$1," in
+            *,WebRtcPipeWireCamera,*|*,WebRtcPipeWireCamera:*|*,WebRtcPipeWireCamera\<*) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    # A caller's --enable-features switch can supersede the system list.
+    # Keep its other features, field-trial syntax, argument order and quoting.
+    y700_camera_cli=false
+    y700_camera_options=true
+    for y700_camera_arg do
+        shift
+        if "$y700_camera_options"; then
+            case $y700_camera_arg in
+                --) y700_camera_options=false ;;
+                --enable-features=*)
+                    y700_camera_cli=true
+                    y700_camera_list=${y700_camera_arg#*=}
+                    if ! y700_camera_enabled "$y700_camera_list"; then
+                        y700_camera_arg=--enable-features=${y700_camera_list:+$y700_camera_list,}WebRtcPipeWireCamera
+                    fi
+                    ;;
+            esac
+        fi
+        set -- "$@" "$y700_camera_arg"
+    done
+
+    if ! "$y700_camera_cli"; then
+        y700_camera_list=
+        for y700_camera_arg in $CHROMIUM_FLAGS; do
+            case $y700_camera_arg in --enable-features=*) y700_camera_list=${y700_camera_arg#*=} ;; esac
+        done
+        if ! y700_camera_enabled "$y700_camera_list"; then
+            CHROMIUM_FLAGS="$CHROMIUM_FLAGS --enable-features=${y700_camera_list:+$y700_camera_list,}WebRtcPipeWireCamera"
+        fi
+    fi
+    # Chromium applies --disable-features first, so an explicit opt-out wins.
+    unset y700_camera_arg y700_camera_cli y700_camera_list y700_camera_options
+    unset -f y700_camera_enabled
+fi

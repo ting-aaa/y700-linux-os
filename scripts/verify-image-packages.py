@@ -20,7 +20,8 @@ for name in ('debian-base.lock.json', 'desktop-repair-auth.lock.json'):
 control = (repo / 'packaging/control').read_text().splitlines()
 version = next(line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
-for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'camera-qcam'):
+for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc',
+              'camera-qcam', 'camera-pipewire', 'camera-portal'):
     name = f'{layer}.lock.json'
     receipt = args.root / 'var/lib/y700/build' / name
     if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):

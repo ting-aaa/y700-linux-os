@@ -27,7 +27,7 @@
 - **锁定屏幕方向**　从平台包 dev7 起，「设置 → 平板屏幕旋转」可保存当前用户的自动旋转偏好。默认锁定当前方向。打开后，桌面在收到加速度计读数时同步旋转屏幕和触控。现有实机的传感器 DSP 离线，开关会显示正在等待方向传感器。[传感器与桌面验证](docs/CAMERA-SENSORS.md#xfce-screen-rotation)
 - **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。「Network Connections」（网络连接）用于编辑已保存的配置。打开菜单时，网络小程序会请求扫描。实机的触屏选网和重连仍待验证。
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 蓝牙管理器搜索并选择设备。当前实机已启用蓝牙控制器并成功启动发现，键鼠配对、输入和重连仍待实际外设验证。
-- **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。在现有实机系统上，后置主摄、前摄和微距均已向应用提供 640×480 彩色帧。屏幕上看到的画质和实际拍照仍待验收。[相机应用](docs/QCAM.md)
+- **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
 最新 KMS 开发镜像包含 1,069 个软件包，使用固定哈希的 Adreno 候选内核，预装「Y700 相机」和可直接在 DRM 内屏上显示的首次设密键盘。它使用两次 GPU 实机测试所用的 framebuffer 启动设置，已在 ARM64 电脑模拟环境从 EFI 启动到 systemd，并核对内核、该设置及完整软件包清单。原厂 CN350 私有传感器固件包含在本机开发镜像中。新安装使用的蓝牙地址须从该台设备单独配置。[最新镜像与校验值](docs/BOARD-IMAGE.md#kms-touchscreen-build) · [原 1,050 包镜像](docs/BOARD-IMAGE.md#combined-tablet-development-image) · [蓝牙设备身份](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 

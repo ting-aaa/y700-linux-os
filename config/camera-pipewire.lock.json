@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "scope": "optional-y700-pipewire-libcamera-source",
+  "sources": {
+    "plugin": "scripts/build-camera-pipewire.sh"
+  },
+  "packages": [
+    {
+      "package": "y700-camera-pipewire",
+      "version": "1.4.2-1+y700.3",
+      "architecture": "arm64",
+      "size": 53928,
+      "sha256": "f8c010932e9eb2a020a71bcc2a61cb322a24115e5b937a9e74ba4accd073c54d"
+    }
+  ]
+}

@@ -2,12 +2,12 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -29,7 +29,7 @@ case $layer in
             test -x "$root/usr/libexec/y700-firstboot/with-keyboard"
         fi
         ;;
-    camera-qcam)
+    camera-qcam|camera-pipewire)
         test -s "$record/camera-layer.lock.json"
         test -x "$root/opt/y700-camera/bin/cam"
         ;;
@@ -79,6 +79,25 @@ case $layer in
         test -x "$root/usr/bin/y700-camera"
         test -x "$root/opt/y700-camera/bin/qcam"
         test -s "$root/usr/share/applications/org.y700.Camera.desktop"
+        ;;
+    camera-pipewire)
+        plugin=/usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so
+        libraries=$(chroot "$root" env -u LD_LIBRARY_PATH ldd "$plugin")
+        for lib in libcamera.so.0.7 libcamera-base.so.0.7; do
+            grep -Fq "$lib => /opt/y700-camera/lib/$lib " <<< "$libraries"
+        done
+        if grep -Fq 'not found' <<< "$libraries"; then
+            echo "Unresolved camera plugin dependency: $libraries" >&2
+            exit 1
+        fi
+        test -s "$root/etc/chromium.d/zz-y700-camera"
+        test -s "$root/opt/y700-camera/etc/libcamera/configuration.yaml"
+        test -s "$root/usr/share/wireplumber/wireplumber.conf.d/65-y700-camera.conf"
+        ;;
+    camera-portal)
+        test -x "$root/usr/libexec/xdg-desktop-portal"
+        test -x "$root/usr/libexec/xdg-desktop-portal-gtk"
+        grep -Fq 'org.freedesktop.impl.portal.Access' "$root/usr/share/xdg-desktop-portal/portals/gtk.portal"
         ;;
 esac
 install -d "$record"

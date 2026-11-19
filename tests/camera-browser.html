@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src 'self' blob:; base-uri 'none'; form-action 'none'">
+<title>Y700 摄像头验证</title>
+<style>
+  :root { color-scheme: light dark; font: 1rem/1.5 system-ui,sans-serif }
+  body { max-width: 48rem; margin: auto; padding: 1rem }
+  h1 { font-size: 1.5rem }
+  button, select { font: inherit; min-height: 3rem; padding: .5rem .85rem; max-width: 100% }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 1rem 0 }
+  video { display: block; max-width: 100%; width: 100%; height: min(46vh, 25rem); background: #171717; object-fit: contain }
+  output { display: block; margin: .7rem 0 }
+</style>
+<main>
+  <h1>Y700 摄像头验证</h1>
+  <p>先点「获取摄像头」。浏览器可能短暂打开默认摄像头以读取设备名称。请在浏览器和系统权限窗口中选择允许或拒绝。选择镜头后，预览会在收到 12 帧后停止。</p>
+  <button id="discover">获取摄像头</button>
+  <div class="controls">
+    <label for="camera">镜头</label>
+    <select id="camera" disabled><option value="">请先获取摄像头</option></select>
+    <button id="start" disabled>采集 12 帧</button>
+    <button id="stop" disabled>停止</button>
+  </div>
+  <video id="preview" muted playsinline></video>
+  <output id="status" role="status">等待开始</output>
+  <ul id="results" aria-label="各镜头的采集结果"></ul>
+</main>
+<script>
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const preview = $("preview"), camera = $("camera"), results = $("results");
+  const sensors = [
+    ["rear", "HI1339", "Y700 Rear Camera", "y700_camera_rear"],
+    ["front", "S5K4H7", "Y700 Front Camera", "y700_camera_front"],
+    ["macro", "SC202CS", "Y700 Rear Macro Camera", "y700_camera_macro"]
+  ];
+  const devices = new Map();
+  const supported = window.isSecureContext && navigator.mediaDevices?.getUserMedia &&
+    navigator.mediaDevices.enumerateDevices && preview.requestVideoFrameCallback;
+  let operation = 0, stream = null, timer = 0, callback = null;
+
+  function finish(message) {
+    operation++;
+    clearTimeout(timer);
+    if (callback !== null) preview.cancelVideoFrameCallback(callback);
+    callback = null;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = null;
+    preview.srcObject = null;
+    $("discover").disabled = !supported;
+    camera.disabled = !devices.size;
+    $("start").disabled = !devices.has(camera.value);
+    $("stop").disabled = true;
+    $("status").textContent = message;
+  }
+
+  function begin(message) {
+    finish(message);
+    $("discover").disabled = camera.disabled = $("start").disabled = true;
+    $("stop").disabled = false;
+    timer = setTimeout(() => finish("等待超时。请关闭仍打开的权限窗口后重试。"), 45000);
+    return operation;
+  }
+
+  async function openCamera(id, video) {
+    const acquired = await navigator.mediaDevices.getUserMedia({audio: false, video});
+    if (id !== operation) {
+      acquired.getTracks().forEach(track => track.stop());
+      return null;
+    }
+    stream = acquired;
+    return acquired;
+  }
+
+  function reportError(id, error) {
+    if (id === operation) finish(error.name === "NotAllowedError"
+      ? "摄像头访问被拒绝。可在浏览器或系统权限设置中更改后重试。"
+      : `采集失败：${error.message || error.name}`);
+  }
+
+  $("discover").onclick = async () => {
+    const id = begin("等待设备授权…");
+    devices.clear();
+    camera.replaceChildren();
+    results.replaceChildren();
+    try {
+      if (!await openCamera(id, true)) return;
+      const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+      if (id !== operation) return;
+      for (const [key, sensor, label, alias] of sensors) {
+        const matches = inputs.filter(d => d.label === label || d.label === alias);
+        const option = new Option(`${sensor} · ${label}`, key);
+        if (matches.length === 1 && matches[0].deviceId) {
+          devices.set(key, matches[0]);
+        } else {
+          option.disabled = true;
+          option.text += matches.length > 1 ? "（名称重复）" : "（未找到）";
+        }
+        camera.add(option);
+      }
+      camera.value = devices.keys().next().value || "";
+      finish(`找到 ${devices.size} 个可单独验证的 Y700 镜头。`);
+    } catch (error) { reportError(id, error); }
+  };
+
+  $("start").onclick = async () => {
+    const device = devices.get(camera.value);
+    if (!device) return;
+    const key = camera.value, id = begin(`正在打开 ${device.label}…`);
+    $("result-" + key)?.remove();
+    try {
+      const acquired = await openCamera(id, {deviceId: {exact: device.deviceId},
+        width: {ideal: 640}, height: {ideal: 480}});
+      if (!acquired) return;
+      const [track] = acquired.getVideoTracks(), settings = track.getSettings();
+      if (track.label !== device.label || (settings.deviceId && settings.deviceId !== device.deviceId))
+        throw Error("浏览器返回了其他镜头");
+      track.onended = () => { if (id === operation) finish("视频轨道已断开。"); };
+      preview.srcObject = acquired;
+      await preview.play();
+      if (id !== operation) return;
+      let count = 0, lastFrame = -1, lastTime = -1;
+      function frame(now, meta) {
+        if (id !== operation) return;
+        const {presentedFrames, mediaTime, width, height} = meta;
+        if (!Number.isInteger(presentedFrames) || !Number.isFinite(mediaTime) ||
+            !((width === 640 && height === 480) || (width === 480 && height === 640))) {
+          finish(`帧元数据异常或尺寸不符：${width}×${height}`);
+          return;
+        }
+        if (presentedFrames > lastFrame && mediaTime > lastTime) {
+          count++;
+          lastFrame = presentedFrames;
+          lastTime = mediaTime;
+          $("status").textContent = `${device.label} · ${width}×${height} · ${count}/12 帧`;
+        }
+        if (count === 12) {
+          const text = `${device.label} · 轨道 ${settings.width}×${settings.height} · 呈现 ${width}×${height} · 12/12 帧`;
+          const row = $("result-" + key) || results.appendChild(document.createElement("li"));
+          row.id = "result-" + key;
+          row.textContent = text;
+          finish(text);
+          return;
+        }
+        callback = preview.requestVideoFrameCallback(frame);
+      }
+      callback = preview.requestVideoFrameCallback(frame);
+    } catch (error) { reportError(id, error); }
+  };
+
+  $("stop").onclick = () => finish("已停止");
+  addEventListener("pagehide", () => finish("已停止"));
+  if (!supported) {
+    $("discover").disabled = true;
+    $("status").textContent = "请通过 localhost 使用支持摄像头和视频帧回调的浏览器。";
+  }
+</script>
+</html>
