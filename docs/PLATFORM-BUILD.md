@@ -38,6 +38,12 @@ The USB descriptor class and function combination follow the repaired prototype.
 
 ## Tablet display scale
 
+Platform dev9 selects a 200% starting scale for Xfce when the Lenovo Asphalt device tree is present and DSI-1 is the sole active output at its native 1600×2560 resolution in either orientation. At 200% this gives compatible apps an 800×1280 portrait or 1280×800 landscape workspace in logical pixels. The system uses the active mode for this decision because the stock Xorg driver drops the panel's physical dimensions. A session starting with an active external display uses its ordinary Xfce defaults. [Panel measurements](PANEL-GEOMETRY.md)
+
+Debian's Xsession hook adds a one-property Xfconf profile before startup. Xfconf merges the system channels in XDG search order and then reads the user's saved values. A saved integer scale takes priority. Older profiles containing an empty scale property inherit the board default. [Xfconf 4.20 merge implementation](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconfd/xfconf-backend-perchannel-xml.c#L1681-L1724)
+
+A single-package upgrade to dev9 on the PRC tablet preserved the running boot and service invocations. Reading its actual DSI topology and loading an isolated ordinary-user Xfconf profile returned scale 2. In Debian ARM64, four new X11 sessions using real GTK and Thunar measured 1280 physical pixels of window width with the tablet profile or a legacy empty value, and 640 with an explicit 100% setting or the standard system profile. A verified dev8 archive is retained for downgrade. The dev9 package SHA-256 is `a1e1fa923877ecbc60963814bed6811bf3544c05f9fdab7fb5689c976f57d0e4` at epoch `1795095900`. Run `bash tests/tablet-xsession-scale.sh` and `bash tests/tablet-scale-default-x11.sh` with the installed package to reproduce the selector and window tests.
+
 From the Xfce applications menu, open **Settings → Tablet display scale**. Select **200% Larger controls** for touch or **100% Standard** to restore the standard desktop scale. Both choices apply immediately through Xfce's user XSettings. Reopen apps that keep their old size.
 
 The launcher writes the current user's `xsettings:/Gdk/WindowScalingFactor` when a scale is selected. The option applies to the signed-in X11 desktop and compatible apps across all connected displays. Xfce Appearance uses the same setting for its 1× and 2× options. [Xfce 4.20.1 source](https://github.com/xfce-mirror/xfce4-settings/blob/xfce4-settings-4.20.1/dialogs/appearance-settings/main.c)
