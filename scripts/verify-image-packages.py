@@ -7,20 +7,53 @@ from pathlib import Path
 
 from camera_layer import RECEIPT, load_camera_lock
 
+
+def package_tuple(p):
+    return (p['package'], p['version'], p['architecture'])
+
+
+def replacements(lock):
+    # The existing single-package Blueman receipt uses an object.
+    entries = lock.get('replaces', [])
+    if isinstance(entries, dict):
+        entries = [entries]
+    return [package_tuple(p) for p in entries]
+
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('root', type=Path)
-parser.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
+mode = parser.add_mutually_exclusive_group()
+mode.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
+mode.add_argument('--check-upgrade', choices=('blueman', 'xorg-dsi'),
+                  help='Check replacement-package parents before the offline upgrade')
 args = parser.parse_args()
 
 repo = Path(__file__).resolve().parents[1]
 wanted = set()
 for name in ('debian-base.lock.json', 'desktop-repair-auth.lock.json'):
     packages = json.loads((repo / 'config' / name).read_text())['packages']
-    wanted.update((p['package'], p['version'], p['architecture']) for p in packages)
+    wanted.update(map(package_tuple, packages))
+output = subprocess.check_output(['dpkg-query', f'--admindir={args.root}/var/lib/dpkg',
+                                  '-W', '-f=${Package}\\t${Version}\\t${Architecture}\\t${db:Status-Status}\\n'], text=True)
+status = {tuple(fields[:3]): fields[3] for fields in (row.split('\t') for row in output.splitlines())}
+actual = {package for package, state in status.items() if state == 'installed'}
+if args.check_upgrade:
+    lock = json.loads((repo / 'config' / f'{args.check_upgrade}.lock.json').read_text())
+    candidates = {(p['package'], p['architecture']): package_tuple(p) for p in lock['packages']}
+    for parent in replacements(lock):
+        package, _, arch = parent
+        if parent not in wanted:
+            raise SystemExit(f'{args.check_upgrade} parent differs from the locked Debian base: {parent}')
+        # dpkg can be interrupted after unpacking the candidate and before configuration.
+        candidate_state = status.get(candidates[package, arch])
+        if parent not in actual and candidate_state not in (
+                'installed', 'half-installed', 'unpacked', 'half-configured', 'triggers-awaited', 'triggers-pending'):
+            raise SystemExit(f'Unexpected installed {package}:{arch} version for {args.check_upgrade}')
+    raise SystemExit(0)
 control = (repo / 'packaging/control').read_text().splitlines()
 version = next(line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
-for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'blueman', 'chinese-ime',
+for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'blueman', 'chinese-ime', 'xorg-dsi',
               'camera-qcam', 'camera-pipewire', 'camera-portal'):
     name = f'{layer}.lock.json'
     receipt = args.root / 'var/lib/y700/build' / name
@@ -31,14 +64,11 @@ for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'bluema
     expected = json.loads((repo / 'config' / name).read_text())
     if json.loads(receipt.read_text()) != expected:
         raise SystemExit(f'{name} receipt differs from the build input lock')
-    if layer == 'blueman':
-        # The local fix updates the base package. Refuse a changed parent version.
-        parent = expected['replaces']
-        original = (parent['package'], parent['version'], parent['architecture'])
+    for original in replacements(expected):
         if original not in wanted:
-            raise SystemExit('Blueman fix does not match the locked Debian base')
+            raise SystemExit(f'{layer} parent differs from the locked Debian base: {original}')
         wanted.remove(original)
-    wanted.update((p['package'], p['version'], p['architecture']) for p in expected['packages'])
+    wanted.update(map(package_tuple, expected['packages']))
 camera_receipt = args.root / RECEIPT
 if camera_receipt.is_symlink():
     raise SystemExit('Camera layer receipt must be a regular file')
@@ -50,9 +80,6 @@ if camera_receipt.exists():
 elif args.camera_lock:
     raise SystemExit('Integrated camera layer receipt is missing')
 
-output = subprocess.check_output(['dpkg-query', f'--admindir={args.root}/var/lib/dpkg',
-                                  '-W', '-f=${Package}\\t${Version}\\t${Architecture}\\t${db:Status-Status}\\n'], text=True)
-actual = {tuple(row.split('\t')[:3]) for row in output.splitlines() if row.endswith('\tinstalled')}
 if wanted != actual:
     raise SystemExit(f'Package mismatch: missing={sorted(wanted-actual)} extra={sorted(actual-wanted)}')
 records = ''.join('\t'.join(record) + '\n' for record in sorted(actual))

@@ -2,12 +2,12 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -44,11 +44,8 @@ cleanup() {
 trap cleanup EXIT
 cp -- "$archives/"*.deb "$stage/"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$stage" "$lock"
-if [[ $layer == blueman ]]; then
-    from=$("${py[@]}" -c 'import json,sys; print(json.load(open(sys.argv[1]))["replaces"]["version"])' "$lock")
-    current=$(chroot "$root" dpkg-query -W -f='${Version}' blueman)
-    candidate=$(dpkg-deb -f "$stage"/blueman_*.deb Version)
-    [[ $current == "$from" || $current == "$candidate" ]] || { echo 'Unexpected Blueman base version' >&2; exit 1; }
+if [[ $layer == blueman || $layer == xorg-dsi ]]; then
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --check-upgrade "$layer"
 fi
 debs=()
 for path in "$stage/"*.deb; do debs+=("${path#"$root"}"); done
@@ -74,6 +71,10 @@ case $layer in
     blueman)
         test -x "$root/usr/bin/blueman-applet"
         test -s "$root/etc/xdg/autostart/blueman.desktop"
+        ;;
+    xorg-dsi)
+        test -x "$root/usr/lib/xorg/Xorg"
+        test -s "$root/usr/lib/xorg/modules/drivers/modesetting_drv.so"
         ;;
     firstboot-touch)
         test -x "$root/usr/libexec/y700-firstboot/with-keyboard"
