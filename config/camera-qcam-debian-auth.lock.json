@@ -1,0 +1,205 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "deb.debian.org_debian_dists_trixie-updates_InRelease",
+      "sha256": "956718d8a45011572372ec8b6ada7473238fde4b6ab7af1bab4ecaecae965727",
+      "date": "Thu, 19 Nov 2026 02:12:54 UTC",
+      "valid_until": "Thu, 26 Nov 2026 02:12:54 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "7f1dd99bbd1a0416d39499892ec12ff38d80637029114d234c38972bba8ae041",
+          "size": 2351
+        }
+      ]
+    },
+    {
+      "file": "deb.debian.org_debian_dists_trixie_InRelease",
+      "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+          "size": 56162922
+        }
+      ]
+    },
+    {
+      "file": "security.debian.org_debian-security_dists_trixie-security_InRelease",
+      "sha256": "9b5b3b107b97b432c66698cc37ba8e52a4cb5085c73e8bb0e3ea6581034536ed",
+      "date": "Thu, 19 Nov 2026 05:45:40 UTC",
+      "valid_until": "Thu, 26 Nov 2026 05:45:40 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "34a602d3819c6a55bf97ecc754538a2e5849aa4b304bfbf27d1e49ad677e4a10",
+          "size": 2668763
+        }
+      ]
+    }
+  ],
+  "installed_count": 17,
+  "authenticated_count": 17,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "libb2-1",
+      "version": "0.98.1-1.1+b2",
+      "architecture": "arm64",
+      "size": 16344,
+      "sha256": "e6255eb2e49677fb7d127b2b48baa7850adb950cd08b415d57e90a37bca6360e",
+      "uri": "https://deb.debian.org/debian/pool/main/libb/libb2/libb2-1_0.98.1-1.1+b2_arm64.deb",
+      "repository_path": "pool/main/libb/libb2/libb2-1_0.98.1-1.1+b2_arm64.deb"
+    },
+    {
+      "package": "libmd4c0",
+      "version": "0.5.2-2+b1",
+      "architecture": "arm64",
+      "size": 46052,
+      "sha256": "fbeaf1abceacb4b081355e16deb7c41e23df719754b10525c35320d808050bda",
+      "uri": "https://deb.debian.org/debian/pool/main/m/md4c/libmd4c0_0.5.2-2+b1_arm64.deb",
+      "repository_path": "pool/main/m/md4c/libmd4c0_0.5.2-2+b1_arm64.deb"
+    },
+    {
+      "package": "libopengl0",
+      "version": "1.7.0-1+b2",
+      "architecture": "arm64",
+      "size": 32148,
+      "sha256": "1880bc8e29a9dfd2823fc0b88f514eb65699d961ec967d2ed2ba692c241fa09a",
+      "uri": "https://deb.debian.org/debian/pool/main/libg/libglvnd/libopengl0_1.7.0-1+b2_arm64.deb",
+      "repository_path": "pool/main/libg/libglvnd/libopengl0_1.7.0-1+b2_arm64.deb"
+    },
+    {
+      "package": "libpcre2-16-0",
+      "version": "10.46-1~deb13u3",
+      "architecture": "arm64",
+      "size": 247336,
+      "sha256": "6aefea24fc8345e56bdf69a3f36190a4b852d8d000a4ea960888ee3ebedeb13b",
+      "uri": "https://security.debian.org/debian-security/pool/updates/main/p/pcre2/libpcre2-16-0_10.46-1~deb13u3_arm64.deb",
+      "repository_path": "pool/updates/main/p/pcre2/libpcre2-16-0_10.46-1~deb13u3_arm64.deb"
+    },
+    {
+      "package": "libqt6core6t64",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 1680380,
+      "sha256": "9a357f28ace917f65d114aaa26aed4ee67e2858797f0a2d01130f299350df208",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6core6t64_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6core6t64_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libqt6dbus6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 247376,
+      "sha256": "8b638af64728b15c4aee768abed39ab96d40063edde17fa0f633253fdc5bce92",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6dbus6_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6dbus6_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libqt6gui6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 2853124,
+      "sha256": "665de7d3d4ef9376797b5123a6169cd63a55e3f4f26d338ebf58fee227582d75",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6gui6_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6gui6_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libqt6opengl6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 386260,
+      "sha256": "edbc333ff0d23f1e635a4c6c678ddef4c9ff06fb9cc963cebae88f2542d2e8ba",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6opengl6_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6opengl6_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libqt6openglwidgets6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 49652,
+      "sha256": "a5e263a7ced863398417a9b2f3feb8d9df78c43e1d8d8f8fa0b76ffd1ff65f5f",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6openglwidgets6_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6openglwidgets6_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libqt6widgets6",
+      "version": "6.8.2+dfsg-9+deb13u2",
+      "architecture": "arm64",
+      "size": 2473232,
+      "sha256": "04176b005896051fe0210a40766427daf9e7bc512214b929cd28e559514d947a",
+      "uri": "https://deb.debian.org/debian/pool/main/q/qt6-base/libqt6widgets6_6.8.2+dfsg-9+deb13u2_arm64.deb",
+      "repository_path": "pool/main/q/qt6-base/libqt6widgets6_6.8.2+dfsg-9+deb13u2_arm64.deb"
+    },
+    {
+      "package": "libts0t64",
+      "version": "1.22-1.1+b1",
+      "architecture": "arm64",
+      "size": 61616,
+      "sha256": "9d8809fef3271377d95fbf976716802b0c99a0ce6143117547e4eedf44271ea0",
+      "uri": "https://deb.debian.org/debian/pool/main/t/tslib/libts0t64_1.22-1.1+b1_arm64.deb",
+      "repository_path": "pool/main/t/tslib/libts0t64_1.22-1.1+b1_arm64.deb"
+    },
+    {
+      "package": "libxcb-cursor0",
+      "version": "0.1.5-1",
+      "architecture": "arm64",
+      "size": 17096,
+      "sha256": "1cb16052bb33d6d2479b4b1dde95b1252a7fcdc5672d0fff72676b3bdf5e66e1",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xcb-util-cursor/libxcb-cursor0_0.1.5-1_arm64.deb",
+      "repository_path": "pool/main/x/xcb-util-cursor/libxcb-cursor0_0.1.5-1_arm64.deb"
+    },
+    {
+      "package": "libxcb-icccm4",
+      "version": "0.4.2-1",
+      "architecture": "arm64",
+      "size": 27208,
+      "sha256": "4f9b048b98cd9cd7b0a553c8eff05bcd25cfc4fbfddbe4f83e9d6a9c82e2d876",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xcb-util-wm/libxcb-icccm4_0.4.2-1_arm64.deb",
+      "repository_path": "pool/main/x/xcb-util-wm/libxcb-icccm4_0.4.2-1_arm64.deb"
+    },
+    {
+      "package": "libxcb-image0",
+      "version": "0.4.0-2+b2",
+      "architecture": "arm64",
+      "size": 21924,
+      "sha256": "25ea3790081635a5f69c96afa2d44efbd04ad4e4c02d0357bf98ff000f12702a",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xcb-util-image/libxcb-image0_0.4.0-2+b2_arm64.deb",
+      "repository_path": "pool/main/x/xcb-util-image/libxcb-image0_0.4.0-2+b2_arm64.deb"
+    },
+    {
+      "package": "libxcb-keysyms1",
+      "version": "0.4.1-1",
+      "architecture": "arm64",
+      "size": 16776,
+      "sha256": "aa1d09f42d23dc8fb4d7e6069d8d15fe20080f8574321220bcf0d028c8e7a57f",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xcb-util-keysyms/libxcb-keysyms1_0.4.1-1_arm64.deb",
+      "repository_path": "pool/main/x/xcb-util-keysyms/libxcb-keysyms1_0.4.1-1_arm64.deb"
+    },
+    {
+      "package": "libxcb-render-util0",
+      "version": "0.3.10-1",
+      "architecture": "arm64",
+      "size": 18456,
+      "sha256": "f4a33bcc7780f404623a608823b48b91d9ac776a1396d56e9916cbfee49b182c",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xcb-util-renderutil/libxcb-render-util0_0.3.10-1_arm64.deb",
+      "repository_path": "pool/main/x/xcb-util-renderutil/libxcb-render-util0_0.3.10-1_arm64.deb"
+    },
+    {
+      "package": "libxcb-xinput0",
+      "version": "1.17.0-2+b1",
+      "architecture": "arm64",
+      "size": 129924,
+      "sha256": "ebc39f2f1940a03963b0c1db916b19178e8078132adb669a27cfa8dd38c5d3c3",
+      "uri": "https://deb.debian.org/debian/pool/main/libx/libxcb/libxcb-xinput0_1.17.0-2+b1_arm64.deb",
+      "repository_path": "pool/main/libx/libxcb/libxcb-xinput0_1.17.0-2+b1_arm64.deb"
+    }
+  ]
+}

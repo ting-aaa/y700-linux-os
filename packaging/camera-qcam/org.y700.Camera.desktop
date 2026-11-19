@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Y700 Camera
+Name[zh_CN]=Y700 相机
+Exec=/usr/bin/y700-camera
+TryExec=/usr/bin/y700-camera
+Icon=camera-photo
+Terminal=false
+Categories=Graphics;Photography;

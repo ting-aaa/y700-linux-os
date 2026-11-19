@@ -65,6 +65,8 @@ bash tests/board-image-vm.sh "$DEST" "$BOARD" "$QEMU" "$NEW_VM_DIRECTORY"
 
 The resulting image ID is `y700-prc-5a984d0e-d1eb-4760-9120-1115d9ac41b5`. Readback from ext4 verified the matching CN350 SLPI metadata, camera runtime, enrollment keyboard, greeter configuration, Bluetooth helper and SSC listener. Readback from FAT matched the selected kernel. The 4 KiB-sector ARM64 EFI guest reached systemd with `/dev/vda2` as root and `/dev/vda1` as ESP. It verified the actual kernel notes and all 1,050 package tuples.
 
+Readback of the actual FAT entry also confirmed the default console framebuffer configuration. The two 30-minute hardware GPU tests used the same kernel with the additional boot option `drm_kms_helper.fbdev_emulation=0` on a previously enrolled installation. The combined image's first-boot keyboard uses `/dev/fb0`. With the default entry, the same EFI guest completed first password setup, authenticated Xfce login and logout back to the keyboard. The GPU results and the guest login results cover different boot configurations. [Touch login evidence](WARM-GREETER.md)
+
 | Combined image artifact | SHA-256 |
 | --- | --- |
 | `root.ext4` | `9d8b4f486a94e4fc28aabeaa0842eb77e1ae533a95a9b6203be44a290929ee55` |

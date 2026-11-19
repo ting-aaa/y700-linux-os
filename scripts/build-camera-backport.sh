@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# Build an isolated camera runtime on Debian 13 ARM64.
+# Build the isolated camera runtime or its optional qcam desktop app on Debian 13 ARM64.
 set -euo pipefail
 export LC_ALL=C
 umask 022
 
+component=runtime
+if [[ ${1:-} == --qcam ]]; then
+    component=qcam
+    shift
+fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-backport.sh SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
+    echo 'Usage: build-camera-backport.sh [--qcam] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
 asphalt=$(realpath -e -- "$2")
 output=$(realpath -m -- "$3")
+repo=$(dirname -- "$(dirname -- "$(realpath -e -- "$0")")")
 if [[ $(dpkg --print-architecture) != arm64 || $(. /etc/os-release; printf '%s' "$VERSION_CODENAME") != trixie ]]; then
     echo 'Use an ARM64 Debian trixie build root.' >&2
     exit 1
@@ -43,25 +49,54 @@ for file in "$patch_dir/asphalt.patch" "$patch_dir"/000[1-6]-*.patch; do
 done
 
 prefix=/opt/y700-camera
+cam=enabled
+gstreamer=enabled
+qcam=disabled
+tests=true
+if [[ $component == qcam ]]; then
+    cam=disabled
+    gstreamer=disabled
+    qcam=enabled
+    tests=false
+fi
 meson setup obj source --prefix="$prefix" --libdir=lib \
     --wrap-mode=nodownload -Dbuildtype=release -Doptimization=2 -Dwerror=false \
     -Dpipelines=simple -Dipas=simple -Dsoftisp-gpu=enabled -Dudev=enabled \
-    -Dcam=enabled -Dcam-output-kms=disabled -Dcam-output-sdl2=disabled \
-    -Dgstreamer=enabled -Ddocumentation=disabled -Dpycamera=disabled -Dqcam=disabled \
-    -Dtracing=disabled -Dtest=true -Dv4l2=disabled -Dlc-compliance=disabled
-meson compile -C obj -j "$jobs"
-meson test -C obj --no-rebuild --print-errorlogs debayer-geometry
+    -Dcam="$cam" -Dcam-output-kms=disabled -Dcam-output-sdl2=disabled \
+    -Dgstreamer="$gstreamer" -Ddocumentation=disabled -Dpycamera=disabled -Dqcam="$qcam" \
+    -Dtracing=disabled -Dtest="$tests" -Dv4l2=disabled -Dlc-compliance=disabled
 
-package=y700-camera-runtime
+runtime_package=y700-camera-runtime
+version=0.7.2-1~bpo13+1.y7001
+package=$runtime_package
+extra_dependencies=
+summary='Private libcamera runtime for the Lenovo TB320FC'
+details=$' Contains the simple pipeline, software ISP, cam and a GStreamer plugin.\n Programs and libraries in /opt/y700-camera require explicit selection.'
+if [[ $component == qcam ]]; then
+    package=y700-camera-qcam
+    extra_dependencies="$runtime_package (= $version), "
+    summary='Qt desktop camera app for the Lenovo TB320FC'
+    details=' Starts upstream qcam with the Y700 libcamera runtime and CPU software ISP.'
+fi
 stage=debian/$package
-DESTDIR="$build/$stage" meson install -C obj --no-rebuild
 runtime=$stage$prefix
-rm -rf -- "$runtime/include" "$runtime/lib/pkgconfig"
-install -Dm644 source/debian/copyright "$stage/usr/share/doc/y700-camera-runtime/copyright"
+if [[ $component == qcam ]]; then
+    meson compile -C obj -j "$jobs" qcam
+    DESTDIR="$build/$stage" meson install -C obj --no-rebuild --tags bin
+    install -Dm755 "$repo/packaging/camera-qcam/y700-camera" "$stage/usr/bin/y700-camera"
+    install -Dm644 "$repo/packaging/camera-qcam/org.y700.Camera.desktop" "$stage/usr/share/applications/org.y700.Camera.desktop"
+    library_paths=(-l"$build/obj/src/libcamera" -l"$build/obj/src/libcamera/base")
+else
+    meson compile -C obj -j "$jobs"
+    meson test -C obj --no-rebuild --print-errorlogs debayer-geometry
+    DESTDIR="$build/$stage" meson install -C obj --no-rebuild
+    rm -rf -- "$runtime/include" "$runtime/lib/pkgconfig"
+    library_paths=(-l"$runtime/lib")
+fi
+install -Dm644 source/debian/copyright "$stage/usr/share/doc/$package/copyright"
 
 # Resolve ELF dependencies on Trixie. The bundled libcamera libraries are
 # supplied together in this package and never entered in the system cache.
-version=0.7.2-1~bpo13+1.y7001
 mkdir -p debian "$stage/DEBIAN" "$output"
 cat > debian/control <<EOF
 Source: $package
@@ -70,8 +105,8 @@ Package: $package
 Architecture: arm64
 EOF
 cat > debian/shlibs.local <<EOF
-libcamera 0.7 $package (= $version)
-libcamera-base 0.7 $package (= $version)
+libcamera 0.7 $runtime_package (= $version)
+libcamera-base 0.7 $runtime_package (= $version)
 EOF
 elf=()
 while IFS= read -r -d '' binary; do
@@ -79,7 +114,7 @@ while IFS= read -r -d '' binary; do
         elf+=(-e "$binary")
     fi
 done < <(find "$runtime" -type f -print0)
-depends=$(dpkg-shlibdeps -x"$package" -l"$runtime/lib" -O "${elf[@]}")
+depends=$(dpkg-shlibdeps -x"$runtime_package" "${library_paths[@]}" -O "${elf[@]}")
 [[ $depends == shlibs:Depends=* ]] || { echo 'Could not resolve ELF dependencies.' >&2; exit 1; }
 size=$(du -sk "$stage" | cut -f1)
 cat > "$stage/DEBIAN/control" <<EOF
@@ -90,10 +125,9 @@ Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
 Section: video
 Priority: optional
 Installed-Size: $size
-Depends: ${depends#shlibs:Depends=}
-Description: Private libcamera runtime for the Lenovo TB320FC
- Contains the simple pipeline, software ISP, cam and a GStreamer plugin.
- Programs and libraries in /opt/y700-camera require explicit selection.
+Depends: $extra_dependencies${depends#shlibs:Depends=}
+Description: $summary
+$details
 EOF
 filename=${package}_${version}_arm64.deb
 archive=$(mktemp "$output/.$filename.XXXXXXXX")

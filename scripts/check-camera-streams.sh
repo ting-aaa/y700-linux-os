@@ -32,13 +32,15 @@ capture() {
     fi
     awk -v count="$count" -v sensor="$sensor" -v format="$format" '
         /cam0-stream0 seq:/ {
+            seq=""
+            bytes=""
             for (i=1; i<=NF; i++) {
-                if ($i=="seq:") seq=$(i+1)+0
-                if ($i=="bytesused:") bytes=$(i+1)+0
+                if ($i=="seq:") seq=$(i+1)
+                if ($i=="bytesused:") bytes=$(i+1)
             }
-            if (bytes<=0 || (frames>0 && seq<=last)) bad=1
+            if (seq !~ /^[0-9]+$/ || bytes !~ /^[0-9]+$/ || bytes+0<=0 || (frames>0 && seq+0<=last)) bad=1
             frames++
-            last=seq
+            last=seq+0
         }
         END {
             if (frames!=count || bad) {

@@ -2,6 +2,8 @@
 
 This maps source evidence and missing integration. A DT compatible or registry candidate is not proof of the populated chip or a working driver. The principal fixed reference is the [Asphalt board patch](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0006-asphalt-board-dts.patch), with the later patches listed in its [queue](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/series.nix). The local PRC build keeps this wiring while adapting region/memory.
 
+The table records the November 18 investigation. For later on-device playback, camera capture, Bluetooth discovery and GPU tests, see [current hardware status](STATUS.md). The [camera and SSC notes](CAMERA-SENSORS.md) include the completed native FastRPC, libssc and proxy builds and the firmware incorporated into the combined image.
+
 | Function | Identified interface / source candidate | Current evidence and implementation route |
 | --- | --- | --- |
 | GPU | SM8475 / Adreno 730, DRM/MSM + GMU + Mesa Freedreno/Turnip | Fault unresolved; [hypothesis table](GPU-INVESTIGATION.md) |

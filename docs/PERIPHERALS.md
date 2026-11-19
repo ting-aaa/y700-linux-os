@@ -12,6 +12,21 @@ The pinned NixOS port for the same tablet reports discovery and unpaired L2CAP t
 
 Run `bash scripts/check-bluetooth-hid.sh` on the booted Debian system before and after connecting each peripheral through Blueman. It reports controller power, whether BlueZ returns a nonzero address and Bluetooth input event-node counts without logging peer names, addresses or keystrokes. Test a keyboard and mouse independently. Confirm harmless text input, pointer movement, buttons and scroll in Xfce. Power-cycle each peripheral, then check reconnect after a new session and after suspend once that system path is ready. Record the device type and transport (Classic or LE) with each result. Input nodes are evidence of kernel enumeration. The interaction checks establish whether Xfce can use them.
 
+The dev6 platform upgrade on the existing tablet preserved the boot and LightDM invocation. Its enabled Bluetooth identity unit succeeded, matched the original adapter address and left the controller powered. During a 15-second LE scan the tablet's BlueZ returned the random 16-byte payload broadcast by the computer's physical Bluetooth adapter. The sender stopped advertising, and the tablet returned to discovery off. No keyboard or mouse event nodes were present. This test establishes reception of an identifiable packet over the air. Pairing, HID input and reconnect still require each type of peripheral.
+
+### Prepare a fresh installation
+
+The common image omits per-unit identities. From the same tablet's private Android backup, use `data/misc/bluedroid/bt_config.conf` and saved `getprop` output on the build host. The importer reads the local `[Adapter]` address, checks the original TB320FC property in displayed order, and writes a new private file. Pairing keys and peer records stay in the backup.
+
+```sh
+umask 077
+uv run --no-project --python 3.13 python scripts/prepare-bluetooth-identity.py \
+  --android-config "$PRIVATE_ANDROID_CONFIG" --getprop "$PRIVATE_GETPROP" \
+  --output "$PRIVATE_DIR/bluetooth-address"
+```
+
+On a fresh per-device installation, install that one file as `/etc/y700/bluetooth-address` with owner root and mode 0600. The enabled unit runs at BlueZ startup. After provisioning an already running tablet, start `y700-bluetooth-identity.service` and check controller power using `scripts/check-bluetooth-hid.sh`.
+
 ## Built-in speakers
 
 The stock-derived board wiring has two CS35L45s. The PRC Debian kernel identified both as revision A0/OTP 0B. It also logged an ADSP AudioReach `APM_CMD_GET_SPF_STATE` timeout and a playback frontend with no enabled backend. Identify the actual enumerated card, its controls and the UCM result before changing topology or gain. A separate postmarketOS port for the Lenovo Q706F demonstrates the same amplifier's dependency on correctly named protection firmware. Its board wiring, speaker count and profile are specific to that tablet. [Asphalt sound and DSP device tree](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0008-asphalt-usb-audio.patch) · [AudioReach opcode definitions](https://github.com/torvalds/linux/blob/master/sound/soc/qcom/qdsp6/audioreach.h) · [Q706F observations](https://github.com/dasudiy/pmos-lenovo-q706f#4-audio-only-dummy-output)
