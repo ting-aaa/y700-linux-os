@@ -97,6 +97,8 @@ Image `y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f` booted in the ARM64 EFI te
 | `asphalt-prc-u-boot.img` | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
 | `identity.txt` | `2c4c34193f039e0061a2fb7156a913d65bf0b0d90eb81b32c89d3505ecc0d74b` |
 
+A second snapshot of these delivered files reached the normal graphical target. The factory account remained locked after a confirmation mismatch. Retrying through the DRM touch keyboard, signing in to Xfce with the same password, then using Xfce's logout dialog returned to Arctica and Onboard. The four file hashes matched again after shutdown. [Full first-boot evidence](FIRSTBOOT-DRM.md)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.

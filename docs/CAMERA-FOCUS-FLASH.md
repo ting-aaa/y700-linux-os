@@ -1,0 +1,48 @@
+# Camera focus and flash on TB320FC_PRC
+
+The 2023 TB320FC has a 13 MP autofocus rear main camera, an 8 MP fixed-focus front camera, a 2 MP fixed-focus rear macro camera and one rear LED. The board maps these to HI1339, S5K4H7 and SC202CS. On 2026-11-19, `cam --list-controls` on the tablet's installed private libcamera reported only `Contrast` and `Gamma` for each camera. The current stack exposes neither autofocus nor flash. [Lenovo TB320FC PSREF](https://psref.lenovo.com/Product/Lenovo_Tablets/Legion_Tab) · [Debian capture evidence](CAMERA-SENSORS.md) · [Asphalt camera port](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/docs/asphalt/hardware.md#cameras)
+
+## What the original board describes
+
+The retained CN350 Android A-slot device tree was reconstructed from vendor DTB index 2 and overlay index 14, as recorded by the earlier Android boot. The merged artifact used here has SHA-256 `7359763f57ceea931c6881581fa13c35198f0cb905116e00fdd20ec00cd181d5`. The HI1339/PHY0 node references an actuator and `led_flash_rear`. The macro/PHY1 node references `led_flash_rear_aux` and has no actuator. The front/PHY2 node has neither link. Both rear flash nodes share the same flash, torch and switch sources under the PM8350C controller at `0xee00`. The two logical rear-camera routes do not establish which Android capture modes can fire the shared LED.
+
+| Item | Stock CN350 DT | Upstream mapping and limits |
+| --- | --- | --- |
+| Controller and sources | `qcom,pm8350c-flash-led` at `0xee00`; both rear routes reference `flash_1`/`flash_2` and `torch_1`/`torch_2`, with zero-based `qcom,id` 1 and 2 | The existing `led-controller@ee00` binding can represent one LED child with one-based `led-sources` 2 and 3. The driver subtracts one before programming the channels. |
+| Torch | 500 mA maximum in each referenced channel node | A ganged child's `led-max-microamp` is the total across both channels. Their stock declarations sum to 1,000,000 µA, which fits the schema numerically. The original HAL's working total and board limits still need verification. |
+| Flash | 1,500 mA maximum per referenced channel, 1,280 ms timeout per channel, 12,500 µA current-step declaration | `flash-max-timeout-us` can represent 1,280,000 µs. The current declarations sum to 3,000,000 µA, above the upstream 2,000,000 µA ganged ceiling. The driver divides ganged current across the channels. Its ceiling is a controller limit, not a measured board limit. |
+| Switch and strobe | Both rear routes select `led_switch_2`, with symmetry enabled and mask `0x0f`. The controller also describes a hardware strobe on PM8350C GPIO 1. | The `flash-source`/`torch-source` phandles select the two relevant outputs. Neither the stock switch nor its GPIO property has a direct field in the upstream schema. The driver supports a V4L2 external-strobe mode. Camera-to-PMIC timing and routing still need verification. |
+| Thermal and fault handling | `qcom,thermal-derate-current = <200 500>` and three named PMIC fault/ramp interrupts | The upstream schema has no field for the stock thermal array. In the retained four-channel driver, the PMIC overtemperature states cap the total at 1,000 mA or 500 mA, and the driver reads fault status. Stock threshold definitions, ordering and policy remain unverified. The overlapping value 500 does not establish equivalent behavior. |
+
+[PM8350C device-tree binding](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/leds/qcom%2Cspmi-flash-led.yaml) · [Qualcomm LED flash driver](https://github.com/torvalds/linux/blob/master/drivers/leds/flash/leds-qcom-flash.c)
+
+## Debian driver path
+
+The locked Linux board DTB has SHA-256 `1fcd5dedc5cec0b03e6f666421aaec317d0db2203bf3371a408078ba427deb7d`. It contains the disabled PM8350C `led-controller@ee00` and has no camera `flash-leds` or `lens-focus` references. The retained baseline kernel config and the embedded config extracted from the locked GMU queue-fix `Image` both set `CONFIG_LEDS_QCOM_FLASH=m` and `CONFIG_LEDS_CLASS_FLASH=m`. The retained module tree contains both `.ko.zst` files. Both configs leave `CONFIG_V4L2_FLASH_LED_CLASS` unset, so the existing LED module cannot register the V4L2 flash subdevice. [Board component hashes](../config/board-components.sha256) · [Queue-fix kernel hashes](../config/gmu-queue-kernel.sha256) · [V4L2 flash class Kconfig](https://github.com/torvalds/linux/blob/master/drivers/media/v4l2-core/Kconfig)
+
+The Asphalt sensor driver calls `v4l2_async_register_subdev_sensor()`, which parses the standard firmware-node links. `flash-leds` names the LED child of the PMIC controller, and `lens-focus` names the separate lens-controller node. These links allow the corresponding subdevices to bind through the media graph. Whether libcamera's simple pipeline and qcam expose usable flash and autofocus controls must be checked separately. [Media device binding](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/media/video-interface-devices.yaml) · [V4L2 firmware-node handling](https://github.com/torvalds/linux/blob/master/drivers/media/v4l2-core/v4l2-fwnode.c) · [Asphalt wiring](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0016-asphalt-camera-wiring.patch)
+
+### PC-only V4L2 bridge build
+
+The [module builder](../scripts/build-camera-flash-bridge.sh) uses two jobs by default. It overlays the pinned compiled PRC tree inside a private Linux mount namespace, with the original tree mounted read-only. Run it on a host with OverlayFS, the baseline LLVM toolchain, AArch64 cross tools and `modinfo`.
+
+```sh
+mkdir -p out
+sudo bash scripts/build-camera-flash-bridge.sh \
+  /build/asphalt/linux-7.3.4 out/camera-flash-bridge
+```
+
+Kbuild's in-tree module targets build the bridge and its Qualcomm client together. The existing LED Flash class object is included in modpost so the generated dependency metadata names the real provider. The probe's functional config change is `CONFIG_V4L2_FLASH_LED_CLASS=m`. On this host `olddefconfig` also enabled `CONFIG_CC_CAN_LINK`, a generated userspace compiler probe used by the sample-program Kconfig. The script rejects other config differences. The original config, kernel Image, DTB and symbol table matched their original SHA-256 pins after the build.
+
+Two independent overlays produced byte-identical AArch64 modules with the original `7.3.4-asphalt-prc SMP preempt mod_unload aarch64` vermagic. The bridge depends on `led-class-flash`. The Qualcomm module depends on both modules and imports the bridge's `v4l2_flash_init` and `v4l2_flash_release` exports. The symbol check found no unresolved imports against those module exports and the baseline table. `fdtget` still reported `disabled` for PM8350C `led-controller@ee00`. The two modules and the build, dependency and checksum receipts are in the ignored output directory. Module loading, LED output and camera controls remain untested for this build.
+
+## Main-camera lens controller
+
+The stock `asphalt_actuator` node uses the generic `qcom,actuator` compatible, CCI0 master 0 and a `cam_vaf` regulator request. It has no actuator part number, CCI slave address or register description. The matching CN350 TXD HI1339 module descriptor `com.qti.sensormodule.txd_hi1339.bin` contains the identifier `gt9768_hi1339` at file offset `0xf9de` and the field names `actuatorName` and `actuatorSlaveAddress`. The retained `lib` and `lib64` copies have the same SHA-256 `34ba25820a0ac983acd57075d8be57cb1b6eba55c3d315f5f7475c946149a3a8`. This identifies GT9768 as the configured actuator for that stock camera module. The physical actuator and its interface have yet to be probed on Debian.
+
+The retained Linux source recognizes `giantec,gt9769` in its DW9768 driver and has no GT9768 match. The next focus input is the matching TXD module actuator configuration or datasheet, which must establish the 7-bit address, supply and ramp, position-register format, usable travel, and park sequence. Verify the semantics of any Android address representation before converting it. A compatible Linux VCM driver must provide `V4L2_CID_FOCUS_ABSOLUTE` before adding the main sensor's `lens-focus` link. Automatic focusing also needs an algorithm and a focus-state/control path in userspace. [DW9768 binding and compatible list](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/media/i2c/dongwoon%2Cdw9768.yaml) · [V4L2 focus and camera controls](https://docs.kernel.org/userspace-api/media/v4l/ext-ctrls-camera.html)
+
+## Next flash change
+
+1. Obtain the CN350 flash driver or board electrical limits and the matching HAL flash policy. Use those inputs to establish one ganged LED's allowed total torch and flash currents, timeout, and behavior at the board's thermal and battery limits. The DTB supplies the channel crosswalk and timeout, but does not establish those operating currents. Until resolved, leave the node disabled. No standalone DTS candidate was created.
+2. Once those limits have been established, add a single board LED child and link HI1339 with `flash-leds`. Run `dtbs_check` against the PMIC and sensor bindings, including a binding for the board sensor if required. Confirm a flash media entity and enumerate its controls before firing it in an attended trial. Validate torch, strobe and fault handling within the verified limits, then check whether libcamera and qcam expose a control. Establish shared flash ownership before advertising the flash on the macro camera.
