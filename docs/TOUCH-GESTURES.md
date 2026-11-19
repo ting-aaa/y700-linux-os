@@ -24,7 +24,7 @@ The dev9 image with qcam revision y7002 ran the same browser and two-contact tra
 | 1600×2560 portrait | 800×1280 | +602.5 CSS px | 1.00× → 2.94× | 2 |
 | 2560×1600 left landscape | 1280×800 | +320 CSS px | 1.00× → 3.72× | 2 |
 
-The page scale again stayed at 1× during the swipe and the scroll offset stayed fixed during the spread. Physical contact tracking, two-finger motion and gesture comfort on the glass still require testing. [Dev9 image receipt](BOARD-IMAGE.md#dev9-image-with-the-scaled-qcam-chooser)
+The page scale again stayed at 1× during the swipe and the scroll offset stayed fixed during the spread. A second dev9 boot reproduced both pinch factors to two decimals and scrolled +520 CSS px in portrait and +330.5 CSS px in landscape. The dev8 regression also passed in both orientations. Physical contact tracking, two-finger motion and gesture comfort on the glass still require testing. [Dev9 image receipt](BOARD-IMAGE.md#dev9-image-with-the-scaled-qcam-chooser)
 
 ## Reproduce in ARM64 QEMU
 
