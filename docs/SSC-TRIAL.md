@@ -31,6 +31,7 @@ Before that start, the worker asks the local QRTR nameservice for QMI service 40
 Cleanup stops the listener, releases the owned SLPI power reference and removes the temporary firmware bind by identity. The trial uses the existing kernel firmware search setting and unit enablement. PID 1 retains cleanup responsibility across a lost SSH connection or a terminated coordinator. The runtime directory stores only temporary state.
 
 ```sh
+journalctl -b -u y700-ssc-first-trial.service -o cat --no-pager
 journalctl -b -u y700-ssc-first-trial.service -u y700-ssc-first-trial-listener.service
 bash /path/to/trial-ssc.sh
 ```
@@ -41,4 +42,4 @@ A Qualcomm firmware fault can interrupt the kernel or USB transport. A postmarke
 
 ## Host checks
 
-`bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. The ARM64 QRTR guest can additionally run `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture` with the existing native libssc test payload and `scripts/trial-ssc.sh` in `/opt/ssc-test/scripts`. This mode reads the guest's fixture marker and uses a delayed mock QMI service. The revised coordinator still needs a separately authorized physical sample check.
+`bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. In the ARM64 QRTR guest, the nameservice gate rejected a missing or already-present service and admitted a delayed mock registration. The installed `ssccli 0.4.4` registered an SSC client, subscribed, emitted finite UTF-8 accelerometer rows and requested unsubscription. Reproduce with the existing native libssc test payload, placing the scripts in `/opt/ssc-test/scripts` and `/opt/ssc-test/tests`, and running `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture`. The revised coordinator still needs a separately authorized physical sample check.
