@@ -38,19 +38,33 @@ if [[ $1 == setup ]]; then
     test -z "$(dpkg --audit)"
     inventory=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
         sed -n 's/^installed\t//p' | LC_ALL=C sort)
-    [[ $(wc -l <<<"$inventory") == 1112 ]]
+    count=1112
+    expected=ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21
+    platform='0.1.0~dev12.5'
+    camera='0.7.2-1~bpo13+1.y7003'
+    if [[ -f /boot/lock-mode && $(cat /boot/lock-mode) == installed ]]; then
+        count=1115
+        expected=a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98
+        platform='0.1.0~dev12.6'
+        camera='0.7.2-1~bpo13+1.y7004'
+        test ! -e /boot/lock-archives
+        echo '5079a43e218503018b28bec9e22a0960824204623db866e17b98dfab48718a99  /usr/lib/y700/rotation_session.py' | sha256sum --strict -c -
+    fi
+    [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)
-    [[ ${digest%% *} == ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21 ]]
-    for item in 'onboard 1.4.1-10+y7002 arm64' 'y700-platform 0.1.0~dev12.5 all' \
-        'y700-camera-qcam 0.7.2-1~bpo13+1.y7003 arm64' 'y700-ssc-runtime 0.1.3 arm64'; do
+    [[ ${digest%% *} == "$expected" ]]
+    for item in 'onboard 1.4.1-10+y7002 arm64' "y700-platform $platform all" \
+        "y700-camera-qcam $camera arm64" 'y700-ssc-runtime 0.1.3 arm64'; do
         read -r name version arch <<<"$item"
         [[ $(dpkg-query -W -f='${Version} ${Architecture}' "$name") == "$version $arch" ]]
         printf 'COMBINED_PACKAGE name=%s version=%s architecture=%s\n' "$name" "$version" "$arch"
     done
     test -z "$(dpkg -V onboard y700-platform y700-camera-qcam y700-ssc-runtime y700-firstboot-drm y700-warm-greeter)"
-    echo "COMBINED_EFI root=/dev/vda2 esp=/dev/vda1 pid1=systemd packages=1112 digest=${digest%% *} account=$account"
+    echo "COMBINED_EFI root=/dev/vda2 esp=/dev/vda1 pid1=systemd packages=$count digest=${digest%% *} account=$account"
     if [[ -d /boot/lock-archives ]]; then
         dpkg --install /boot/lock-archives/*.deb
+    fi
+    if [[ -f /boot/lock-witness.py ]]; then
         apt-get check
         [[ -z $(dpkg --audit) && -z $(dpkg -V xfce4-screensaver y700-touch-lock) ]]
         install -m755 /boot/lock-test-uv /run/y700-lock-test-uv
@@ -141,6 +155,16 @@ wrapper=$(pgrep -o -u "$uid" -f '^/usr/lib/[^ ]+/xfce4/panel/wrapper-2\.0 .*/lib
 grep -Fq '/libpulseaudio-plugin.so' "/proc/$wrapper/maps"
 echo 'COMBINED_AUDIO_PANEL ordinary=1 marker=1 top_panel=1 mapped_wrapper=1'
 if [[ -f /boot/lock-mode ]]; then
+    if [[ $(cat /boot/lock-mode) == installed ]]; then
+        saver_started() {
+            asuser gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+                --method org.freedesktop.DBus.NameHasOwner org.xfce.ScreenSaver | grep -Fxq '(true,)'
+        }
+        wait_for 40 saver-autostart saver_started
+        pgrep -u "$uid" -f '^(/usr/bin/python3 )?/usr/lib/y700/y700-auto-rotate.py --session$' >/dev/null
+        [[ $(asuser gsettings get org.y700.tablet auto-rotate) == false ]]
+        echo 'COMBINED_SAVER_AUTOSTART rotation=running auto_rotate=false'
+    fi
     bash /boot/observe-lock.sh "$(cat /boot/lock-mode)" "$sid" "$pid"
 fi
 echo COMBINED_PASS

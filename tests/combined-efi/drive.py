@@ -162,7 +162,7 @@ def exercise(work, secret, cold=False):
         greeter_ready(work, "password")
         enter(stream, GREETER, secret, (894, 648))
         wait_marker(work, "COMBINED_PAM_XFCE account=y700 ordinary=1 active=1 local=1 seat=seat0 type=x11", 320)
-        if os.environ.get("SCREEN_LOCK") == "candidate":
+        if os.environ.get("SCREEN_LOCK") in ("candidate", "installed"):
             sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "screen-lock"))
             from drive_lock import unlock
             unlock(work, stream, secret)

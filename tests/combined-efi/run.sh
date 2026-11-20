@@ -16,11 +16,13 @@ regdb=${VERIFY_REGDB:-1}
 cold=${COLD_BOOT:-0}
 [[ $cold == 0 || $cold == 1 ]]
 screen_lock=${SCREEN_LOCK:-off}
-case "$screen_lock" in off|baseline|candidate) ;; *) echo 'Invalid SCREEN_LOCK mode' >&2; exit 2 ;; esac
-[[ $screen_lock == off || $cold == 0 ]]
+case "$screen_lock" in off|baseline|candidate|installed) ;; *) echo 'Invalid SCREEN_LOCK mode' >&2; exit 2 ;; esac
+[[ $screen_lock == off || $screen_lock == installed || $cold == 0 ]]
+if [[ $screen_lock == candidate || $screen_lock == installed ]]; then
+    guest_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the GTK witness}")
+fi
 if [[ $screen_lock == candidate ]]; then
     lock_archives=$(realpath -e "${SCREEN_LOCK_ARCHIVES:?Provide the locked session-lock archive directory}")
-    guest_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the GTK witness}")
     "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python "$here/../../scripts/repair-inputs.py" \
         verify "$lock_archives" "$here/../../config/touch-lock.lock.json"
 fi
@@ -80,6 +82,8 @@ if [[ $screen_lock != off ]]; then
     if [[ $screen_lock == candidate ]]; then
         mmd -i test-esp.fat ::/lock-archives
         mcopy -i test-esp.fat "$lock_archives"/*.deb ::/lock-archives/
+    fi
+    if [[ $screen_lock == candidate || $screen_lock == installed ]]; then
         mcopy -i test-esp.fat "$here/../screen-lock/witness.py" ::/lock-witness.py
         mcopy -i test-esp.fat "$guest_uv" ::/lock-test-uv
     fi
@@ -142,9 +146,12 @@ timeout -k 25 "$budget" "${UV_BIN:-uv}" run --offline --no-project --python /usr
 grep -Fxq 'COMBINED_QEMU_EXIT_0 phase=first' "$out/touch.log"
 if [[ $screen_lock == baseline ]]; then
     grep -Fxq 'SCREEN_LOCK_BASELINE xflock4_exit=1 active=yes locked_hint=no greeter=no' "$out/first/report.log"
-elif [[ $screen_lock == candidate ]]; then
-    for marker in SCREEN_LOCK_ACTIVE SCREEN_LOCK_BAD_PASSWORD_REJECTED SCREEN_LOCK_SAME_SESSION_DRAFT_RESTORED; do
-        grep -Fxq "$marker" "$out/first/report.log"
+elif [[ $screen_lock == candidate || $screen_lock == installed ]]; then
+    for report in "$out"/*/report.log; do
+        for marker in SCREEN_LOCK_ACTIVE SCREEN_LOCK_BAD_PASSWORD_REJECTED SCREEN_LOCK_CANCEL_STILL_LOCKED SCREEN_LOCK_SAME_SESSION_DRAFT_RESTORED; do
+            grep -Fxq "$marker" "$report"
+        done
+        if [[ $screen_lock == installed ]]; then grep -Fxq 'COMBINED_SAVER_AUTOSTART rotation=running auto_rotate=false' "$report"; fi
     done
 fi
 if (( cold )); then

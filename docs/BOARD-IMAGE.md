@@ -4,7 +4,7 @@ Candidate 03 combines the fresh 993-package Debian ARM64 root with the previousl
 
 ## Build on a Linux host
 
-For the current standalone dev12.5 package, see the [Linux extraction guide](DEV12.5-IMAGE.md) and its [verification record](#dev125-standalone-image). The build sequence below describes the earlier candidate 03.
+For the current dev12.6 development image, see the [standalone archive](DEV12.6-IMAGE.md) and [generic root update](ROTATION-IMAGE.md). The [dev12.5 verification record](#dev125-standalone-image) covers the preceding version. The build sequence below describes candidate 03.
 
 Use a native Linux filesystem for the build directories. Install the tools used by the [Debian snapshot build](DEBIAN-SNAPSHOT.md), plus rsync, kmod, cpio, gzip, e2fsprogs, dosfstools, mtools, util-linux (sfdisk with selectable sector size), device-tree-compiler and zstd. Obtain the pinned [Asphalt checkout](PROVENANCE.md), the integrated Debian root, and the private board components described below. Run as root on the build host with uv configured for an installed Python 3.12 or 3.13. Each output directory must be new.
 
@@ -350,6 +350,8 @@ The exact generic root booted through virtual U-Boot and EFI to Linux 7.3.4-asph
 
 ## Dev12.5 standalone image
 
+The following section describes the earlier dev12.5 artifact. The [dev12.6 boot record](#dev126-standalone-image) covers the combined image with the touchscreen locker.
+
 The [USB file-backed trial](DEV12.5-USB-TRIAL.md) stages two flat files on an existing internal Debian filesystem. The USB stream was verified end to end on the physical tablet. Separate ARM64 virtual tests cover booting the nested root and ESP and handling failures before enrollment.
 
 The complete dev12.5 microSD trial kit includes a 512-byte-sector GPT disk and an internal EFI menu supplement. See the [trial and recovery guide](DEV12.5-SD-TRIAL.md) for current files, hashes, physical preflight and how to return to the internal install. The older candidate 03 console-enrollment procedure below applies to that earlier image.
@@ -383,3 +385,11 @@ The U-Boot DT shipped in the current PRC container disables the SD controller at
 3. During the approved reboot select **Y700 candidate (microSD)** manually for this boot. At the first console prompt enter a new password for `y700` twice with a keyboard. The first-boot service waits for this before starting the display manager. Record the entry actually selected, the display, and the time to the console and graphical login.
 4. The export includes `verify-physical-boot.sh`, its companion `identity.txt` and `PROBE-SHA256SUMS`. Verify them on the PC with `sha256sum -c PROBE-SHA256SUMS`. Make those two files available to the local session on separate removable media or via an independently available transfer. From that directory run `sh verify-physical-boot.sh`. The expected UUID and package receipt come from the export. Candidate 03 also accepts `sh verify-physical-boot.sh UUID` with its built-in package receipt. Capture the PASS line, kernel, root and ESP evidence. If the helper cannot yet be transferred, record `cat /etc/y700/image-id`, `findmnt /`, `findmnt /boot`, `uname -r` and `cat /proc/1/comm` at the local terminal. Continue the remaining checks before recording acceptance.
 5. Return through the known internal Debian entry under supervision and verify the original image identity and maintenance channel. Remove only the four trial files after their identity is confirmed. An inability to select the trial, a black screen or loss of access ends the trial pending recovery. Candidate acceptance requires actual boot evidence and successful return to the working baseline.
+
+## Dev12.6 standalone image
+
+The 1,299,681,280-byte TAR contains the PRC U-Boot, the 1 GiB EFI partition and the 6 GiB Debian root. Its SHA-256 is `137b8cbad0e42c11d745501fa90bbcf921d4d32aa15d91fa4460b052956706c6`. Two local packaging runs produced identical bytes. An ordinary user extracted the Windows delivery copy and independently verified its filesystems and full package inventory. [Extraction guide](DEV12.6-IMAGE.md) · [Root and inventory digests](ROTATION-IMAGE.md)
+
+The combined EFI test booted the root with SHA-256 `74374ce94db4d88c20ba49d7cdff4cdbe6b5931ba047bea3460cede2c93b70cd`. The preinstalled locker and rotation client started in the ordinary Xfce session. On the first boot, virtual touchscreen input set the account password and signed into Xfce. After shutdown, a second QEMU process used the same disk overlay, skipped enrollment, and accepted the existing password. On both boots, PAM rejected a wrong unlock password, cancel kept the screen locked, and successful unlock recovered the original GTK window and its unsaved text. Both boots also loaded the expected signed regulatory database. The virtual guest had no radio or physical sensors.
+
+The reduced local receipt is `out/platform-dev12.6/boot-verified.txt`, SHA-256 `1c10817cae8a42a5d9cc1b63bb99c437dfed05faee6bbdd757ed16346cfa23bf`. Use `SCREEN_LOCK=installed COLD_BOOT=1` with the dev12.6 root and the dev12.5 EFI system partition to repeat this check. Physical boot of the combined image, hand rotation and finger alignment on the glass remain open. [EFI test](../tests/combined-efi/README.md) · [Tablet CPU lock test](SCREEN-LOCK.md#rotation-while-locked)

@@ -1,4 +1,4 @@
-# Combined dev12.5 EFI desktop acceptance
+# Y700 EFI desktop acceptance
 
 Run on a Linux PC with AArch64 QEMU, the NBDKit split plugin, nbdfuse and FUSE, mtools, sfdisk, cpio, gzip, uv, and a compiler that builds static AArch64 executables. Provide a freshly reconstructed 6 GiB combined ext4 root, its 1 GiB boot FAT, and their recorded SHA-256 values. Use the project's QEMU-virt U-Boot binary and QEMU-virt device tree. The final argument is a new log directory.
 
@@ -16,3 +16,5 @@ The host generates a throwaway password in memory and enters it through the real
 Set `COLD_BOOT=1` and provide `qemu-img` to reuse one private QCOW2 child of the read-only disk for a second cold boot. The first process must fully power off before the next starts. The runner requires different Linux boot IDs, preexisting enrollment and panel markers before the second login, no password enrollment UI, and successful touch-only login with the same in-memory credential. Guest logs for the two boots go in `first/` and `cold/`. The virtual display uses the desktop scale selected by the unmodified product policy.
 
 Use `SCREEN_LOCK=baseline` or `SCREEN_LOCK=candidate` for the separate single-boot test of locking and unlocking an existing desktop. [Required inputs and session-lock checks](../../docs/SCREEN-LOCK.md#run-the-virtual-test)
+
+Use `SCREEN_LOCK=installed` with a dev12.6 root and `UV_ARM64` pointing to an ARM64 Linux uv binary to test the packaged desktop. The guest checks the complete 1,115-package inventory, the rotation client, and the existing Xfce autostarts before the lock test. It gets the test observer from the copied EFI partition and all desktop packages from the candidate root. With `COLD_BOOT=1`, the test exercises the screen lock, PAM and draft recovery again after power-off and a second login.

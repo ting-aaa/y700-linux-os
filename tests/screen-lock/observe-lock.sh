@@ -20,7 +20,7 @@ if [[ $mode == baseline ]]; then
     printf 'SCREEN_LOCK_BASELINE xflock4_exit=%s active=%s locked_hint=%s greeter=%s\n' "$rc" "$active" "$hint" "$greeter"
     exit
 fi
-[[ $mode == candidate ]]
+[[ $mode == candidate || $mode == installed ]]
 wait_for() {
     local max=$1 label=$2 end
     shift 2
