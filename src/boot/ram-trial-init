@@ -52,7 +52,7 @@ printf '# Temporary Y700 RAM desktop\n' > /newroot/etc/fstab || fail 'cannot set
 chmod 0644 /newroot/etc/fstab || fail 'cannot set fstab permissions'
 rules=/newroot/etc/udev/rules.d/99-y700-ram-media.rules
 cat > "$rules" <<'RULES' || fail 'cannot install RAM media policy'
-SUBSYSTEM=="block", ENV{UDISKS_IGNORE}:="1"
+SUBSYSTEM=="block", ENV{UDISKS_IGNORE}="1"
 ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*|mmcblk*|nvme*n*|vd*", ATTR{ro}=="0", RUN+="/usr/sbin/blockdev --setro $devnode"
 RULES
 chmod 0644 "$rules" || fail 'cannot set media policy permissions'
