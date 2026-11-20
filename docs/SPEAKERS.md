@@ -54,7 +54,7 @@ The runner builds the upstream `snd-dummy` module in a temporary directory, atta
 
 Tap the speaker icon on the Xfce panel. The top row controls playback. Tap its slider to change volume or its switch to mute and unmute. If your panel has no speaker icon, open **Settings → Panel → Items → Add**, then choose the installed **PulseAudio Plugin**. [Xfce panel settings](https://docs.xfce.org/xfce/xfce4-panel/preferences#items) · [Xfce audio plugin](https://docs.xfce.org/panel-plugins/xfce4-pulseaudio-plugin/start)
 
-In the isolated dev11.1 ARM64 desktop at 200%, the stock plugin responded to synthetic pointer taps. The private PipeWire Pulse server reported playback changing from about 47% to 77%, switching to muted and back at 77%, then returning to the exact selected 47% level in both channels. The software sink carried digital silence to keep its audio format active. It had no hardware audio device. This qualifies the menu and its software control path. Audible output from the tablet speakers still requires separate evidence.
+In the isolated dev11.1 ARM64 desktop at 200%, the stock plugin responded to synthetic pointer taps. The private PipeWire Pulse server reported playback changing from about 47% to 77%, switching to muted and back at 77%, then returning to the exact selected 47% level in both channels. The software sink carried digital silence to keep its audio format active. It had no hardware audio device. This qualifies the menu and its software control path. The physical Chromium listening result is recorded above.
 
 ## Low-level stereo probe for the earlier dev11 profile
 
