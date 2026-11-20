@@ -1,0 +1,12 @@
+--- a/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dts
++++ b/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dts
+@@ -977,4 +977,8 @@
+ &camcc { status = "okay"; };
+-&cci0 { status = "okay"; };
++&cci0 {
++ status = "okay";
++ assigned-clocks = <&camcc CAM_CC_CCI_0_CLK_SRC>;
++ assigned-clock-rates = <37500000>;
++};
+ &cci1 { status = "okay"; };
+ &cci1_i2c0 {

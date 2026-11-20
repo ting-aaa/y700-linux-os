@@ -1,10 +1,11 @@
 """Check the CN350 main-camera lens ID or its factory AF calibration over the native CCI bus."""
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ctypes
 import fcntl
 import json
 import os
+import re
 from pathlib import Path
 import runpy
 import stat
@@ -171,6 +172,68 @@ def verify_calibration(bus, layout, decode):
     print("AF factory CRC=valid endpoints=ordered within_10bit=yes", flush=True)
 
 
+def queue_events(trace):
+    pending = None
+    rows = []
+    for line in trace.splitlines():
+        if "queue_start:" in line:
+            entered = re.search(r"\bmaster=(0x[0-9a-f]+|[0-9]+) queue=(0x[0-9a-f]+|[0-9]+)$", line)
+            require(entered is not None and pending is None, "Incomplete CCI queue entry")
+            pending = tuple(int(value, 0) for value in entered.groups())
+        elif "queue_done:" in line:
+            status = re.search(r"\bstatus=(-?[0-9]+)$", line)
+            caller = re.search(r"\((cci_xfer\+0x[0-9a-f]+)\b", line)
+            require(status is not None and pending is not None, "Unmatched CCI queue return")
+            rows.append((*pending, int(status[1]), caller[1] if caller else "unresolved"))
+            pending = None
+    require(rows and pending is None, "No complete CCI queue capture")
+    return rows
+
+
+@contextmanager
+def trace_queues():
+    tracefs = Path("/sys/kernel/tracing")
+    group = "y700cci_" + uuid.uuid4().hex[:16]
+    instance = tracefs / "instances" / group
+    unit = "y700-cci-clean-" + group
+    # Removing a private instance releases its event references before unregistering the probes.
+    cleanup = ["/bin/sh", "-ec", """
+        if [ -d "$1/instances/$2" ]; then rmdir "$1/instances/$2"; fi
+        for event in queue_start queue_done; do
+            if [ -d "$1/events/$2/$event" ]; then
+                printf -- '-:%s/%s\\n' "$2" "$event" >> "$1/kprobe_events"
+            fi
+        done
+    """, "sh", str(tracefs), group]
+    subprocess.run(["systemd-run", "--quiet", "--collect", "--expand-environment=no",
+                    "--unit=" + unit, "--on-active=30s", "--timer-property=AccuracySec=1s",
+                    *cleanup], check=True)
+    try:
+        instance.mkdir()
+        (instance / "tracing_on").write_text("0\n")
+        (instance / "set_event_pid").write_text(f"{os.getpid()}\n")
+        for event in (f"p:{group}/queue_start cci_run_queue master=%x1:u8 queue=%x2:u8",
+                      f"r:{group}/queue_done cci_run_queue status=$retval:s32"):
+            # tracefs accepts an append write but does not support seeking to EOF.
+            fd = os.open(tracefs / "kprobe_events", os.O_WRONLY | os.O_APPEND)
+            try:
+                definition = (event + "\n").encode("ascii")
+                require(os.write(fd, definition) == len(definition), "Incomplete probe definition")
+            finally:
+                os.close(fd)
+        (instance / "events" / group / "enable").write_text("1\n")
+        (instance / "tracing_on").write_text("1\n")
+        try:
+            yield
+        finally:
+            (instance / "tracing_on").write_text("0\n")
+            for master, queue, status, caller in queue_events((instance / "trace").read_text()):
+                print(f"CCI queue master={master} queue={queue} status={status} caller={caller}", flush=True)
+    finally:
+        subprocess.run(cleanup, check=True)
+        subprocess.run(["systemctl", "stop", unit + ".timer"], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -178,7 +241,11 @@ def main():
     mode.add_argument("--af-layout", type=Path, help="verify the AF block with CN350 decoder metadata")
     parser.add_argument("--power-main", action="store_true",
                         help="hold the HI1339 driver's normal runtime power during the read")
+    parser.add_argument("--trace-queues", action="store_true",
+                        help="record this read's ARM64 CCI queue numbers and return statuses")
     args = parser.parse_args()
+    if args.trace_queues and not (args.read_id or args.af_layout):
+        parser.error("--trace-queues requires a read operation")
     if args.af_layout and not args.power_main:
         parser.error("the factory EEPROM read requires --power-main")
     if args.power_main and not (args.read_id or args.af_layout):
@@ -200,10 +267,11 @@ def main():
         return
     try:
         with main_sensor_power(sensor, args.power_main):
-            if args.af_layout:
-                verify_calibration(bus, layout, decode)
-            else:
-                read_chip_id(bus)
+            with trace_queues() if args.trace_queues else nullcontext():
+                if args.af_layout:
+                    verify_calibration(bus, layout, decode)
+                else:
+                    read_chip_id(bus)
     finally:
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:

@@ -49,6 +49,17 @@ class FocusProbeTests(unittest.TestCase):
             p.verify_calibration(Path("i2c-0"), {}, decode)
         decode.assert_called_once_with(payload, {})
 
+    def test_queue_trace_retains_phase_and_status(self):
+        trace = """worker-7 [002] ... queue_start: (cci_run_queue+0x0/0xa0) master=0x0 queue=0x0
+worker-7 [002] ... queue_done: (cci_xfer+0x344/0x400 <- cci_run_queue) status=0
+worker-7 [002] ... queue_start: (cci_run_queue+0x0/0xa0) master=0x0 queue=0x1
+worker-7 [002] ... queue_done: (cci_xfer+0x220/0x400 <- cci_run_queue) status=-6"""
+        self.assertEqual(self.probe.queue_events(trace),
+                         [(0, 0, 0, "cci_xfer+0x344"), (0, 1, -6, "cci_xfer+0x220")])
+        for incomplete in (trace.splitlines()[0], trace.splitlines()[1], "# no events"):
+            with self.subTest(incomplete=incomplete), self.assertRaises(RuntimeError):
+                self.probe.queue_events(incomplete)
+
     def test_failed_powered_read_restores_auto(self):
         p = self.probe
         with tempfile.TemporaryDirectory() as tmp:
