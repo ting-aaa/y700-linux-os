@@ -2,10 +2,10 @@
 # Exercise the sealed desktop plus the offline player layer entirely in RAM.
 set -euo pipefail
 umask 077
-[[ $# == 5 || $# == 6 ]] || { echo 'Usage: run-parole-tablet.sh USB_SSH RAM_BUNDLE PLAYER_TAR_GZ SYNTHETIC_CLIPS DEVICE_XVFB_USR [SEPARATE_V4L2_SO]' >&2; exit 2; }
+[[ $# == 5 || $# == 6 ]] || { echo 'Usage: run-parole-tablet.sh USB_SSH RAM_BUNDLE PLAYER_TAR_GZ|--preinstalled SYNTHETIC_CLIPS DEVICE_XVFB_USR [SEPARATE_V4L2_SO]' >&2; exit 2; }
 access=$(realpath -e "$1")
 bundle=$(realpath -e "$2")
-player=$(realpath -e "$3")
+player=
 clips=$(realpath -e "$4")
 helper=$5
 plugin=
@@ -14,9 +14,16 @@ trace=${IRIS_PAROLE_TRACE:-}
 [[ $helper =~ ^/var/tmp/[A-Za-z0-9._/-]+/usr$ && $helper != */../* ]]
 here=$(cd "$(dirname "$0")" && pwd)
 ramtests="$here/../ram-userspace"
-initrd_sha=c2c0375bbdae3fb2ae0b1dcc6ac44e549cfc194eacc6e80e6b3925bce254579f
-[[ ${PAROLE_BUNDLE_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
-printf '%s  %s\n' "$initrd_sha" "$bundle/initrd" "$PAROLE_BUNDLE_SHA256" "$player" | sha256sum -c --strict --status -
+source "$ramtests/profiles.sh"
+initrd_sha=$(sha256sum "$bundle/initrd" | cut -d' ' -f1)
+ram_profile "$initrd_sha"
+if [[ $3 == --preinstalled ]]; then
+    [[ $release == dev12.9 && $# == 5 ]]
+else
+    [[ $release == dev12.8 && ${PAROLE_BUNDLE_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
+    player=$(realpath -e "$3")
+    printf '%s  %s\n' "$PAROLE_BUNDLE_SHA256" "$player" | sha256sum -c --strict --status -
+fi
 if [[ $# == 6 ]]; then
     plugin=$(realpath -e "$6")
     [[ ${IRIS_V4L2_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
@@ -45,8 +52,9 @@ tar -cf - -C "$ramtests" device.sh profiles.sh -C "$here" parole-namespace.sh pa
 if [[ -n $plugin ]]; then
     bash "$access" "cd '$stage' && cat >plugin.so && echo '$IRIS_V4L2_SHA256  plugin.so' | sha256sum -c --strict --status -" <"$plugin"
 fi
-bash "$access" "cat >'$stage/player.tgz'" <"$player"
-bash "$access" "cd '$stage' && echo '$PAROLE_BUNDLE_SHA256  player.tgz' | sha256sum -c --strict --status -"
+if [[ -n $player ]]; then
+    bash "$access" "cd '$stage' && cat >player.tgz && echo '$PAROLE_BUNDLE_SHA256  player.tgz' | sha256sum -c --strict --status -" <"$player"
+fi
 timeout 150 bash "$access" "cat >'$stage/initrd'" <"$bundle/initrd"
 probe="$here/../video-player/check-x11.py"
 probe_hash=$(sha256sum "$probe" | cut -d' ' -f1)

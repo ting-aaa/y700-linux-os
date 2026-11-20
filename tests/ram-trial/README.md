@@ -1,5 +1,7 @@
 # Diskless Y700 RAM boot
 
+Use `RAM_TRIAL_VERSION=dev12.9` for the 1,240-package release with Parole preinstalled. The guest compares its media receipt to the repository lock and hashes its installed package inventory. It also exercises the desktop and temporary upper layer described below. [dev12.9 artifacts and results](../../docs/DEV12.9-VERIFICATION.md)
+
 Run on a Linux PC with an ARM64 QEMU system emulator, an AArch64 cross compiler, uv, `dtc` tooling and room to run a 9 GiB guest. Provide the sealed RAM trial directory and the same virtual board DT used by the combined EFI fixture.
 
 ```sh

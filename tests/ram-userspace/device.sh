@@ -6,7 +6,7 @@ printf '%s  initrd\n' "$3" | sha256sum --strict -c
 source ./profiles.sh
 ram_profile "$3"
 [[ $(stat -c %s initrd) == "$initrd_bytes" ]]
-# Both sealed archives use the same board initrd and aligned newc member offset.
+# The sealed archives use the same board initrd and aligned newc member offset.
 # GNU dd is in coreutils on the board, including installations without cpio.
 dd if=initrd of=carrier bs=1M iflag=skip_bytes,count_bytes skip=11641252 count="$carrier_bytes" status=none
 printf '%s  carrier\n' "$carrier_sha" | sha256sum --strict -c

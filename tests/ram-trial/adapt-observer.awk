@@ -47,6 +47,7 @@
 {
     gsub("/boot/blueman-tested.lock", "/run/y700-ram-qa/blueman-tested.lock")
     gsub("/boot/platform-tested.lock", "/run/y700-ram-qa/platform-tested.lock")
+    gsub("/boot/media-tested.lock", "/run/y700-ram-qa/media-tested.lock")
     gsub("/boot/lock-mode", "/run/y700-ram-qa/lock-mode")
     gsub("/boot/combined-", "/run/y700-ram-qa/combined-")
     print

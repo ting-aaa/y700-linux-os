@@ -28,6 +28,10 @@ case $version in
         package_sha=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
         guide=ADAPTIVE-BRIGHTNESS-IMAGE.md
         ;;
+    dev12.9)
+        package_count=1240
+        package_sha=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
+        ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
 epoch=${SOURCE_DATE_EPOCH:-1795132800}
@@ -52,9 +56,21 @@ base=$bundle/base
 mkdir -- "$bundle" "$base" "$work/db" "$work/result"
 cd "$work/db"
 debugfs -R 'dump /var/lib/dpkg/status status' "$root" >/dev/null 2>&1
-if [[ $version == dev12.8 ]]; then
+if [[ $version == dev12.8 || $version == dev12.9 ]]; then
     debugfs -R 'dump /var/lib/y700/build/platform.lock.json platform.lock.json' "$root" >/dev/null 2>&1
     cmp "$repo/config/platform.lock.json" platform.lock.json
+fi
+if [[ $version == dev12.9 ]]; then
+    [[ $4 == 495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6 ]]
+    debugfs -R 'dump /var/lib/y700/build/video-player.lock.json media.lock' "$root" >/dev/null 2>&1
+    debugfs -R 'dump /var/lib/y700/build/video-player-debian.lock.json media-packages.lock' "$root" >/dev/null 2>&1
+    cmp "$repo/config/video-player.lock.json" media.lock
+    cmp "$repo/tests/video-player/debian.lock.json" media-packages.lock
+    jq -er '.files | to_entries[] | [.value, .key] | @tsv' media.lock > media-files.tsv
+    while IFS=$'\t' read -r digest path; do
+        actual=$(debugfs -R "cat /$path" "$root" 2>/dev/null | sha256sum)
+        [[ ${actual%% *} == "$digest" ]] || { echo "Image file mismatch: /$path" >&2; exit 1; }
+    done < media-files.tsv
 fi
 dpkg-query --admindir=. -W '-f=${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
     sed -n 's/^installed\t//p' | sort > packages.tsv
@@ -102,6 +118,10 @@ cd "$work/result"
 tar --sort=name --format=gnu --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
     -cf "$name.tar" -C "$work" "$name"
 sha256sum "$name.tar" > SHA256SUMS
+if [[ $version == dev12.9 ]]; then
+    install -m644 "$work/db/packages.tsv" packages.tsv
+    sha256sum packages.tsv >> SHA256SUMS
+fi
 cd "$work"
 mv -T --no-clobber -- result "$dest"
 [[ ! -e result ]]

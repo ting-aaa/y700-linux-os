@@ -55,12 +55,16 @@ seed_limit=1048576
 case ${RAM_TRIAL_VERSION:-dev12.5} in
     dev12.5) echo baseline > "$seed/lock-mode" ;;
     dev12.6) echo installed > "$seed/lock-mode" ;;
-    dev12.8)
+    dev12.8|dev12.9)
         echo installed > "$seed/lock-mode"
         cp "$here/../../config/blueman.lock.json" "$seed/blueman-tested.lock"
         cp "$here/../../config/platform.lock.json" "$seed/platform-tested.lock"
         cp "$here/check-volatile-desktop.sh" "$seed/"
         extras=(blueman-tested.lock platform-tested.lock check-volatile-desktop.sh)
+        if [[ $RAM_TRIAL_VERSION == dev12.9 ]]; then
+            cp "$here/../../config/video-player.lock.json" "$seed/media-tested.lock"
+            extras+=(media-tested.lock)
+        fi
         if [[ $sleep_trial == 1 ]]; then
             fdtput -t s "$work/ram.dtb" /aliases rtc1 /pl031@9010000
             bash "$here/../sleep-guest/prepare.sh" "$seed" "$work"
@@ -69,7 +73,7 @@ case ${RAM_TRIAL_VERSION:-dev12.5} in
         fi
         args+=" y700.combined_power=1"
         ;;
-    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6 or dev12.8)' >&2; exit 2 ;;
+    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6, dev12.8 or dev12.9)' >&2; exit 2 ;;
 esac
 combined=$here/../combined-efi
 awk -f "$here/adapt-observer.awk" "$combined/observe.sh" > "$seed/combined-observe.sh"

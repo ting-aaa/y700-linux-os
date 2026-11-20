@@ -19,6 +19,15 @@ ram_profile() {
             package_count=1124
             package_sha=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
             ;;
+        f635f98c62c6a75b1a14fab4341e5f58923294b81a88ccaf8c77c9001d3e8813)
+            release=dev12.9
+            initrd_bytes=1357505124
+            carrier_bytes=1345863680
+            carrier_sha=fc1f17e9a6051195caa7f8d54c0c73dbde80de814e8e1ce400a97d802185c9fb
+            root_sha=e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb
+            package_count=1240
+            package_sha=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
+            ;;
         *) echo 'Unexpected RAM bundle initrd' >&2; return 1 ;;
     esac
 }

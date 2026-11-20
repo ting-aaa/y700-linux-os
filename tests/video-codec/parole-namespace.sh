@@ -7,7 +7,7 @@ stage=$PWD
 helper=$(realpath -e "$2")
 source ./profiles.sh
 ram_profile "$3"
-[[ $release == dev12.8 && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
+[[ ($release == dev12.8 || $release == dev12.9) && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
 for ns in mnt pid net ipc; do [[ $(readlink "/proc/self/ns/$ns") != "$(cat "host-$ns")" ]]; done
 mapfile -t nodes < <(grep -lFx qcom-iris-decoder /sys/class/video4linux/video*/name)
 [[ ${#nodes[@]} == 1 && $(cat /sys/bus/platform/devices/aa00000.video-codec/power/runtime_status) == suspended ]]
@@ -39,18 +39,29 @@ install -m755 "$helper/bin/Xvfb" "$(command -v uv)" root/qa/bin/
 install -m644 parole-desktop.sh check-x11.py root/qa/
 install -m644 h264.mp4 hevc.mp4 vp9.webm root/qa/clips/
 chroot root dbus-uuidgen >root/etc/machine-id
-printf '#!/bin/sh\nexit 101\n' > root/usr/sbin/policy-rc.d
-chmod 755 root/usr/sbin/policy-rc.d
-tar --no-same-owner -xf player.tgz -C root/run
-installer=/run/y700-parole-iris/install.sh
 player_env=()
-if [[ -f plugin.so ]]; then
-    installer=/run/y700-video-player/install.sh
-    install -D -m644 plugin.so root/qa/plugin/libgstvideo4linux2.so
-    player_env=(GST_PLUGIN_PATH_1_0=/qa/plugin)
+if [[ $release == dev12.9 ]]; then
+    [[ ! -e player.tgz && ! -e plugin.so ]]
+    chroot root dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
+        sed -n 's/^installed\t//p' | sort > inventory
+    [[ $(wc -l <inventory) == "$package_count" ]]
+    printf '%s  inventory\n' "$package_sha" | sha256sum -c --strict
+    chroot root dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n' |
+        cmp - lower/var/lib/y700/build/packages.tsv
+    echo "PLAYER_PREINSTALLED edition=$release packages=$package_count package_sha=$package_sha"
+else
+    printf '#!/bin/sh\nexit 101\n' > root/usr/sbin/policy-rc.d
+    chmod 755 root/usr/sbin/policy-rc.d
+    tar --no-same-owner -xf player.tgz -C root/run
+    installer=/run/y700-parole-iris/install.sh
+    if [[ -f plugin.so ]]; then
+        installer=/run/y700-video-player/install.sh
+        install -D -m644 plugin.so root/qa/plugin/libgstvideo4linux2.so
+        player_env=(GST_PLUGIN_PATH_1_0=/qa/plugin)
+    fi
+    if ! chroot root bash "$installer" --install >install.log 2>&1; then tail -25 install.log; exit 1; fi
+    grep -E 'Preflight passed|Installed 1240 packages' install.log
 fi
-if ! chroot root bash "$installer" --install >install.log 2>&1; then tail -25 install.log; exit 1; fi
-grep -E 'Preflight passed|Installed 1240 packages' install.log
 [[ $(chroot root dpkg-query -W -f='${Version}' parole) == 4.18.2-1 ]]
 touch "root/dev/$dev"
 mount --bind "/dev/$dev" "root/dev/$dev"

@@ -33,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT
 actors=(-C "$here" device.sh namespace.sh desktop.sh thunar.sh profiles.sh)
-if [[ $release == dev12.8 ]]; then actors+=(brightness.py -C "$here/../brightness" probe.py); fi
+if [[ $release == dev12.8 || $release == dev12.9 ]]; then actors+=(brightness.py -C "$here/../brightness" probe.py); fi
 tar -cf - "${actors[@]}" |
     bash "$ssh" "umask 077; tar -xf - -C '$stage'"
 start=$SECONDS
