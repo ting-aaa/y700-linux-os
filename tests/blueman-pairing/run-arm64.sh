@@ -70,8 +70,8 @@ if (( $# == 8 )); then
     printf '%s  %s\n' "$8" "$candidate" | sha256sum -c -
     test "$(dpkg-deb -f "$candidate" Package)" = blueman
     test "$(dpkg-deb -f "$candidate" Architecture)" = arm64
-    next_version=2.4.4-1+y7001
-    test "$(dpkg-deb -f "$candidate" Version)" = "$next_version"
+    next_version=$(dpkg-deb -f "$candidate" Version)
+    case $next_version in 2.4.4-1+y7001|2.4.4-1+y7002) ;; *) exit 1 ;; esac
     inventory() {
         chroot "$root" dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' \
             | sed -n 's/^installed\t//p' | LC_ALL=C sort
@@ -83,7 +83,9 @@ if (( $# == 8 )); then
     test -z "$(chroot "$root" dpkg --audit)"
     test -z "$(chroot "$root" dpkg -V blueman)"
     inventory > "$work/after"
-    sed 's/^blueman\t2\.4\.4-1\tarm64$/blueman\t2.4.4-1+y7001\tarm64/' "$work/before" | cmp - "$work/after"
+    awk -F '\t' -v OFS='\t' -v next_version="$next_version" \
+        '$1 == "blueman" && $2 == "2.4.4-1" && $3 == "arm64" {$2 = next_version} {print}' \
+        "$work/before" | cmp - "$work/after"
     version=$next_version
     printf '%s\n' 'BLUEMAN_PACKAGE_UPGRADE changed_tuples=1 dpkg_verify=1 audit_clean=1'
 fi

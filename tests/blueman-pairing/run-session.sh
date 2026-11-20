@@ -48,6 +48,18 @@ xfconf-query -c xsettings -p /Xft/DPI -n -t int -s 192
 xfsettingsd --no-daemon --replace >"$HOME/xfsettingsd.log" 2>&1 &
 children+=("$!")
 timeout 15 gdbus wait --session org.xfce.SettingsDaemon
+if [[ ${BLUEMAN_TOUCH_ENTRY:-0} == 1 ]]; then
+    xfwm4 --compositor=off >"$HOME/window-manager.log" 2>&1 &
+    children+=("$!")
+    for _ in {1..80}; do
+        if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id # 0x'; then break; fi
+        sleep .1
+    done
+    xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id # 0x'
+    onboard >"$HOME/onboard.log" 2>&1 &
+    children+=("$!")
+    timeout 25 gdbus wait --session org.onboard.Onboard
+fi
 "${py[@]}" -m dbusmock --system -t bluez5 >"$HOME/bluez-mock.log" 2>&1 &
 children+=("$!")
 "${py[@]}" "$bundle/probe.py"

@@ -109,30 +109,39 @@ def pairing_dialog(label):
     return None
 
 
-def bluetooth_window():
-    windows = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Bluetooth$"],
+def bluetooth_window(title="Bluetooth"):
+    windows = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", f"^{re.escape(title)}$"],
                              check=True, capture_output=True, text=True, timeout=4).stdout.split()
     require(len(windows) == 1 and windows[0].isdecimal(), "pairing-dialog-x11-window-not-unique")
     return windows[0]
 
 
-def tap(node, dialog):
-    window = subprocess.run(["xwininfo", "-id", bluetooth_window()], check=True, capture_output=True,
+def bounds(window_id):
+    window = subprocess.run(["xwininfo", "-id", window_id], check=True, capture_output=True,
                             text=True, timeout=4).stdout
     dimensions = dict(re.findall(r"^\s*(Absolute upper-left X|Absolute upper-left Y|Width|Height):\s+(-?\d+)$",
                                  window, re.M))
     require(len(dimensions) == 4, "pairing-dialog-x11-geometry-missing")
-    origin_x, origin_y, width, height = (int(dimensions[key]) for key in
-                                       ("Absolute upper-left X", "Absolute upper-left Y", "Width", "Height"))
+    return tuple(int(dimensions[key]) for key in ("Absolute upper-left X", "Absolute upper-left Y", "Width", "Height"))
+
+
+def tap(node, dialog, title="Bluetooth"):
+    xid = bluetooth_window(title)
+    origin_x, origin_y, width, height = bounds(xid)
     require(0 <= origin_x < origin_x + width <= 2560 and 0 <= origin_y < origin_y + height <= 1600,
             "pairing-dialog-outside-screen")
     frame = dialog.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
     button = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
     require(frame.width > 0 and frame.height > 0, "pairing-dialog-empty-geometry")
-    sx, sy = width / frame.width, height / frame.height
+    # AT-SPI's top-level rectangle includes Xfwm decorations. The X client
+    # origin and size from xwininfo exclude them. Undecorated Xvfb uses zero.
+    prop = subprocess.check_output(["xprop", "-id", xid, "_NET_FRAME_EXTENTS"], text=True, timeout=4)
+    decoration = re.search(r"=\s*(\d+), (\d+), (\d+), (\d+)", prop)
+    left, right, top, bottom = map(int, decoration.groups()) if decoration else (0, 0, 0, 0)
+    sx, sy = (width + left + right) / frame.width, (height + top + bottom) / frame.height
     require(abs(sx - sy) < 0.05 and 0.95 <= sx <= 2.05, "pairing-dialog-inconsistent-coordinate-scale")
-    x = origin_x + round((button.x + button.width / 2 - frame.x) * sx)
-    y = origin_y + round((button.y + button.height / 2 - frame.y) * sy)
+    x = origin_x - left + round((button.x + button.width / 2 - frame.x) * sx)
+    y = origin_y - top + round((button.y + button.height / 2 - frame.y) * sy)
     require(button.width > 0 and button.height > 0 and 0 < x < 2560 and 0 < y < 1600,
             "pairing-button-invalid-geometry")
     subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True,
@@ -152,7 +161,7 @@ def call_agent_async(bus, destination, member, arguments):
                 outcome["cause"] = "passkey-index"
 
     bus.call(destination, AGENT, AGENT_IFACE, member, arguments, None,
-             Gio.DBusCallFlags.NONE, 10000, None, ended)
+             Gio.DBusCallFlags.NONE, 45000, None, ended)
     return outcome
 
 
@@ -219,6 +228,109 @@ def display_passkey(system, agent, keyboard, applet_pid, passkey, stock):
     emit("BLUEMAN_CANCEL display_dismissed=1 agent_receipt=1")
 
 
+def control(dialog, role, name):
+    return next((node for node in showing_nodes(dialog)
+                 if node.get_role() == role and node.get_name() == name), None)
+
+
+def entry_dialog(applet_pid):
+    return next((node for node in showing_nodes(application(applet_pid))
+                 if node.get_name() == "Pairing request" and node.get_role() == Atspi.Role.DIALOG), None)
+
+
+def onboard_bounds(session):
+    visible, = call(session, "org.onboard.Onboard", "/org/onboard/Onboard/Keyboard",
+                    "org.freedesktop.DBus.Properties", "Get",
+                    GLib.Variant("(ss)", ("org.onboard.Onboard.Keyboard", "Visible")))
+    if not visible:
+        return None
+    found = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "^Onboard$"],
+                           capture_output=True, text=True, timeout=4).stdout.split()
+    for xid in found:
+        box = bounds(xid)
+        x, y, width, height = box
+        if width >= 1200 and height >= 250 and 0 <= x <= 2560 - width and 0 <= y <= 1600 - height:
+            return box
+    return None
+
+
+def enter_with_onboard(session, text, entry):
+    # Centers on the normal alpha layer of Debian Onboard's Compact layout.
+    keys = {"e": (.251, .30), "h": (.448, .50), "l": (.631, .50), "o": (.616, .30)}
+    for i, digit in enumerate("1234567890"):
+        keys[digit] = (.091 + .061 * i, .10)
+    for index, character in enumerate(text, 1):
+        x, y, width, height = await_value(lambda: onboard_bounds(session), "onboard-not-visible-on-entry")
+        dx, dy = keys[character]
+        subprocess.run(["xdotool", "mousemove", str(x + round(dx * width)), str(y + round(dy * height)),
+                        "click", "1"], check=True, timeout=4)
+        try:
+            await_value(lambda: entry.get_character_count() == index, "screen-key-did-not-append-character", 4)
+        except ProbeError:
+            focused = subprocess.run(["xdotool", "getwindowfocus", "getwindowname"],
+                                     text=True, capture_output=True, timeout=3).stdout.strip()
+            emit(f"BLUEMAN_KEY_INPUT count={entry.get_character_count()} index={index} "
+                 f"entry_focused={int(entry.get_state_set().contains(Atspi.StateType.FOCUSED))} "
+                 f"pairing_has_x_focus={int(focused == 'Pairing request')}")
+            raise
+
+
+def check_local_entry(system, session, agent, keyboard, applet_pid, method, other_device=None):
+    result = call_agent_async(system, agent, method, GLib.Variant("(o)", (keyboard,)))
+    dialog = await_value(lambda: entry_dialog(applet_pid), "local-pairing-dialog-missing")
+    numeric = method == "RequestPasskey"
+    role = Atspi.Role.TEXT if numeric else Atspi.Role.PASSWORD_TEXT
+    entry = await_value(lambda: next((n for n in showing_nodes(dialog) if n.get_role() == role and
+                                     n.get_state_set().contains(Atspi.StateType.EDITABLE)), None),
+                        "editable-pairing-field-missing")
+    accept = control(dialog, Atspi.Role.PUSH_BUTTON, "OK")
+    require(accept and not accept.get_state_set().contains(Atspi.StateType.SENSITIVE),
+            "empty-entry-can-submit")
+    if other_device:
+        xid = bluetooth_window("Pairing request")
+        pending = call_agent_async(system, agent, "RequestPinCode", GLib.Variant("(o)", (other_device,)))
+        require(await_value(lambda: pending, "second-device-no-reply") == {"error": "org.bluez.Error.Canceled"},
+                "second-device-did-not-defer")
+        require(bluetooth_window("Pairing request") == xid and not result, "first-entry-replaced")
+    # Gtk may already have focused the entry and shown the dock. In that case
+    # tapping its old screen position can hit a key before the window settles.
+    if not entry.get_state_set().contains(Atspi.StateType.FOCUSED):
+        tap(entry, dialog, "Pairing request")
+    await_value(lambda: entry.get_state_set().contains(Atspi.StateType.FOCUSED), "entry-did-not-get-focus")
+    require(entry.get_character_count() == 0, "entry-no-longer-empty-before-first-key")
+    # Use a leading zero so that the numeric protocol type and the string PIN
+    # are independently checked. Keep all generated values out of the receipt.
+    text = ("0" + "".join(secrets.choice("0123456789") for _ in range(5)) if numeric else
+            "".join(secrets.choice("ehlo") for _ in range(4)) + secrets.choice("0123456789"))
+    enter_with_onboard(session, text, entry)
+    require(not result and accept.get_state_set().contains(Atspi.StateType.SENSITIVE),
+            "entry-completion-state-incorrect")
+    # The docked keyboard can cover the dialog's action row. GTK sets OK as
+    # this entry's default action, so the on-screen Return works in either layout.
+    x, y, width, height = await_value(lambda: onboard_bounds(session), "onboard-return-unavailable")
+    subprocess.run(["xdotool", "mousemove", str(x + round(.873 * width)),
+                    str(y + round(.40 * height)), "click", "1"], check=True, timeout=4)
+    outcome = await_value(lambda: result, "local-entry-result-missing")
+    require(outcome == {"reply": (int(text) if numeric else text,)}, "screen-keyboard-entry-value-mismatch")
+    await_value(lambda: not entry_dialog(applet_pid), "local-entry-still-visible")
+    emit(f"BLUEMAN_LOCAL_ENTRY method={method} input=onboard-pointer matched=1 masked={int(not numeric)} "
+         f"second_request_deferred={int(bool(other_device))}")
+
+
+def zero_confirmation(system, agent, keyboard, applet_pid, fixed):
+    if fixed:
+        confirm_path(system, agent, keyboard, applet_pid, 0, "deny")
+    else:
+        result = call_agent_async(system, agent, "RequestConfirmation", GLib.Variant("(ou)", (keyboard, 0)))
+        deny = await_value(lambda: control(application(applet_pid), Atspi.Role.PUSH_BUTTON, "Deny"),
+                           "zero-comparison-dialog-missing")
+        require(not matching_label(applet_pid, 0) and not result, "old-zero-comparison-state-unexpected")
+        tap(deny, pairing_dialog(deny))
+        require(await_value(lambda: result, "zero-comparison-denial-missing") ==
+                {"error": "org.bluez.Error.Canceled"}, "zero-comparison-denial-failed")
+    emit(f"BLUEMAN_ZERO_COMPARISON six_digits_visible={int(fixed)} denied=1")
+
+
 def main():
     require(os.geteuid() != 0, "ordinary-user-required")
     require(os.environ["DBUS_SYSTEM_BUS_ADDRESS"].startswith("unix:path=/run/blueman-pairing/"),
@@ -262,6 +374,13 @@ def main():
         confirm_path(system, agent, keyboard, applet.pid, deny_passkey, "deny")
         stock = os.environ["BLUEMAN_EXPECTED_VERSION"] == "2.4.4-1"
         display_passkey(system, agent, keyboard, applet.pid, display_key, stock)
+        if os.environ.get("BLUEMAN_TOUCH_ENTRY") == "1":
+            fixed = os.environ["BLUEMAN_EXPECTED_VERSION"] == "2.4.4-1+y7002"
+            zero_confirmation(system, agent, keyboard, applet.pid, fixed)
+            other = call(system, BLUEZ, "/", "org.bluez.Mock", "AddDevice",
+                         GLib.Variant("(sss)", (adapter, "02:00:00:00:00:02", "Second fixture device")))[0]
+            check_local_entry(system, session, agent, keyboard, applet.pid, "RequestPinCode")
+            check_local_entry(system, session, agent, keyboard, applet.pid, "RequestPasskey", other if fixed else None)
         if stock:
             emit("BLUEMAN_STOCK_BOUNDARY_REPRODUCED")
         else:

@@ -21,7 +21,7 @@ Use the official Debian ARM64 `blueman_2.4.4-1_arm64.deb` with the [authenticate
 ```sh
 mkdir -p out/blueman-pairing-offline
 bash scripts/build-blueman-passkey.sh \
-  /path/to/blueman_2.4.4-1_arm64.deb out/blueman-pairing-offline
+  /path/to/blueman_2.4.4-1_arm64.deb out/blueman-pairing-offline y7001
 ```
 
 The test runner uses a read-only qcow2 root, private Linux mount, network and PID namespaces, and ARM64 binfmt emulation on x86. Provide host `qemu-nbd` and `nbdfuse` in the same directory, Debian ARM64 Xvfb, xdotool and libxdo3 archives, Debian `python3-dbusmock` 0.38.1-1 and an ARM64 `uv` executable. The runner requires the qcow2 leaf's SHA-256 and the original backing chain at its declared paths. Omit the final two arguments to run the stock control and reproduce its index error. [Runner](../tests/blueman-pairing/run-arm64.sh)
@@ -42,3 +42,11 @@ On 2026-11-19 the installed `2.4.4-1+y7001` package passed the same test through
 At 200% Xfce scaling on the private 2560×1600 display, the built-in GTK dialog's Confirm and Deny buttons measured 708×84 and 706×84 pixels. Both pointer clicks returned the expected replies. The applet registered `KeyboardDisplay`, displayed the matching code at 0, 3 and 6 digits entered, and dismissed the final dialog on `Cancel`. The installed package file check was clean.
 
 The boot, Bluetooth, SSH and LightDM service invocations, active seat, desktop processes and host mounts matched before and after. No test process or staging directory remained. This establishes the installed ARM64 software path with synthetic events. Glass input, over-the-air pairing and input from a physical accessory remain separate checks. [Probe](../tests/blueman-pairing/probe.py)
+
+## Enter a code on the tablet
+
+If the pairing dialog asks for a code supplied by the accessory, enter it on the tablet's screen keyboard. The PIN field masks its characters. Tap the on-screen Return key to submit, including when the docked keyboard covers the bottom of the dialog. If the tablet instead displays a code for a keyboard, type that code on the external keyboard. For numeric comparison, check the two displays before confirming. [BlueZ Agent API](https://github.com/bluez/bluez/blob/5.82/doc/org.bluez.Agent.rst)
+
+The tablet was upgraded in place to Blueman `2.4.4-1+y7002`. Only the Blueman package tuple changed. Its files, APT dependencies and dpkg state verified. A new USB session found the same boot, active seat, desktop applet processes, and BlueZ, SSH and LightDM service instances. The owner's existing applet will load the update at the next normal login. The previous archive and a checksum-checked rollback script are on the tablet.
+
+On this tablet, an ordinary user ran the installed applet, Xfwm and Onboard on a private 2560×1600 desktop at 200%. The fixture selected keys on the visible Compact layout by pointer, including Return. The BlueZ fixture received the exact alphanumeric string for a masked PIN and the expected integer for a six-digit passkey beginning with zero. During numeric entry a second device requested a PIN. The updated applet kept the first entry window and finished the original request. When the comparison value was zero, the old applet omitted the displayed code. The updated applet showed all six zeros. Both dialogs respected the Deny button. The fixture isolated the radio, real desktop and physical display. [Tablet runner](../tests/blueman-pairing/run-tablet.sh) · [Keyboard progress and cancellation](BLUEMAN-PASSKEY-LIFETIME.md) · [Update the dev12.7 image](BLUEMAN-UPDATE.md)
