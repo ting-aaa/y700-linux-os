@@ -1,0 +1,11 @@
+--- a/debian/control
++++ b/debian/control
+@@ -29,7 +29,7 @@
+ Package: xfce4-power-manager
+ Architecture: any
+ Depends: upower,
+-         xfce4-power-manager-data (=${source:Version}),
++         xfce4-power-manager-data (= 4.20.0-1),
+          ${misc:Depends},
+          ${shlibs:Depends}
+ Recommends: default-logind | logind, xfce4-power-manager-plugins

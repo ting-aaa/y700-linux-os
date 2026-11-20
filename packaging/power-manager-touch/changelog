@@ -1,0 +1,6 @@
+xfce4-power-manager (4.20.0-1+y7001) trixie; urgency=medium
+
+  * Open the X11 power manager tray menu on primary activation.
+  * Use Debian's unmodified 4.20.0-1 architecture-independent data.
+
+ -- Y700 Linux contributors <y700@localhost>  Fri, 20 Nov 2026 00:00:00 +0000
