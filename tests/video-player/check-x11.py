@@ -102,6 +102,7 @@ def thunar_open(path):
 def main(work):
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--opener", choices=["gio", "thunar"], default="gio")
+    cli.add_argument("--installed-iris", action="store_true", help="verify the combined Y700 desktop launcher and plugin")
     args = cli.parse_args()
     assert os.getuid() == 1000
     Gtk.init([])
@@ -113,6 +114,8 @@ def main(work):
         app = Gio.AppInfo.get_default_for_type(mime, False)
         print(f"PLAYER_ASSOCIATION mime={mime} default={app.get_id() if app else 'none'}", flush=True)
         assert app and app.get_id() == "org.xfce.Parole.desktop"
+        if args.installed_iris:
+            assert app.get_filename() == "/usr/local/share/applications/org.xfce.Parole.desktop"
     for name in ("h264.mp4", "hevc.mp4", "vp9.webm"):
         assert not session_players(), "Use a private display and session bus with no running Parole"
         assert not colour_pairs(root), "Unexpected pre-existing test colours"
@@ -137,6 +140,16 @@ def main(work):
         assert len(pids) == 1
         argv = Path(f"/proc/{pids[0]}/cmdline").read_bytes().split(b"\0")
         assert str(path).encode() in argv or path.as_uri().encode() in argv, (path.name, argv)
+        if args.installed_iris:
+            proc = Path("/proc") / str(pids[0])
+            private_plugin = "/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so"
+            mappings = {line.split()[-1] for line in (proc / "maps").read_text().splitlines()
+                        if line.endswith("/libgstvideo4linux2.so")}
+            assert mappings == {private_plugin}, mappings
+            env = dict(entry.split(b"=", 1) for entry in (proc / "environ").read_bytes().split(b"\0") if entry)
+            registry = Path(os.fsdecode(env[b"GST_REGISTRY_1_0"]))
+            assert registry.is_file() and registry.parent == Path.home() / ".cache/y700-parole", registry
+            print(f"PLAYER_PLUGIN file={name} pid={pids[0]} installed_iris=1 private_cache=1", flush=True)
         print(f"PLAYER_OPEN file={name} via={args.opener} program=parole pid={pids[0]} file_arg=1 "
               f"observed={','.join(sorted(observed))} samples={samples}", flush=True)
         assert observed == {"01", "12", "20"}, name

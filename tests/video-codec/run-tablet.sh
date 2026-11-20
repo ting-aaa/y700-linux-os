@@ -6,7 +6,7 @@ access=$(realpath -e "$1")
 deb=$(realpath -e "$2")
 clips=$(realpath -e "$3")
 mode=$4
-case $mode in h264|hevc|vp9|h264-mp4|hevc-mp4|vp9-auto|h264-playbin|hevc-playbin) ;; *) exit 2 ;; esac
+case $mode in h264|hevc|vp9|h264-mp4|hevc-mp4|vp9-auto|h264-playbin|hevc-playbin|vp9-playbin) ;; *) exit 2 ;; esac
 codec=${mode%%-*}
 parser=
 v4l2_plugin=
@@ -36,11 +36,17 @@ cd "$work"
 cp tools/usr/bin/gst-{inspect,launch}-1.0 "$here/board.sh" .
 chmod 755 gst-{inspect,launch}-1.0
 mkdir "$codec"
-cp "$clips/$codec/"{[0-9][0-9][0-9].au,reference.sha256} "$codec/"
+cp "$clips/$codec/reference.sha256" "$codec/"
 if [[ -f $clips/$codec/geometry ]]; then cp "$clips/$codec/geometry" "$codec/"; else echo '384 256' >"$codec/geometry"; fi
-if [[ $codec == vp9 ]]; then cp "$clips/$codec/clip.webm" "$codec/"; fi
-if [[ $mode == *-mp4 || $mode == *-playbin ]]; then cp "$clips/$codec/clip.mp4" "$codec/"; fi
-[[ $(wc -l <"$codec/reference.sha256") == 24 && $(find "$codec" -name '*.au' | wc -l) == 24 ]]
+if [[ $codec == vp9 ]]; then
+    cp "$clips/$codec/clip.webm" "$codec/"
+elif [[ $mode == *-mp4 || $mode == *-playbin ]]; then
+    cp "$clips/$codec/clip.mp4" "$codec/"
+else
+    cp "$clips/$codec/"[0-9][0-9][0-9].au "$codec/"
+    [[ $(find "$codec" -name '*.au' | wc -l) == 24 && $(wc -l <"$codec/reference.sha256") == 24 ]]
+fi
+awk 'length($0)!=64 || /[^a-f0-9]/ {bad=1} END {exit (bad || NR<1 || NR>48)}' "$codec/reference.sha256"
 extra=()
 if [[ -n $parser ]]; then
     mkdir -m755 parser plugin

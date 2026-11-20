@@ -90,7 +90,9 @@ if [[ $mode == *-mp4 || $mode == vp9-auto ]]; then
 fi
 pipeline=("${decode[@]}" '!' videoconvert '!' video/x-raw,format=I420 '!' filesink location=results/actual.i420 sync=false)
 if [[ $mode == *-playbin ]]; then
-    pipeline=(playbin uri="file://$stage/$codec/clip.mp4" audio-sink=fakesink 'video-sink=videoconvert ! video/x-raw,format=I420 ! filesink location=results/actual.i420 sync=false')
+    container=mp4
+    if [[ $codec == vp9 ]]; then container=webm; fi
+    pipeline=(playbin uri="file://$stage/$codec/clip.$container" audio-sink=fakesink 'video-sink=videoconvert ! video/x-raw,format=I420 ! filesink location=results/actual.i420 sync=false')
 fi
 timeout -k 3 30 "${gst[@]}" GST_DEBUG_NO_COLOR=1 GST_DEBUG='v4l2videodec:7,v4l2bufferpool:6,v4l2allocator:7,videodecoder:6' ./gst-launch-1.0 -m -v \
     "${pipeline[@]}" \
@@ -102,7 +104,7 @@ timeout -k 3 30 "${gst[@]}" GST_DEBUG_NO_COLOR=1 GST_DEBUG='v4l2videodec:7,v4l2b
 grep -q 'Got EOS' results/pipeline
 if grep -Fq 'Confirmed Iris VP9 startup keyframe' results/pipeline; then echo IRIS_VP9_KEYFRAME_CONFIRMED; fi
 if [[ $mode == *-mp4 || $mode == vp9-auto || $mode == *-playbin ]]; then
-    grep -F "${factory}0" results/pipeline >/dev/null || { echo IRIS_AUTO_SOFTWARE_OR_OTHER_DECODER; exit 1; }
+    grep -E "<${factory}[0-9]+> Got buffer for frame number" results/pipeline >/dev/null || { echo IRIS_AUTO_SOFTWARE_OR_OTHER_DECODER; exit 1; }
     grep -F 'format=(string)NV12' results/pipeline >/dev/null
     echo "IRIS_AUTOPLUG mode=$mode selected=$factory staged_parser=$(test -d parser && echo yes || echo no)"
 fi
@@ -121,4 +123,5 @@ if ! cmp -s "$codec/reference.sha256" results/frame.sha256; then
         "$codec/reference.sha256" results/frame.sha256
     exit 1
 fi
-echo "IRIS_DECODE_PASS codec=$codec frames=24 geometry=${width}x$height linear=NV12 output=I420 matching_software_frames=24 eos=1"
+frames=$((bytes / frame_bytes))
+echo "IRIS_DECODE_PASS codec=$codec frames=$frames geometry=${width}x$height linear=NV12 output=I420 matching_software_frames=$frames eos=1"
