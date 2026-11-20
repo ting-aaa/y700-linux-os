@@ -1,5 +1,7 @@
 # TB320FC internal microphones
 
+The dev12.9 ARM64 desktop can select a two-channel microphone when the candidate ALSA profile sees the matching capture PCM and mixer controls. On the PC, an ordinary application recorded independent synthetic channels while the speaker monitor carried a third tone. Two kernel fixes also passed an original-versus-patched ARM64 test. Physical capture on the tablet is still open. [Stereo driver verification](#stereo-driver-and-audioreach-verification) · [Application and duplex verification](../tests/microphone/virtual/README.md)
+
 The physical Lenovo Y700 Gen 2 running `y700-platform 0.1.0~dev12.6` and `7.3.4-asphalt-prc` has **zero capture PCMs**. ALSA card `LenovoY700` exposes MultiMedia1 and MultiMedia2 playback. The board UCM profile lists only Speaker. Applications can encounter a speaker monitor source even on a system without a microphone PCM. Lenovo specifies two microphones for the Snapdragon 8+ Gen 1 TB320FC. [Lenovo product reference](https://psref.lenovo.com/syspool/Sys/PDF/Lenovo_Tablets/Legion_Tab/Legion_Tab_Spec.PDF) · [Shipping board UCM](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf)
 
 ## Factory capture path
@@ -63,3 +65,31 @@ uv run --no-project tests/microphone/build-topology.py \
 | Installed and rebuilt playback topology | `bfb28e0af200bdc000e7d03af30e11d191200a8620a4179a6afe2d5c8ef26d63` |
 | Offline candidate with two-channel capture | `aa6d0c1a904bafa20915528cae810ee08560d262f174c52465c386629e1b6422` |
 | Installed dev12.6 speaker UCM | `3147a57e096b84286a392f23a35ec2fbf73bd969565d5359e50dbbad16caa8c7` |
+
+## Stereo driver and AudioReach verification
+
+In the prepared 7.3.4 kernel, the TX macro remembered a single most recently selected decimator per audio interface. With DEC2 and DEC5 selected, selecting DEC2 a second time increased the reported channel count to three. Unmuting then affected only DEC2, and disabling both inputs left a stale route. The candidate derives the channel count from the active mask and mutes or unmutes every selected path. [TX macro fix](../config/kernel/asphalt-lpass-tx-stereo.patch)
+
+The board also needs to tell AudioReach which physical DMA slots carry samples. The stock mixer selects DEC2 and DEC5. The published Waipio TX macro returns those decimator indices as bits, and Qualcomm's downstream graph manager passes the active bitmap to the DMA interface. The native CPU DAI initially assigns a two-channel stream to slots 0 and 1. The Y700 capture callback now supplies a fully specified map for TX3 after hardware-parameter setup and before the DSP command is built. This associates logical channels one and two with slots 2 and 5. Acoustic left/right placement remains unmeasured. [Waipio decimator map](https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8450/blob/877203a7cf9b79973d44a9db716490f95d820110/vendor/qcom/opensource/audio-kernel/asoc/codecs/lpass-cdc/lpass-cdc-tx-macro.c#L1142-L1158) · [Qualcomm graph manager](https://github.com/Xiaomi-SM8650/android_vendor_qcom_opensource_agm/blob/cb1c0fbbcdb8e75315ff09504bf4ef537ab52561/service/src/graph_module.c#L277-L301) · [Y700 DMA mapping](../config/kernel/asphalt-tx3-dma-map.patch)
+
+Two fresh ARM64 QEMU guests used the same prepared Asphalt kernel. Each ran the real TX macro module against a RAM-backed register window and a registered ALSA card. A separate guest test used the actual board configuration callback, CPU DAI configuration functions, packet allocator and AudioReach command builder. It inspected the outgoing bytes at the DSP transport boundary. No physical DSP participated.
+
+| Observation | Original driver | Candidate |
+| --- | --- | --- |
+| Active channels after selecting DEC2, DEC5, DEC2 | 3 | 2 |
+| Paths actually unmuted | DEC2 | DEC2 and DEC5 |
+| Paths reported after disabling both | Mask `0x04`, count 2 | Empty, count 0 |
+| Reopen with only DEC5, then close | No unmuted path, stale count 3 on close | DEC5 alone, count 0 on close |
+| 48 kHz, 16-bit stereo TX3 DMA command | `active_channels_mask=0x03` | `active_channels_mask=0x24` |
+
+The two full kernel module builds and the compact serial receipts are in `out/microphone/tx-stereo/`. On a Linux build host, use an unmodified prepared kernel tree, its installed modules root, a static AArch64 BusyBox, Clang, dtc, uv and QEMU. The output directory must be new.
+
+```sh
+bash tests/microphone/tx-macro/run.sh "$kernel_build" "$modules_root" "$arm64_busybox" "$new_logs"
+```
+
+## Board wiring and desktop capture
+
+The offline device-tree test compiled both WCD9380 and WCD9385 hypotheses against the exact board source. It compared the capture DAI, both SoundWire links, GPIO controllers, bias routes and ADC-to-TX links with the retained CN350 inputs. The speaker and regulator properties passed comparison to the base. The compiled variants differ only in the WCD compatible string. Both factory trees specify separate normal and active-only defaults for the BOB regulator, 3.296 V and 3.008 V respectively. Those properties specify requests. They do not establish the measured voltage when recording. The codec variant, a supported consumer voltage request, real bus enumeration, capture and simultaneous physical speaker operation are still open. [Board graph test](../tests/microphone/board-graph/README.md)
+
+The candidate UCM includes the existing speaker sequence and looks up the capture PCM on the same card. With the capture endpoint absent, WirePlumber exposed no microphone, although a Pulse default recording request could still read the speaker monitor. With the endpoint present, the same unprivileged client recorded 48,000 frames at 48 kHz with a 1,000 Hz left and 1,500 Hz right signal. The simultaneous monitor carried 375 Hz on both channels. These generated signals exercised the sealed dev12.9 audio stack. [Candidate UCM](../packaging/microphone/HiFi-Mic.conf) · [ARM64 duplex test](../tests/microphone/virtual/README.md)

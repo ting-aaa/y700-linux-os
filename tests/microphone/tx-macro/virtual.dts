@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			#address-cells = <2>;
+			#size-cells = <2>;
+
+			reserved-memory {
+				#address-cells = <2>;
+				#size-cells = <2>;
+				ranges;
+				tx-registers@56000000 {
+					reg = <0 0x56000000 0 0x1000>;
+					no-map;
+				};
+			};
+
+			tx_clk: tx-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <19200000>;
+			};
+
+			codec@56000000 {
+				compatible = "qcom,sm8450-lpass-tx-macro";
+				reg = <0 0x56000000 0 0x1000>;
+				clocks = <&tx_clk>, <&tx_clk>, <&tx_clk>;
+				clock-names = "mclk", "npl", "fsgen";
+				#clock-cells = <0>;
+				#sound-dai-cells = <1>;
+			};
+
+			test-card {
+				compatible = "test,y700-tx-macro";
+			};
+		};
+	};
+};

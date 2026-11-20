@@ -9,3 +9,5 @@ packaging/camera-qcam/*.patch whitespace=-blank-at-eol,-space-before-tab
 packaging/power-manager-touch/*.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
 tests/camera-focus-ldo5.patch whitespace=-space-before-tab
 tests/camera-cci/*.patch whitespace=-blank-at-eol,-space-before-tab
+config/kernel/asphalt-lpass-tx-stereo.patch whitespace=-blank-at-eol,-space-before-tab
+config/kernel/asphalt-tx3-dma-map.patch whitespace=-blank-at-eol,-space-before-tab
