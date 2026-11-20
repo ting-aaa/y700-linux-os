@@ -51,7 +51,56 @@ def bounds(xid):
     return tuple(int(re.search(rf"{field}:\s+(-?\d+)", info)[1]) for field in fields)
 
 
+def mapped_speaker(pid, socket_id):
+    xid = hex(socket_id)
+    socket = bounds(xid)
+    if not socket:
+        raise RuntimeError(f"Speaker socket {xid} for pid={pid} is not viewable")
+    x, y, w, h = socket
+    cx, cy = x + w // 2, y + h // 2
+    if min(w, h) < 12 or not (0 <= cx < 1024 and 0 <= cy < 768):
+        raise RuntimeError(f"Speaker socket {xid} has unusable bounds={socket}")
+
+    tree = run("xwininfo", "-id", xid, "-tree")
+    plug = re.search(r'^\s*(0x[\da-f]+) .*\("[^"]*" "Wrapper-2\.0"\)', tree, re.I | re.M)
+    if not plug:
+        raise RuntimeError(f"Speaker socket {xid} bounds={socket} contains no Xfce wrapper")
+    owner = run("xprop", "-id", plug[1], "_NET_WM_PID")
+    plug_pid = re.search(r"_NET_WM_PID\(CARDINAL\) = (\d+)", owner)
+    if plug_pid and int(plug_pid[1]) != pid:
+        raise RuntimeError(f"Socket {xid} embeds pid={plug_pid[1]}, expected pid={pid}")
+
+    for _ in range(8):
+        parent = re.search(r"Parent window id: (0x[\da-f]+)", tree, re.I)
+        if not parent or int(parent[1], 16) == 0:
+            break
+        panel_id = parent[1]
+        if '"xfce4-panel"' in run("xprop", "-id", panel_id, "WM_CLASS").lower():
+            bar = bounds(panel_id)
+            if bar:
+                bx, by, bw, bh = bar
+                if bw > bh and by <= cy < by + bh and bx <= cx < bx + bw and cy < 768 // 2:
+                    print(f"PANEL_X11_SOCKET pid={pid} socket={xid} bounds={socket} "
+                          f"plug={plug[1]} panel={panel_id} panel_bounds={bar}", flush=True)
+                    return pid, socket
+            raise RuntimeError(f"Socket {xid} bounds={socket} is outside the top Xfce bar {panel_id} bounds={bar}")
+        tree = run("xwininfo", "-id", panel_id, "-tree")
+    raise RuntimeError(f"Socket {xid} bounds={socket} has no Xfce panel ancestor")
+
+
 def speaker_button():
+    observer_pid = os.environ.get("Y700_PANEL_WRAPPER_PID")
+    observer_socket = os.environ.get("Y700_PANEL_SOCKET_XID")
+    if observer_pid is not None or observer_socket is not None:
+        if (not re.fullmatch(r"[1-9][0-9]*", observer_pid or "")
+                or not re.fullmatch(r"(?:[1-9][0-9]*|0[xX][0-9A-Fa-f]+)", observer_socket or "")):
+            raise RuntimeError(f"Invalid observer speaker pid={observer_pid!r} socket={observer_socket!r}")
+        pid, socket_id = int(observer_pid), int(observer_socket, 0)
+        if pid > 0x7fffffff or not 0 < socket_id <= 0xffffffff:
+            raise RuntimeError(f"Out-of-range observer speaker pid={pid} socket={socket_id}")
+        # The observer verified the wrapper UID, plugin ID, loaded library and
+        # argv. The session user verifies its live XEmbed socket and owns all UI.
+        return mapped_speaker(pid, socket_id)
     for proc in Path("/proc").glob("[0-9]*"):
         try:
             if proc.stat().st_uid != os.getuid():
@@ -64,11 +113,10 @@ def speaker_button():
                 continue
             if "/libpulseaudio-plugin.so" not in (proc / "maps").read_text():
                 continue
-            socket = bounds(hex(int(args[module + 2])))
+            socket_id = int(args[module + 2])
         except (FileNotFoundError, PermissionError, ProcessLookupError):
             continue
-        if socket and socket[1] in range(0, 12) and socket[2] >= 12 and socket[3] >= 12:
-            return int(proc.name), socket
+        return mapped_speaker(int(proc.name), socket_id)
     return None
 
 
