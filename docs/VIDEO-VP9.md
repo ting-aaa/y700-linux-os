@@ -2,6 +2,24 @@
 
 The private GStreamer plugin delivered all 24 reference pictures on the PRC tablet at both 384×256 and 1920×1080. Both VP9 runs reached end of stream. In the 1080p WebM test, automatic GStreamer selection chose `v4l2vp9dec` and no separate parser was needed. The installed Debian plugin stays available to ordinary applications. The trial bundle is optional. [Codec wiring](VIDEO-CODEC-KERNEL.md)
 
+## Optional Parole bundle, revision 2
+
+Revision 2 includes the VP9 first-picture correction and adds support for two partial BT.601 descriptions on the compressed input of Iris. The 135,543-byte archive `out/iris-input-color-r2/iris-input-color-r2-arm64.tar.gz` has SHA-256 `14d9ffb3bf32373e44d460904168fd7227f987ce76a4051e566b6d7d5e053d0f`. It contains `PRIVATE-SHA256SUMS` and one private ARM64 plugin, SHA-256 `7c3e57f206c81fa0af09a3cf34d9836a686527212c7738dc4657d6c315ec9962`. The per-process extraction and checksum procedure below applies to either revision.
+
+On the physical tablet, opening each 1920×1080 file in Thunar launched Parole. The ordinary user saw three expected picture changes in each video on the isolated X desktop. Each Parole process returned ten buffers from its matching Iris decoder during observation. In separate runs through end of stream, all 48 decoded pictures for each format exactly matched the software reference. The device returned to runtime suspend after each run. The images, packages and preferences for the desktop trial were staged in RAM. Local receipts are `out/iris-physical/parole-thunar-10.log`, `parole-10.tar.gz` and `color-r2-{h264,hevc,vp9}-playbin.log`.
+
+| Codec | Original 1080p 12 fps clip at the decoder input | 1080p 2 fps Parole clip at the decoder input |
+| --- | --- | --- |
+| H.264 | No colorimetry field, parsed Annex B access units | `0:4:0:0`, parsed Annex B access units |
+| HEVC | No colorimetry field, parsed Annex B access units | `2:4:0:0`, parsed Annex B access units |
+| VP9 | `2:0:0:0`, with or without the additional VP9 parser | `2:4:0:0`, profile 0 |
+
+The four numbers describe range, matrix, transfer function and primaries. Zero denotes unknown. Both failing descriptions explicitly identify the BT.601 matrix. The second also specifies limited range. The driver advertised `bt601` and `2:0:0:0` among its supported settings. GStreamer treats the colorimetry field as a string. The stock V4L2 plugin supplies a colorimetry-free alternative for raw video only. With a partial description on the compressed input, each Iris decoder opened and reached READY before `ACCEPT_CAPS` failed. Parole then displayed software-decoded pictures. The archived trial 08 showed this for all three codecs. Replaying its exact caps on ARM64 found that removing only colorimetry restored the stock caps intersection in all three cases. [GStreamer color representation](https://gstreamer.freedesktop.org/documentation/video/video-color.html) · [V4L2 caps probing](https://github.com/GStreamer/gstreamer/blob/1.26.2/subprojects/gst-plugins-good/sys/v4l2/gstv4l2object.c)
+
+The revision adds two alternatives to the probed compressed sink caps only when this board's Iris decoder advertises full `bt601` on that codec. Every other field and memory feature is copied from the original alternative. The stream retains its own range and matrix, and its unspecified primaries and transfer function. The fix introduces no new full-range, PQ or HLG alternatives. The original raw CAPTURE path still negotiates the decoded surface. In the physical trial 10 trace, the decoder accepted each of the three original input strings. [Caps change](../tests/video-vp9/iris-input-color.h)
+
+Two clean builds reproduced both revision 2 and the original revision 1 archive. ARM64 tests covered 15 color/format/device cases, the three full trace intersections and the 13 earlier VP9 buffer replays. The local color receipt `out/iris-input-color-r2/color-replay.log` has SHA-256 `0f811918322d7cb5ae43ca67dee952a9cd923d66cafe56a401e378022e91277a`. Use `build-color.sh` with the same inputs as the original builder below. The caps test can be compiled with an ARM64 C compiler and `pkg-config --cflags --libs gstreamer-video-1.0`. Pass the compiled test or its QEMU command to `check-color-trace.py` after the path to `parole-08.tar.gz`. [Revision 2 builder](../tests/video-vp9/build-color.sh) · [ARM64 checks](../tests/video-vp9/color-caps.c) · [Trace replay](../tests/video-vp9/check-color-trace.py)
+
 ## The two capture buffers
 
 The stock Debian 1.26.2 V4L2 decoder delivered 23 of 24 pictures from the short synthetic clip. Its first output matched the **second** software reference picture. The remaining pictures matched in order. GStreamer's V4L2 allocator logged the following CAPTURE buffers returned by the kernel, with a separate OUTPUT dequeue interleaved. Both CAPTURE buffers carried sequence zero and copied timestamp zero.

@@ -1,0 +1,19 @@
+--- a/sys/v4l2/gstv4l2videodec.c
++++ b/sys/v4l2/gstv4l2videodec.c
+@@ -31,6 +31,7 @@
+
+ #include "gstv4l2object.h"
+ #include "gstv4l2videodec.h"
++#include "iris-input-color.h"
+
+ #include "gstv4l2h264codec.h"
+ #include "gstv4l2h265codec.h"
+@@ -134,6 +135,8 @@
+   self->probed_sinkcaps = gst_v4l2_object_probe_caps (self->v4l2output,
+       codec_caps);
+   gst_caps_unref (codec_caps);
++  self->probed_sinkcaps = iris_partial_input_color (self->probed_sinkcaps,
++      &self->v4l2output->vcap, self->v4l2output->type);
+
+   if (gst_caps_is_empty (self->probed_sinkcaps))
+     goto no_encoded_format;
