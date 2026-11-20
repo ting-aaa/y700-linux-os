@@ -329,6 +329,23 @@ The local `out/dev12.2-board` bundle upgrades `y700-platform` on the sealed dev1
 
 Independent generic and synthetic Bluetooth extractions passed the complete filesystem and package inventory checks. The exact root booted through virtual U-Boot and EFI to systemd, rejected a mismatched touchscreen enrollment and completed a normal LightDM/PAM Xfce login. The new user had one running PulseAudio wrapper, ID 19 next to the top-panel notification area, and the original bottom-panel layout. On this emulated first login the helper reported a D-Bus timeout during panel restart and left its completion marker absent. A subsequent observation in that same login confirmed the wrapper had started. The guest shut down normally. The physical tablet received the package update separately. Full-image physical cold boot remains untested. See `out/dev12.2-board-verified/efi/report.log` for the ordered observations.
 
+### Dev12.4 native Xfce volume button at first login
+
+The complete local `out/dev12.4-board` distribution upgrades only `y700-platform` from the sealed dev12.2 root. New Xfce profiles receive a per-user runtime panel template before the desktop starts. The fallback handles existing layouts. Both paths preserve the installed audio driver, UCM profile and per-device calibration workflow. Use the included Chinese `README.md` and `unpack.sh` to reproduce the generic image or personalize the Bluetooth address for one tablet. [Xfce panel and hardware volume keys](PANEL-AUDIO.md)
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `ceb1200c8cdee611e778ffcba95ce4ab5fbf262aa085b7667f3b86522979c8ec` |
+| `TOOLS-SHA256SUMS` | `3f3485c86ab29bf45ea09a15dce2c3dc782299fd395acea9a661e131256b3ef2` |
+| Portable `dev12.4.qcow2` (355,205,120 bytes) | `482d458db19f9c9531b01934363b0bc71e0cbee4e84830588f33d605eb875993` |
+| Generic 6 GiB `root.ext4` | `9054df11e3a7d6cceacdfa6dffdb081c4a94428468ada09076c286c61ac17f30` |
+| 1,112 installed package tuples | `e0caf1e65e742059c826219046fad6e39437c45d8b33d50325f15054a0b6ac8a` |
+| `y700-platform_0.1.0~dev12.4_all.deb` | `24f029d301a8322493f7e90a50c29fe7bf2b49f33c52b353379a2d1af494f1cb` |
+
+Full extraction reproduced the generic root byte for byte. A second extraction with a synthetic Bluetooth identity checked the private file's content, owner and 0600 mode. Both roots passed ext4, FAT, package inventory and installed-file checks. U-Boot, the EFI partition and the public identity receipt matched between the two outputs.
+
+The exact generic root booted through virtual U-Boot and EFI to Linux 7.3.4-asphalt-prc and systemd. Mismatched touchscreen enrollment left the user locked. Correct enrollment enabled normal LightDM/PAM login to Xfce. In the first desktop session, the panel inherited the new runtime template in its `XDG_CONFIG_DIRS`. The ordinary user's session bus retained one panel owner. An independent observer confirmed PulseAudio wrapper 19 by D-Bus, process and loaded library. The top panel contained exactly one extra item after the tray, the bottom panel retained its eight items, and the per-user completion marker was present. Repeating setup with the existing wrapper restored a missing marker and produced no duplicate. The VM powered off cleanly. This run exercises virtual display and input. Physical boot of the complete image remains untested. Local receipts are in `out/dev12.4-board-verified/efi/`, including `native-panel.log`, `timeline.jsonl` and `firmware.log`.
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
