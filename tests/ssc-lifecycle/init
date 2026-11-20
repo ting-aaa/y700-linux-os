@@ -1,0 +1,61 @@
+#!/bin/busybox sh
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+exec </dev/console >/dev/console 2>&1
+grep -qw 'linux,dummy-virt' /proc/device-tree/compatible || poweroff -f
+# Probe order varies with virtio-mmio. Identify the 96 MiB fixture drive,
+# then verify both filesystem layouts before constructing the overlay.
+case $(cat /sys/class/block/vda/size) in
+    196608) data=vda; root=vdb ;;
+    *) data=vdb; root=vda ;;
+esac
+test "$(cat "/sys/class/block/$data/size")" = 196608
+mount -t ext4 -o ro,noload "/dev/$root" /lower
+mount -t ext4 -o ro,noload "/dev/$data" /payload
+test -x /lower/sbin/init && test -s /payload/runtime.deb
+mount -t tmpfs tmpfs /runtime
+mkdir /runtime/work /runtime/upper
+mount -t overlay overlay -o lowerdir=/lower,upperdir=/runtime/upper,workdir=/runtime/work /guest
+mkdir -p /guest/opt/ssc-test
+mount --move /payload /guest/opt/ssc-test
+# The VM presents the root without the board's GPT/ESP. Keep the board image read-only.
+: > /guest/etc/fstab
+cp /guest/opt/ssc-test/lib/libqrtr.so.1 /guest/usr/lib/aarch64-linux-gnu/libqrtr.so.1
+dir=/guest/etc/systemd/system
+mkdir -p "$dir/y700-ssc.service.d"
+# Replace only the hardware boundary. Keep the package's unit, seed,
+# namespaces, dependencies, readiness probe and actual proxy executable.
+cat > "$dir/y700-ssc.service.d/fixture.conf" <<'EOF'
+[Service]
+ExecStart=
+# uv converts its child process's termination signal into exit status 143.
+SuccessExitStatus=143
+Environment=UV_CACHE_DIR=/tmp/ssc-uv PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/opt/ssc-test:/opt/ssc-test/ssc_server:/opt/ssc-test/python
+ExecStart=/opt/ssc-test/uv run --offline --no-project --python /usr/bin/python3 python /opt/ssc-test/ssc-server
+EOF
+cat > "$dir/ssc-lifecycle.service" <<'EOF'
+[Unit]
+Description=QEMU-only SSC device lifecycle
+Requires=systemd-udevd.service dbus.service
+After=systemd-udev-trigger.service systemd-udevd.service dbus.service
+[Service]
+Type=oneshot
+StandardOutput=journal+console
+StandardError=journal+console
+ExecStart=/bin/bash /opt/ssc-test/guest.sh
+ExecStopPost=/usr/bin/systemctl --no-block poweroff
+EOF
+mode=$(sed -n 's/.*y700.ssc_lifecycle=\([^ ]*\).*/\1/p' /proc/cmdline)
+if [ "$mode" = cold ] || [ "$mode" = late ]; then
+    chroot /guest /usr/bin/env PATH=/usr/sbin:/usr/bin:/sbin:/bin SYSTEMD_OFFLINE=1 \
+        /usr/bin/dpkg -i /opt/ssc-test/runtime.deb
+fi
+if [ "$mode" = cold ]; then
+    insmod /guest/opt/ssc-test/y700_ssc_qemu.ko
+fi
+for d in proc sys dev; do mount --move "/$d" "/guest/$d"; done
+exec switch_root /guest /sbin/init

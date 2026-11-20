@@ -132,10 +132,10 @@
     },
     {
       "package": "y700-ssc-runtime",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "architecture": "arm64",
-      "size": 173446,
-      "sha256": "ceb15ee63163b9f1700a7720d654229b22ba476464b1716c8a48618df0aad0ac"
+      "size": 173570,
+      "sha256": "2d717ae8b0090b986423f8fd398b675d125af6087a5a9827385527c98ccd479b"
     }
   ]
 }

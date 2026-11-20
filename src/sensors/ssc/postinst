@@ -19,4 +19,5 @@ if [ -x /usr/sbin/policy-rc.d ]; then
     /usr/sbin/policy-rc.d y700-ssc.service start || result=$?
     case "$result" in 0|104) ;; *) exit 0 ;; esac
 fi
-systemctl --no-block start y700-ssc.service
+[ "$(systemctl show -p LoadState --value y700-ssc-device.target)" = loaded ] || exit 0
+systemctl --no-block start y700-ssc-device.target

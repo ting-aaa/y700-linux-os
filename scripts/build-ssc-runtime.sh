@@ -47,6 +47,7 @@ done
 unit=$repo/src/sensors/ssc
 install -Dm644 "$unit/y700-ssc.service" "$stage/usr/lib/systemd/system/y700-ssc.service"
 install -Dm644 "$unit/proxy.conf" "$stage/usr/lib/systemd/system/iio-sensor-proxy.service.d/90-y700-ssc.conf"
+install -Dm644 "$unit/y700-ssc-device.target" "$stage/usr/lib/systemd/system/y700-ssc-device.target"
 install -Dm644 "$unit/90-y700-ssc.rules" "$stage/usr/lib/udev/rules.d/90-y700-ssc.rules"
 install -m755 "$unit/postinst" "$stage/DEBIAN/postinst"
 install -m755 "$unit/seed" "$unit/wait-accelerometer" "$programs/"
@@ -58,7 +59,7 @@ printf '%s\n' "$expected_digest" > "$stage/usr/share/doc/y700-ssc-runtime/fastrp
 
 cat > "$stage/DEBIAN/control" <<'EOF'
 Package: y700-ssc-runtime
-Version: 0.1.2
+Version: 0.1.3
 Architecture: arm64
 Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
 Section: admin
@@ -72,7 +73,7 @@ EOF
 export SOURCE_DATE_EPOCH=1795046400
 find "$stage" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
 mkdir -p "$output"
-filename=y700-ssc-runtime_0.1.2_arm64.deb
+filename=y700-ssc-runtime_0.1.3_arm64.deb
 archive=$(mktemp "$output/.$filename.XXXXXXXX")
 dpkg-deb --root-owner-group --build "$stage" "$archive"
 chmod 644 "$archive"

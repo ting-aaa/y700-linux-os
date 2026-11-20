@@ -1,0 +1,5 @@
+[Unit]
+Description=Y700 sensor services while the SDSP device is present
+BindsTo=dev-fastrpc\x2dsdsp.device
+After=dev-fastrpc\x2dsdsp.device
+Upholds=y700-ssc.service
