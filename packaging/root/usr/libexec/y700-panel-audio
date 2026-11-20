@@ -46,6 +46,28 @@ def wrappers():
             if (node.get("name") or "").isdigit()}
 
 
+def wait_for_wrapper(plugin_id, panel, seconds):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            if plugin_id in wrappers() and plugin_id in xfconf("GetProperty", "(ss)", panel)[0]:
+                return True
+        except GLib.Error:
+            pass  # The old panel releases its bus name before the new one acquires it.
+        time.sleep(0.2)
+    return False
+
+
+def restart_panel():
+    owner, = dbus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetNameOwner",
+                  GLib.Variant("(s)", ("org.xfce.Panel",)))
+    message = Gio.DBusMessage.new_method_call(owner, "/org/xfce/Panel", "org.xfce.Panel", "Terminate")
+    message.set_body(GLib.Variant("(b)", (True,)))
+    # The panel may exit before returning the method reply, especially at first login.
+    message.set_flags(Gio.DBusMessageFlags.NO_REPLY_EXPECTED | Gio.DBusMessageFlags.NO_AUTO_START)
+    bus.send_message(message, Gio.DBusSendMessageFlags.NONE)
+
+
 def panel_layout(props):
     panels = props.get("/panels", [])
     if type(panels) is int:  # Legacy Xfce profiles store a panel count.
@@ -73,10 +95,14 @@ def add_control(marker):
     def name(n):
         return props.get(f"/plugins/plugin-{n}")
 
-    for ids in layout.values():
-        if any(name(n) == "pulseaudio" for n in ids):
-            marker.touch()
-            return
+    for panel, ids in layout.items():
+        for plugin_id in ids:
+            if name(plugin_id) == "pulseaudio":
+                if wait_for_wrapper(plugin_id, panel, 60):
+                    marker.touch()
+                else:
+                    raise RuntimeError("The configured speaker plugin did not start")
+                return
 
     # Keep the dock, launchers and all existing plugin IDs in their order.
     panel = next((key for key, ids in layout.items() if any(name(n) == "systray" for n in ids)), None)
@@ -104,17 +130,14 @@ def add_control(marker):
         raise RuntimeError("Panel items changed during setup")
     updated = ids[:position] + [plugin_id] + ids[position:]
     xfconf("SetProperty", "(ssv)", panel, GLib.Variant("av", [GLib.Variant("i", n) for n in updated]))
-    if plugin_id not in live:
-        dbus("org.xfce.Panel", "/org/xfce/Panel", "org.xfce.Panel", "Terminate", GLib.Variant("(b)", (True,)))
-    for _ in range(100):
-        try:
-            if plugin_id in wrappers() and plugin_id in xfconf("GetProperty", "(ss)", panel)[0]:
-                marker.touch()
-                return
-        except GLib.Error:
-            pass
-        time.sleep(0.2)
-    raise RuntimeError("The new panel plugin did not start")
+    try:
+        restart_panel()
+    except GLib.Error:
+        # A concurrent restart can already be loading the saved layout.
+        pass
+    if not wait_for_wrapper(plugin_id, panel, 60):
+        raise RuntimeError("The new panel plugin did not start")
+    marker.touch()
 
 
 if __name__ == "__main__":
