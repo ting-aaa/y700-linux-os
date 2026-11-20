@@ -16,7 +16,7 @@ The table records the November 18 investigation. For later on-device playback, c
 | Accelerometer/gyro | SSC through SLPI/SDSP FastRPC, not simply direct AP I2C | IMU registry includes LSM6DST, BMI3x0 and ICM4x6xx candidates; live sensor identity/revision unconfirmed |
 | Magnetometer/light/proximity/Hall | Upstream reports MMC56x3, STK3A5x and BU52053NVX in SSC | Same-device upstream evidence only; this Debian install has no accepted readings |
 | Cameras | Patched CCI/CSIPHY/CAMSS graph names HI1339, S5K4H7, SC202CS; WL2864C regulator | Source candidates; populated-module/route identification and capture still unverified |
-| Video codec | SM8450 Iris/remote firmware and secure-memory patches | No hardware video encode/decode acceptance; distinct from GPU rendering |
+| Video codec | Native Iris driver, SM8450 VPU2, board-specific CN350 firmware and protected ARP memory | Physical 8-bit H.264, HEVC and VP9 decode matched software references at 1080p. VP9 used a private GStreamer correction. Hardware encoding and sustained desktop playback remain open. [Board tests](VIDEO-CODEC-BOARD.md) |
 | USB / external display | Qualcomm DWC3, QMP USB3/DP PHY, NXP eUSB2 repeater, PMIC GLINK | Existing ACM/NCM works; newly generated identity, Type-C roles and external DP need tests |
 | Storage | UFS controller/SM8475 PHY and OPP patches | Internal root boot physically accepted; lifecycle/recovery and sustained I/O still separate |
 | Power/charging/thermals | PM8350/PM8350C/PMR735A RPMh regulators, PMIC GLINK and Qualcomm thermal/power paths | Inventory fuel-gauge/charger interfaces and actual readings before choosing a charging policy |

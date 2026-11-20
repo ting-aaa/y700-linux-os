@@ -4,7 +4,7 @@ The private GStreamer plugin delivered all 24 reference pictures on the PRC tabl
 
 ## The two capture buffers
 
-The stock Debian 1.26.2 V4L2 decoder delivered 23 of 24 pictures from the short synthetic clip. Its first output matched the **second** software reference picture. The remaining pictures matched in order. The kernel trace showed the following consecutive CAPTURE returns, with a separate OUTPUT dequeue interleaved. Both CAPTURE buffers carried sequence zero and copied timestamp zero.
+The stock Debian 1.26.2 V4L2 decoder delivered 23 of 24 pictures from the short synthetic clip. Its first output matched the **second** software reference picture. The remaining pictures matched in order. GStreamer's V4L2 allocator logged the following CAPTURE buffers returned by the kernel, with a separate OUTPUT dequeue interleaved. Both CAPTURE buffers carried sequence zero and copied timestamp zero.
 
 | CAPTURE index | Flags | Payload at 384×256 | GStreamer stock behavior |
 | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ The trial recognizes the first CAPTURE of a stream on the `aa00000.video-codec` 
 | Check | Result |
 | --- | --- |
 | Board, stock plugin | 23/24 pictures, missing reference picture zero. Local trace `out/iris-physical/vp9-capture-flags.log` |
+| Board, unmodified plugin rebuilt with the candidate's toolchain | 23/24 again. The first delivered frame matched reference 2 and the last matched reference 24. Local trace `out/iris-physical/vp9-same-build-stock.log`, SHA-256 `9688d4e31f2d3b3829786211c35e282cf0850dfc4ea7dc8e0f0e2a30c6cb5083`. |
 | Board, private plugin, direct decoder | 24/24 software frame matches, 384×256, EOS. Local receipt `out/iris-physical/vp9-private-small.log` |
 | Board, private plugin, WebM automatic selection | 24/24 software frame matches, 1920×1080, EOS. Local receipt `out/iris-physical/vp9-private-hd-auto.log` |
 | PC, native ARM64 code under QEMU | 13/13 dequeue replays. Divergent timestamp/sequence, partial payload, delta frame, two errors, EOS on poll, a dequeued LAST buffer, flushing, source change, device failure and an ineligible stream all preserved the expected error signals and flow returns. A damaged first picture with payload stayed marked corrupt. Local receipt `out/iris-vp9-private/replay.log` |
