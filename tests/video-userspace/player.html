@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Y700 video decoder check</title>
+<video id="screen" muted playsinline preload="auto" width="384" height="224"></video>
+<script>
+const video = document.querySelector("video");
+const canvas = document.createElement("canvas");
+canvas.width = 192;
+canvas.height = 112;
+const ctx = canvas.getContext("2d", {willReadFrequently: true});
+function event(name, action) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => finish(new Error("timeout-" + name)), 12000);
+    function finish(error) {
+      clearTimeout(timer);
+      video.removeEventListener(name, success);
+      video.removeEventListener("error", failure);
+      error ? reject(error) : resolve();
+    }
+    const success = () => finish();
+    const failure = () => finish(new Error("media-" + video.error.code));
+    video.addEventListener(name, success);
+    video.addEventListener("error", failure);
+    Promise.resolve().then(action).catch(finish);
+  });
+}
+async function play(name) {
+  try {
+    await event("loadeddata", () => { video.src = name; video.load(); });
+    if (video.videoWidth !== 192 || video.videoHeight !== 112) throw Error("dimensions");
+    function pixels() {
+      ctx.drawImage(video, 0, 0);
+      return [48, 144].map(x => {
+        const rgb = Array.from(ctx.getImageData(x, 56, 1, 1).data).slice(0,3);
+        const i = rgb.indexOf(Math.max(...rgb));
+        if (rgb[i] < 180 || rgb.some((v,j) => j !== i && v > 60)) throw Error("sample-colour");
+        return i;
+      }).join("");
+    }
+    const observed = new Map([[0, pixels()]]);
+    let callback;
+    function presented(time, metadata) {
+      observed.set(Math.round(metadata.mediaTime * 2), pixels());
+      callback = video.requestVideoFrameCallback(presented);
+    }
+    callback = video.requestVideoFrameCallback(presented);
+    try { await event("ended", () => video.play()); }
+    finally { video.cancelVideoFrameCallback(callback); }
+    const samples = [...observed].sort((a,b) => a[0]-b[0]);
+    const expected = ["01","12","20","01","12","20"];
+    if (samples.length < 3 || new Set(samples.map(x => x[1])).size !== 3 ||
+        samples.some(([i,colour]) => expected[i] !== colour)) throw Error("frame-order-" + JSON.stringify(samples));
+    return {decoded: true, samples, ended: video.ended};
+  } catch (e) { return {decoded: false, error: e.message}; }
+}
+(async () => {
+  const results = {};
+  for (const name of ["vp9.webm", "h264.mp4", "hevc.mp4"]) results[name] = await play(name);
+  await fetch("/result", {method:"POST", body:JSON.stringify(results)});
+})();
+</script>
