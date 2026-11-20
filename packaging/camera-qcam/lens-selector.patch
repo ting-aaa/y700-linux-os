@@ -1,0 +1,216 @@
+diff --git a/src/apps/qcam/cam_select_dialog.cpp b/src/apps/qcam/cam_select_dialog.cpp
+index 7370567..083a8af 100755
+--- a/src/apps/qcam/cam_select_dialog.cpp
++++ b/src/apps/qcam/cam_select_dialog.cpp
+@@ -17,8 +17,11 @@
+ #include <QFormLayout>
+ #include <QGuiApplication>
+ #include <QLabel>
++#include <QLocale>
++#include <QPushButton>
+ #include <QScreen>
+ #include <QString>
++#include <QStyledItemDelegate>
+ 
+ CameraSelectorDialog::CameraSelectorDialog(libcamera::CameraManager *cameraManager,
+ 					   QWidget *parent)
+@@ -29,15 +32,17 @@ CameraSelectorDialog::CameraSelectorDialog(libcamera::CameraManager *cameraManag
+ 
+ 	/* Setup the camera id combo-box. */
+ 	cameraIdComboBox_ = new QComboBox;
++	cameraIdComboBox_->setMinimumHeight(48);
++	cameraIdComboBox_->setItemDelegate(new QStyledItemDelegate(cameraIdComboBox_));
+ 	for (const auto &cam : cm_->cameras())
+-		cameraIdComboBox_->addItem(QString::fromStdString(cam->id()));
++		addCamera(QString::fromStdString(cam->id()));
+ 
+ 	/* Set camera information labels. */
+ 	cameraLocation_ = new QLabel;
+ 	cameraModel_ = new QLabel;
+ 
+-	updateCameraInfo(cameraIdComboBox_->currentText());
+-	connect(cameraIdComboBox_, &QComboBox::currentTextChanged,
++	updateCameraInfo();
++	connect(cameraIdComboBox_, &QComboBox::currentIndexChanged,
+ 		this, &CameraSelectorDialog::updateCameraInfo);
+ 
+ 	/* Setup the QDialogButton Box */
+@@ -50,10 +55,19 @@ CameraSelectorDialog::CameraSelectorDialog(libcamera::CameraManager *cameraManag
+ 	connect(buttonBox, &QDialogButtonBox::rejected,
+ 		this, &QDialog::reject);
+ 
++	const bool chinese = QLocale().language() == QLocale::Chinese;
++	setWindowTitle(chinese ? QStringLiteral("选择镜头") : QStringLiteral("Select camera"));
++	for (auto *button : buttonBox->buttons())
++		button->setMinimumHeight(48);
++	if (chinese) {
++		buttonBox->button(QDialogButtonBox::Ok)->setText(QStringLiteral("确定"));
++		buttonBox->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
++	}
++
+ 	/* Set the layout. */
+-	layout->addRow("Camera:", cameraIdComboBox_);
+-	layout->addRow("Location:", cameraLocation_);
+-	layout->addRow("Model:", cameraModel_);
++	layout->addRow(chinese ? QStringLiteral("镜头") : QStringLiteral("Camera:"), cameraIdComboBox_);
++	layout->addRow(chinese ? QStringLiteral("位置") : QStringLiteral("Location:"), cameraLocation_);
++	layout->addRow(chinese ? QStringLiteral("型号") : QStringLiteral("Model:"), cameraModel_);
+ 	layout->addWidget(buttonBox);
+ 
+ 	/*
+@@ -69,53 +83,81 @@ CameraSelectorDialog::~CameraSelectorDialog() = default;
+ 
+ std::string CameraSelectorDialog::getCameraId()
+ {
+-	return cameraIdComboBox_->currentText().toStdString();
++	return cameraIdComboBox_->currentData().toString().toStdString();
++}
++
++QString CameraSelectorDialog::displayName(const QString &id)
++{
++	const bool chinese = QLocale().language() == QLocale::Chinese;
++	if (id == QStringLiteral("/base/soc@0/cci@ac15000/i2c-bus@0/camera@20"))
++		return chinese ? QStringLiteral("后置主摄") : QStringLiteral("Rear main camera");
++	if (id == QStringLiteral("/base/soc@0/cci@ac15000/i2c-bus@1/camera@10"))
++		return chinese ? QStringLiteral("前置摄像头") : QStringLiteral("Front camera");
++	if (id == QStringLiteral("/base/soc@0/cci@ac16000/i2c-bus@0/camera@36"))
++		return chinese ? QStringLiteral("后置微距") : QStringLiteral("Rear macro camera");
++	return id;
++}
++
++void CameraSelectorDialog::selectCamera(const QString &id)
++{
++	const int index = cameraIdComboBox_->findData(id);
++	if (index >= 0)
++		cameraIdComboBox_->setCurrentIndex(index);
+ }
+ 
+ /* Hotplug / Unplug Support. */
+ void CameraSelectorDialog::addCamera(QString cameraId)
+ {
+-	cameraIdComboBox_->addItem(cameraId);
++	if (cameraIdComboBox_->findData(cameraId) >= 0)
++		return;
++	const QString label = displayName(cameraId);
++	cameraIdComboBox_->addItem(label, cameraId);
++	const QFontMetrics metrics = cameraIdComboBox_->fontMetrics();
++	const QSize touchSize(metrics.horizontalAdvance(label) + 24, qMax(48, metrics.height() + 8));
++	cameraIdComboBox_->setItemData(cameraIdComboBox_->count() - 1, touchSize, Qt::SizeHintRole);
+ }
+ 
+ void CameraSelectorDialog::removeCamera(QString cameraId)
+ {
+-	int cameraIndex = cameraIdComboBox_->findText(cameraId);
++	int cameraIndex = cameraIdComboBox_->findData(cameraId);
+ 	cameraIdComboBox_->removeItem(cameraIndex);
+ }
+ 
+ /* Camera Information */
+-void CameraSelectorDialog::updateCameraInfo(QString cameraId)
++void CameraSelectorDialog::updateCameraInfo()
+ {
+ 	const std::shared_ptr<libcamera::Camera> &camera =
+-		cm_->get(cameraId.toStdString());
++		cm_->get(getCameraId());
+ 
+-	if (!camera)
++	if (!camera) {
++		cameraLocation_->clear();
++		cameraModel_->clear();
+ 		return;
++	}
+ 
+ 	const libcamera::ControlList &properties = camera->properties();
++	const bool chinese = QLocale().language() == QLocale::Chinese;
++	const QString unknown = chinese ? QStringLiteral("未知") : QStringLiteral("Unknown");
+ 
+ 	const auto &location = properties.get(libcamera::properties::Location);
+ 	if (location) {
+ 		switch (*location) {
+ 		case libcamera::properties::CameraLocationFront:
+-			cameraLocation_->setText("Internal front camera");
++			cameraLocation_->setText(chinese ? QStringLiteral("前置") : QStringLiteral("Internal front camera"));
+ 			break;
+ 		case libcamera::properties::CameraLocationBack:
+-			cameraLocation_->setText("Internal back camera");
++			cameraLocation_->setText(chinese ? QStringLiteral("后置") : QStringLiteral("Internal back camera"));
+ 			break;
+ 		case libcamera::properties::CameraLocationExternal:
+-			cameraLocation_->setText("External camera");
++			cameraLocation_->setText(chinese ? QStringLiteral("外接") : QStringLiteral("External camera"));
+ 			break;
+ 		default:
+-			cameraLocation_->setText("Unknown");
++			cameraLocation_->setText(unknown);
+ 		}
+ 	} else {
+-		cameraLocation_->setText("Unknown");
++		cameraLocation_->setText(unknown);
+ 	}
+ 
+-	const auto model = properties.get(libcamera::properties::Model)
+-				    .value_or("Unknown");
+-
+-	cameraModel_->setText(QString::fromUtf8(model.data(), model.length()));
++	const auto model = properties.get(libcamera::properties::Model);
++	cameraModel_->setText(model ? QString::fromUtf8(model->data(), model->size()) : unknown);
+ }
+diff --git a/src/apps/qcam/cam_select_dialog.h b/src/apps/qcam/cam_select_dialog.h
+index 4bec9ea..93c4038 100755
+--- a/src/apps/qcam/cam_select_dialog.h
++++ b/src/apps/qcam/cam_select_dialog.h
+@@ -29,13 +29,15 @@ public:
+ 	~CameraSelectorDialog();
+ 
+ 	std::string getCameraId();
++	static QString displayName(const QString &id);
++	void selectCamera(const QString &id);
+ 
+ 	/* Hotplug / Unplug Support. */
+ 	void addCamera(QString cameraId);
+ 	void removeCamera(QString cameraId);
+ 
+ 	/* Camera Information */
+-	void updateCameraInfo(QString cameraId);
++	void updateCameraInfo();
+ 
+ private:
+ 	libcamera::CameraManager *cm_;
+diff --git a/src/apps/qcam/main_window.cpp b/src/apps/qcam/main_window.cpp
+index c19d4fe..41e5b1a 100755
+--- a/src/apps/qcam/main_window.cpp
++++ b/src/apps/qcam/main_window.cpp
+@@ -201,6 +201,7 @@ int MainWindow::createToolbars()
+ 
+ 	/* Camera selector. */
+ 	cameraSelectButton_ = new QPushButton;
++	cameraSelectButton_->setMinimumHeight(48);
+ 	connect(cameraSelectButton_, &QPushButton::clicked,
+ 		this, &MainWindow::switchCamera);
+ 
+@@ -295,12 +296,13 @@ void MainWindow::switchCamera()
+ 
+ 	startStopAction_->setChecked(true);
+ 
+-	/* Display the current cameraId in the toolbar .*/
+-	cameraSelectButton_->setText(QString::fromStdString(cam->id()));
++	cameraSelectButton_->setText(CameraSelectorDialog::displayName(QString::fromStdString(cam->id())));
+ }
+ 
+ std::shared_ptr<Camera> MainWindow::chooseCamera()
+ {
++	if (camera_)
++		cameraSelectorDialog_->selectCamera(QString::fromStdString(camera_->id()));
+ 	if (cameraSelectorDialog_->exec() != QDialog::Accepted)
+ 		return {};
+ 
+@@ -337,8 +339,7 @@ int MainWindow::openCamera()
+ 		return -EBUSY;
+ 	}
+ 
+-	/* Set the camera switch button with the currently selected Camera id. */
+-	cameraSelectButton_->setText(QString::fromStdString(camera_->id()));
++	cameraSelectButton_->setText(CameraSelectorDialog::displayName(QString::fromStdString(camera_->id())));
+ 
+ 	return 0;
+ }
