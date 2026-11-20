@@ -1,0 +1,138 @@
+--- a/sys/v4l2/gstv4l2bufferpool.c
++++ b/sys/v4l2/gstv4l2bufferpool.c
+@@ -43,6 +43,8 @@
+ #include <gstv4l2bufferpool.h>
+
+ #include "gstv4l2object.h"
++#include "gstv4l2videodec.h"
++#include "iris-vp9-startup.h"
+ #include <glib/gi18n-lib.h>
+ #include <gst/glib-compat-private.h>
+
+@@ -721,6 +723,20 @@
+         goto streamon_failed;
+
+       pool->streaming = TRUE;
++      if (obj->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
++          obj->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_NV12 &&
++          !strcmp ((const char *) obj->vcap.driver, "iris_driver") &&
++          !strcmp ((const char *) obj->vcap.card, "Iris Decoder") &&
++          g_str_has_prefix ((const char *) obj->vcap.bus_info,
++              "platform:aa00000.video-codec:") &&
++          GST_IS_V4L2_VIDEO_DEC (obj->element)) {
++        GstV4l2Object *input = GST_V4L2_VIDEO_DEC (obj->element)->v4l2output;
++
++        pool->check_iris_vp9_start =
++            input->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_VP9;
++      } else {
++        pool->check_iris_vp9_start = FALSE;
++      }
+
+       GST_DEBUG_OBJECT (pool, "Started streaming");
+       break;
+@@ -1264,8 +1280,8 @@
+ }
+
+ static GstFlowReturn
+-gst_v4l2_buffer_pool_dqbuf (GstV4l2BufferPool * pool, GstBuffer ** buffer,
+-    gboolean * outstanding, gboolean wait)
++gst_v4l2_buffer_pool_dqbuf_once (GstV4l2BufferPool * pool, GstBuffer ** buffer,
++    gboolean * outstanding, gboolean wait, gboolean * pending_error)
+ {
+   GstBufferPool *bpool = GST_BUFFER_POOL_CAST (pool);
+   GstFlowReturn res;
+@@ -1276,6 +1292,7 @@
+   const GstVideoInfo *info = &obj->info.vinfo;
+   gint i;
+   gint old_buffer_state;
++  gboolean defer = FALSE;
+
+   if ((res = gst_v4l2_buffer_pool_poll (pool, wait)) < GST_FLOW_OK)
+     goto poll_failed;
+@@ -1299,7 +1316,21 @@
+   if (res != GST_FLOW_OK)
+     goto dqbuf_failed;
+
+-  if (group->buffer.flags & V4L2_BUF_FLAG_ERROR) {
++  if (*pending_error) {
++    if (iris_vp9_start_buffer (&group->buffer, group->planes, TRUE)) {
++      GST_INFO_OBJECT (pool, "Confirmed Iris VP9 startup keyframe");
++    } else {
++      GST_WARNING_OBJECT (pool, "Reporting unconfirmed Iris VP9 capture error");
++      g_signal_emit (pool, gst_v4l2_buffer_pool_signals[CAPTURE_ERROR_DEQUEUED],
++          0, 0u);
++    }
++    *pending_error = FALSE;
++  } else if (pool->check_iris_vp9_start) {
++    pool->check_iris_vp9_start = FALSE;
++    defer = iris_vp9_start_buffer (&group->buffer, group->planes, FALSE);
++  }
++
++  if (!defer && (group->buffer.flags & V4L2_BUF_FLAG_ERROR)) {
+     if (V4L2_TYPE_IS_OUTPUT (obj->type))
+       g_signal_emit (pool, gst_v4l2_buffer_pool_signals[OUTPUT_ERROR_DEQUEUED],
+           0, (guint) group->buffer.timestamp.tv_sec);
+@@ -1332,6 +1363,16 @@
+     GST_OBJECT_UNLOCK (pool);
+   }
+
++  if (defer) {
++    /* Keep frame zero pending. Requeue this empty slot before looking for
++     * the independently dequeued CAPTURE picture. Never forward its memory. */
++    GST_DEBUG_OBJECT (pool, "Checking empty first Iris VP9 capture");
++    gst_v4l2_buffer_pool_complete_release_buffer (bpool, outbuf, FALSE);
++    *pending_error = TRUE;
++    *buffer = NULL;
++    return GST_FLOW_OK;
++  }
++
+   if (group->buffer.flags & V4L2_BUF_FLAG_LAST &&
+       group->planes[0].bytesused == 0) {
+     GST_DEBUG_OBJECT (pool, "Empty last buffer, signalling eos.");
+@@ -1481,6 +1522,9 @@
+   }
+ no_buffer:
+   {
++    if (defer)
++      g_signal_emit (pool, gst_v4l2_buffer_pool_signals[CAPTURE_ERROR_DEQUEUED],
++          0, 0u);
+     GST_ERROR_OBJECT (pool, "No free buffer found in the pool at index %d.",
+         group->buffer.index);
+     return GST_FLOW_ERROR;
+@@ -1488,6 +1532,26 @@
+ }
+
+ static GstFlowReturn
++gst_v4l2_buffer_pool_dqbuf (GstV4l2BufferPool * pool, GstBuffer ** buffer,
++    gboolean * outstanding, gboolean wait)
++{
++  gboolean pending_error = FALSE;
++  GstFlowReturn ret;
++
++  ret = gst_v4l2_buffer_pool_dqbuf_once (pool, buffer, outstanding, wait,
++      &pending_error);
++  if (pending_error) {
++    ret = gst_v4l2_buffer_pool_dqbuf_once (pool, buffer, outstanding, wait,
++        &pending_error);
++    /* Poll error, source change, flush or EOS before another CAPTURE. */
++    if (pending_error)
++      g_signal_emit (pool, gst_v4l2_buffer_pool_signals[CAPTURE_ERROR_DEQUEUED],
++          0, 0u);
++  }
++  return ret;
++}
++
++static GstFlowReturn
+ gst_v4l2_buffer_pool_acquire_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
+     GstBufferPoolAcquireParams * params)
+ {
+--- a/sys/v4l2/gstv4l2bufferpool.h
++++ b/sys/v4l2/gstv4l2bufferpool.h
+@@ -88,6 +88,7 @@
+   guint copy_threshold;      /* when our pool runs lower, start handing out copies */
+
+   gboolean streaming;
++  gboolean check_iris_vp9_start;
+   gboolean flushing;
+
+   GstBuffer *buffers[VIDEO_MAX_FRAME];
