@@ -1,17 +1,17 @@
 # Y700 二代的电源键与 RTC 唤醒路径
 
-TB320FC_PRC 的原 Debian 内核已经注册电源键，并提供 `s2idle` 和 `deep`。定时唤醒缺少一个板级配置：已交付的设备树继承了 PMK8350 RTC 的 `disabled` 状态。电脑上已用原源码编译两份独立 DTB，并验证可沿用 dev12.8 已安装的 RTC 驱动。平板的清醒状态检查中，成功和失败的系统睡眠计数均为零。电源键唤醒、RTC 唤醒以及唤醒后的屏幕、触控、Wi-Fi 和 USB 恢复均待实测。[平板清醒状态与桌面策略](STATUS.md#wake-sources-on-the-running-tablet)
+TB320FC_PRC 的原 Debian 内核已经注册电源键，并提供 `s2idle` 和 `deep`。已交付的设备树沿用 PMK8350 RTC 的 `disabled` 默认值，因此当前系统缺少硬件定时唤醒设备。电脑上已用原源码编译两份独立 DTB，并验证可沿用 dev12.8 已安装的 RTC 驱动。平板的清醒状态检查中，成功和失败的系统睡眠计数均为零。电源键唤醒、RTC 唤醒以及唤醒后的屏幕、触控、Wi-Fi 和 USB 恢复均待实测。[平板清醒状态与桌面策略](STATUS.md#wake-sources-on-the-running-tablet)
 
 ## 从硬件到 Linux
 
 | 来源 | 板级接线和驱动 | 已确认的行为 |
 | --- | --- | --- |
-| 短按电源键 | PMK8350 的 PON 子设备，`KEY_POWER`，SPMI SID 0、外围号 `0x13`、位 7，双边沿 | 板级 DTS 已启用此键。内置的 `pm8941-pwrkey` 对 Gen3 电源键默认启用唤醒；挂起回调在 `device_may_wakeup()` 成立时调用 `enable_irq_wake()`。回调忽略该调用的返回值。清醒时注册成功仍不足以证明固件睡眠后能返回。 |
-| RTC 定时闹钟 | 同一 PMK8350，计数器和闹钟的外围地址分别为 `0x6100` 和 `0x6200`；闹钟 IRQ 为 SID 0、外围号 `0x62`、位 1，上升沿 | `rtc-pm8xxx` 在成功分配并请求 IRQ 后，将它注册为系统唤醒 IRQ，向 RTC 核心发布闹钟。原树禁止该节点，平板当前没有 `/dev/rtcN`。 |
+| 短按电源键 | PMK8350 的 PON 子设备，`KEY_POWER`，SPMI SID 0、外围号 `0x13`、位 7，双边沿 | 板级 DTS 已启用此键。内置的 `pm8941-pwrkey` 对 Gen3 电源键默认启用唤醒，挂起回调在 `device_may_wakeup()` 成立时调用 `enable_irq_wake()`。回调忽略该调用的返回值。清醒时注册成功仍不足以证明固件睡眠后能返回。 |
+| RTC 定时闹钟 | 同一 PMK8350，计数器和闹钟的外围地址分别为 `0x6100` 和 `0x6200`。闹钟 IRQ 为 SID 0、外围号 `0x62`、位 1，上升沿 | `rtc-pm8xxx` 在成功分配并请求 IRQ 后，将它注册为系统唤醒 IRQ，向 RTC 核心发布闹钟。原树禁止该节点，平板当前没有 `/dev/rtcN`。 |
 
-两者共用 SPMI 仲裁器的 `periph_irq`。子 IRQ 的 `irq_set_wake` 将请求传给这条父 IRQ。SM8450/SM8475 的 DT 用高电平 PDC 输入 1，按首个映射范围 `<0 480 12>` 对应 GIC **SPI 481**，即 INTID 513。运行中分配的 Linux IRQ 号可不同。PDC 驱动把线路启用与父 GIC 配置联动；设备树只能说明路由，断电域、电源控制器和固件在实际睡眠时如何配合仍需测量。[SoC 设备树](https://github.com/torvalds/linux/blob/v7.3/arch/arm64/boot/dts/qcom/sm8450.dtsi) · [SPMI 仲裁器](https://github.com/torvalds/linux/blob/v7.3/drivers/spmi/spmi-pmic-arb.c) · [Gen3 电源键](https://github.com/torvalds/linux/blob/v7.3/drivers/input/misc/pm8941-pwrkey.c)
+两者共用 SPMI 仲裁器的 `periph_irq`。子 IRQ 的 `irq_set_wake` 将请求传给这条父 IRQ。SM8450/SM8475 的 DT 用高电平 PDC 输入 1，按首个映射范围 `<0 480 12>` 对应 GIC **SPI 481**，即 INTID 513。运行中分配的 Linux IRQ 号可不同。PDC 驱动把线路启用与父 GIC 配置联动。电源域和固件在真实睡眠期间的行为仍需测量。[SoC 设备树](https://github.com/torvalds/linux/blob/v7.3/arch/arm64/boot/dts/qcom/sm8450.dtsi) · [SPMI 仲裁器](https://github.com/torvalds/linux/blob/v7.3/drivers/spmi/spmi-pmic-arb.c) · [Gen3 电源键](https://github.com/torvalds/linux/blob/v7.3/drivers/input/misc/pm8941-pwrkey.c)
 
-原内核有 `CONFIG_SUSPEND=y`、PSCI CPU idle 及电源域支持，`CONFIG_HIBERNATION` 关闭。清醒时读到 `/sys/power/state = freeze mem` 和 `mem_sleep = [s2idle] deep`。s2idle 可在系统冻结后依靠已配置的中断唤醒；深度挂起还依赖平台进入与退出，当前 PSCI 驱动会查询固件的 `SYSTEM_SUSPEND` 能力。菜单或 sysfs 出现 `deep` 不能验证外设恢复或待机耗电。[Linux 系统睡眠](https://docs.kernel.org/admin-guide/pm/sleep-states.html) · [PSCI 实现](https://github.com/torvalds/linux/blob/v7.3/drivers/firmware/psci/psci.c)
+原内核有 `CONFIG_SUSPEND=y`、PSCI CPU idle 及电源域支持，`CONFIG_HIBERNATION` 关闭。清醒时读到 `/sys/power/state = freeze mem` 和 `mem_sleep = [s2idle] deep`。s2idle 可在系统冻结后依靠已配置的中断唤醒。深度挂起还依赖平台进入与退出，当前 PSCI 驱动会查询固件的 `SYSTEM_SUSPEND` 能力。菜单或 sysfs 出现 `deep` 不能验证外设恢复或待机耗电。[Linux 系统睡眠](https://docs.kernel.org/admin-guide/pm/sleep-states.html) · [PSCI 实现](https://github.com/torvalds/linux/blob/v7.3/drivers/firmware/psci/psci.c)
 
 ## 与 Android 的交叉核对
 
@@ -36,13 +36,13 @@ bash scripts/build-rtc-dtb.sh --probe-rtc1 "$prepared_kernel" "$new_clock_probe_
 
 ## 首次注册与系统时间
 
-原配置将 `RTC_HCTOSYS_DEVICE` 与 `RTC_SYSTOHC_DEVICE` 都设为 `rtc0`。注册名匹配时，RTC 核心读取设备并调用 `do_settimeofday64()`；驱动延后加载也会触发。NTP 向硬件写时另按 `SYSTOHC_DEVICE` 选择目标。清醒的 Debian 当前运行 systemd-timesyncd，报告已同步，chrony 未运行；这不能确定本机 PMIC 计数的实际纪元或 Android 校时源。[RTC 注册逻辑](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/class.c) · [NTP 写 RTC](https://github.com/torvalds/linux/blob/v7.3/kernel/time/ntp.c)
+原配置将 `RTC_HCTOSYS_DEVICE` 与 `RTC_SYSTOHC_DEVICE` 都设为 `rtc0`。注册名匹配时，RTC 核心读取设备并调用 `do_settimeofday64()`，驱动延后加载也会触发。NTP 向硬件写时另按 `SYSTOHC_DEVICE` 选择目标。清醒的 Debian 当前运行 systemd-timesyncd，报告已同步，chrony 未运行。本机 PMIC 计数的实际纪元和 Android 校时源仍待测量。[RTC 注册逻辑](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/class.c) · [NTP 写 RTC](https://github.com/torvalds/linux/blob/v7.3/kernel/time/ntp.c)
 
 PMK8350 的驱动探测会尝试设置 `0x6146` 的启用位，读取秒数使用 `0x6148` 起的四字节小端计数。写闹钟使用 `0x6240`，启用位在 `0x6246`、清中断在 `0x6248`。两个候选均沿用原树，无 `allow-set-time`、NVMEM offset 或 `qcom,uefi-rtc-info`。在这种配置下读取的偏移为零，设置 RTC 时间的路径会返回 `ENODEV`。注册时仍会读取已有的硬件闹钟。首次探测前不应假定 PMIC 时间等于系统 UTC，也不应将 Android 时钟偏移写入未知存储。[RTC 驱动](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/rtc-pm8xxx.c)
 
-专用探测树为将来的隔离唤醒验证保留 `rtc1`。在只绑定这一个 RTC 的早期环境中，注册前检查 RTC 类为空，核对最终 DT 的 `rtc1` 指向目标 PMIC，随后核对注册设备的 OF 路径、`hctosys=0`、RTC 读数和独立的系统时间。编号已占用时，RTC 核心会退回到可用编号；无法保证独占的环境可另编隔离测试内核，关闭 `CONFIG_RTC_HCTOSYS` 和 `CONFIG_RTC_SYSTOHC`。这两项均为编译配置。探测树只针对内核按名称进行的校时；显式调用 `hwclock` 的用户空间程序仍能访问指定设备。[RTC sysfs 接口](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-rtc)
+专用探测树为将来的隔离唤醒验证保留 `rtc1`。在只绑定这一个 RTC 的早期环境中，注册前检查 RTC 类为空，核对最终 DT 的 `rtc1` 指向目标 PMIC，随后核对注册设备的 OF 路径、`hctosys=0`、RTC 读数和独立的系统时间。编号已占用时，RTC 核心会退回到可用编号。无法保证独占的环境可另编隔离测试内核，关闭 `CONFIG_RTC_HCTOSYS` 和 `CONFIG_RTC_SYSTOHC`。这两项均为编译配置。探测树只针对内核按名称进行的校时，显式调用 `hwclock` 的用户空间程序仍能访问指定设备。[RTC sysfs 接口](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-rtc)
 
-在电脑上用原内核 `9afa9b69…`、512 MiB ARM64 QEMU 和测试专用 PL031 模块运行两个无盘对照。每次先将来宾系统时间设为 2024-01-02，再注册计数为 2010-01-02 的模拟 RTC。普通编号得到 `rtc0/hctosys=1`，系统时间跳至 2010。探测别名得到 `rtc1/hctosys=0`，系统时间保留在 2024，同时仍可读到 2010 的 RTC 时间。两次均正常关机，可用下列命令复测。虚拟 PL031 验证的是共同的 RTC 核心；平板的 PMIC 响应、中断归属、唤醒耗时和待机电流仍需独立实测。[无盘对照脚本](../tests/rtc-alias/run.sh)
+在电脑上用原内核 `9afa9b69…`、512 MiB ARM64 QEMU 和测试专用 PL031 模块运行两个无盘对照。每次先将来宾系统时间设为 2024-01-02，再注册计数为 2010-01-02 的模拟 RTC。普通编号得到 `rtc0/hctosys=1`，系统时间跳至 2010。探测别名得到 `rtc1/hctosys=0`，系统时间保留在 2024，同时仍可读到 2010 的 RTC 时间。两次均正常关机，可用下列命令复测。虚拟 PL031 验证的是共同的 RTC 核心。平板的 PMIC 响应、中断归属、唤醒耗时和待机电流仍需独立实测。[无盘对照脚本](../tests/rtc-alias/run.sh)
 
 ```sh
 bash tests/rtc-alias/run.sh "$prepared_kernel" "$static_arm64_busybox" "$new_logs"
