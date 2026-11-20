@@ -22,6 +22,8 @@ cleanup() {
     echo "ONBOARD_GUEST_EXIT=$rc"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 trap 'echo "ONBOARD_GUEST_FAILURE line=$LINENO" >&2' ERR
 wait_for() {
     local deadline=$((SECONDS + $1)); shift

@@ -40,7 +40,7 @@ cc=${AARCH64_CC:-aarch64-linux-gnu-gcc}
 sha256sum "$root" "$kernel" "$3"
 qemu_data=()
 if [[ -n ${QEMU_DATA:-} ]]; then qemu_data=(-L "$QEMU_DATA"); fi
-timeout -k 5 360 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_data[@]}" -machine virt,gic-version=3 \
+timeout -k 5 600 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_data[@]}" -machine virt,gic-version=3 \
     -cpu max -smp 3 -m 1536 -nodefaults -no-user-config -monitor none -display none -serial stdio -nic none -no-reboot \
     -kernel "$kernel" -initrd "$work/initrd" \
     -append "console=ttyAMA0 quiet loglevel=3 panic=5 y700.onboard_fixture=1 y700.onboard_profile=$profile y700.onboard_focus=$focus y700.touch_gesture_fixture=1 fstab=no systemd.unit=onboard-fixture.service systemd.show_status=no" \

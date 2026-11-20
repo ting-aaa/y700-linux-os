@@ -30,7 +30,7 @@ Type=oneshot
 TTYPath=/dev/ttyAMA0
 StandardOutput=tty
 StandardError=tty
-TimeoutStartSec=310
+TimeoutStartSec=480
 ExecStart=/bin/bash /opt/onboard-test/guest.sh
 UNIT
 exec switch_root /guest /sbin/init

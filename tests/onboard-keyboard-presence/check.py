@@ -7,6 +7,7 @@ import time
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 
@@ -20,8 +21,10 @@ ONBOARD_IFACE = ONBOARD_BUS + ".Keyboard"
 def wait(check, name, seconds=12):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
-        while GLib.MainContext.default().iteration(False):
-            pass
+        # Do not let queued desktop work consume an observation's deadline.
+        for _ in range(20):
+            if not GLib.MainContext.default().iteration(False):
+                break
         if check():
             return
         time.sleep(0.08)
@@ -124,7 +127,7 @@ def main():
         wait(lambda: entry.is_focus() and window.is_active(), "editor did not receive focus")
         expect_visibility(expected, label)
 
-    wait(lambda: visible() is False, "stock Onboard did not autostart hidden", 110)
+    wait(lambda: visible() is False, "stock Onboard did not autostart hidden", 180)
     # Wait for the installed session and window manager to settle before the
     # initial map request, rather than positioning a window during login.
     window.maximize()

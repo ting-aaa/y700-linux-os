@@ -17,3 +17,5 @@ The fixture starts the packaged Xfce session and Onboard autostart with a fresh 
 With detection enabled by the installed package, mouse-only attachment keeps automatic show available. A keyboard hides Onboard while editing and keeps it hidden on newly focused fields. Unplugging that keyboard brings Onboard back even with the mouse still attached. Explicit user overrides for keyboard detection and auto-show are checked separately. The stock test also records the pre-change behavior with detection disabled.
 
 The base disk is read-only. Package installation and test user state live in a disposable RAM overlay. The guest has no external network or hardware passthrough. The fixture verifies the input stack from emulated devices through the desktop. Pairing and radio transport have separate [virtual Bluetooth tests](../../docs/BLUETOOTH-VIRTUAL.md).
+
+The guest has an eight-minute service deadline and the host allows ten minutes for startup, the assertions and power-off under TCG. Host acceptance requires the scenario markers in addition to zero exit status.
