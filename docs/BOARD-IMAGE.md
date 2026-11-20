@@ -4,6 +4,8 @@ Candidate 03 combines the fresh 993-package Debian ARM64 root with the previousl
 
 ## Build on a Linux host
 
+For the current standalone dev12.5 package, see the [Linux extraction guide](DEV12.5-IMAGE.md) and its [verification record](#dev125-standalone-image). The build sequence below describes the earlier candidate 03.
+
 Use a native Linux filesystem for the build directories. Install the tools used by the [Debian snapshot build](DEBIAN-SNAPSHOT.md), plus rsync, kmod, cpio, gzip, e2fsprogs, dosfstools, mtools, util-linux (sfdisk with selectable sector size), device-tree-compiler and zstd. Obtain the pinned [Asphalt checkout](PROVENANCE.md), the integrated Debian root, and the private board components described below. Run as root on the build host with uv configured for an installed Python 3.12 or 3.13. Each output directory must be new.
 
 ```sh
@@ -345,6 +347,28 @@ The complete local `out/dev12.4-board` distribution upgrades only `y700-platform
 Full extraction reproduced the generic root byte for byte. A second extraction with a synthetic Bluetooth identity checked the private file's content, owner and 0600 mode. Both roots passed ext4, FAT, package inventory and installed-file checks. U-Boot, the EFI partition and the public identity receipt matched between the two outputs.
 
 The exact generic root booted through virtual U-Boot and EFI to Linux 7.3.4-asphalt-prc and systemd. Mismatched touchscreen enrollment left the user locked. Correct enrollment enabled normal LightDM/PAM login to Xfce. In the first desktop session, the panel inherited the new runtime template in its `XDG_CONFIG_DIRS`. The ordinary user's session bus retained one panel owner. An independent observer confirmed PulseAudio wrapper 19 by D-Bus, process and loaded library. The top panel contained exactly one extra item after the tray, the bottom panel retained its eight items, and the per-user completion marker was present. Repeating setup with the existing wrapper restored a missing marker and produced no duplicate. The VM powered off cleanly. This run exercises virtual display and input. Physical boot of the complete image remains untested. Local receipts are in `out/dev12.4-board-verified/efi/`, including `native-panel.log`, `timeline.jsonl` and `firmware.log`.
+
+## Dev12.5 standalone image
+
+The local archive in `out/dev12.5-board/` can be unpacked independently as an ordinary Linux user. It includes all three raw board images and a Chinese extraction guide. The generic output matches the three input hashes. A separate test of per-device Bluetooth provisioning used synthetic input and checked the private file's owner, mode and content. [Extraction guide](DEV12.5-IMAGE.md) · [Four-package change from dev12.4](KEYBOARD-IMAGE.md)
+
+| Delivered file or inventory | SHA-256 |
+| --- | --- |
+| `y700-tb320fc-prc-debian-dev12.5.tar`, 1,294,776,320 bytes | `5f47305a7e64b1cedaa87aa28ca1d170c4712a7aca3ca0358f787e33acb472c6` |
+| `asphalt-prc-u-boot.img` | `f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8` |
+| `linux-boot.fat` | `495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6` |
+| `root.ext4` | `041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6` |
+| 1,112 installed package tuples | `ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21` |
+
+The [wireless preparation script](../scripts/prepare-dev12.5-wireless.sh) takes the four-package dev12.5 root and the sealed dev12.4 ESP. The root file comparison found changes to the two regulatory database links and their alternatives selection record. The only changed file on the ESP was the initramfs. It contains the original file payloads and adds the signed database pair. Repacking also changed directory metadata, including the initial ramdisk's root directory mode from 0755 to 0700. The shipped initramfs SHA-256 is `6d3832e03eaea523a55c6bf12f90e1cf1146a34df1a264bdeefec9c8398d00ce`. The raw disk hashes above identify the output of unpacking this archive. A fresh preparation from the parent images can differ in filesystem metadata. [Wi-Fi evidence](WIFI-CHOOSER.md#signed-wireless-regulatory-database)
+
+A new build using the recorded build time reproduced the shipped initramfs and the full EFI partition byte for byte. Its ext4 container had a different hash. Both builds passed their ext4 check and the same three-path comparison against the parent root.
+
+The [device-tree check](../tests/board-device-tree.py) passed on both the shipped PRC board DTB and the live tablet tree. It checked the panel and touch connection, Wi-Fi and Bluetooth nodes, both speaker amps, the GPU and DSP firmware references, and reciprocal links between all three cameras and their CSI receivers. The checker rejected separate copies with a broken macro camera link or disabled Wi-Fi PCIe controller. The running tablet's existing kernel also had drivers bound to these devices. Their operation after booting this exact archive on the tablet still needs verification.
+
+The [ARM64 EFI fixture](../tests/combined-efi/) booted the delivered kernel, initramfs and root with virtual U-Boot and a virtual-board DT in a private ESP copy. The first boot rejected mismatched touch-entered passwords while the account remained locked. Matching entries then allowed a normal LightDM/PAM login as the desktop user. Xfce started Onboard and the native volume panel. The guest loaded the signed wireless rules and obtained the test country on a machine with no radio. The test powered the guest off through systemd.
+
+A second run used two QEMU processes and retained the first boot's writable disk changes. The second cold boot skipped enrollment and accepted the same password through the on-screen keyboard. Both boots reached an active, ordinary Xfce session with Onboard and the volume control, and both powered off cleanly. The two Linux boot IDs differed. The virtual display was 1024×768 at 100%. Internal-panel scaling and touch on this complete build still need a physical boot.
 
 ## Attended candidate 03 tablet gate
 

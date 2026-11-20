@@ -2,6 +2,8 @@
 
 Evidence through 2026-11-20 covers one TB320FC_PRC with 16 GiB RAM, 512 GB storage and CN350 Android firmware. The tablet runs platform dev12.5 with external keyboard detection enabled in Xfce. Its top bar includes a native speaker control. It exposes the three display controls in Xfce's Hardware settings. Its calibrated internal speakers play Chromium videos at an owner-confirmed comfortable level. The 1,112-package ARM64 image also includes the dev10 touch-mapping and Xorg panel-size fixes. Dev9 introduced Intelligent Pinyin and a per-user English or Simplified Chinese display setting. On the tablet's CPU, a private 200% Xfce desktop entered 你好 and then English in both GTK and a sandboxed Chromium 156 web form. An attended physical boot of the entire new image and touch-only first enrollment on the built-in panel remain open. [Image receipt](BOARD-IMAGE.md#brightness-and-speaker-gain) · [Desktop input](CHINESE-INPUT.md)
 
+The [complete dev12.5 archive](DEV12.5-IMAGE.md) has passed independent offline extraction and two ARM64 EFI boots with virtual touch. The first boot set the account password. After a full power-off the next boot skipped enrollment and accepted the same password at the normal graphical login. The shipped PRC device tree and the physical tablet's current tree passed the same peripheral-connection checks. [Boot evidence and checksums](BOARD-IMAGE.md#dev125-standalone-image)
+
 | Area | Evidence / current status | Remaining acceptance |
 | --- | --- | --- |
 | Native boot/UFS | Physical Debian boot, expanded root filesystem, EFI chain; B slot successful/bootable confirmed | Repeated cold starts, recovery and update rollback |
