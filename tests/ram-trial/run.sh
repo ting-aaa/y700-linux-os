@@ -70,6 +70,10 @@ ExecStart=/bin/bash -e -o pipefail -c 'grep -zFxq linux,dummy-virt /proc/device-
 UNIT
 unit=$(base64 -w0 "$work/probe.service")
 args+=" console=ttyAMA0,115200 loglevel=7 y700.ram_probe=1 y700.combined_efi=1 systemd.wants=y700-ram-qa.service systemd.set_credential_binary=systemd.extra-unit.y700-ram-qa.service:$unit"
+if [[ ${RAM_TRIAL_RETAIN_PANIC:-0} == 1 ]]; then
+    [[ ${RAM_TRIAL_KEXEC:-0} == 1 ]]
+    args+=' retain_initrd'
+fi
 [[ ${#args} -lt 2048 ]]
 
 qemu_data=()

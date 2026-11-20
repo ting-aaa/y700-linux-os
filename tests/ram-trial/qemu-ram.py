@@ -1,7 +1,8 @@
 """Verify the sealed RAM boot using only private virtio serial ports and QMP."""
 
-from pathlib import Path
+import json
 import os
+from pathlib import Path
 import re
 import signal
 import subprocess
@@ -32,12 +33,71 @@ def wait_for_marker(log, guest, expected, seconds):
     raise TimeoutError(expected.split()[0])
 
 
-def send_observer(work, guest):
+class GuestBootPanic(RuntimeError):
+    pass
+
+
+def check_boot_panic(serial):
+    try:
+        data = serial.read_bytes()
+    except FileNotFoundError:
+        return
+    match = re.search(rb"(?m)^(?:\[ *[0-9]+\.[0-9]+\] *)?Kernel panic - not syncing:[^\r\n]*[\r\n]", data)
+    if match:
+        reason = match[0].strip().decode("utf-8", errors="replace")
+        raise GuestBootPanic(f"Guest kernel panicked before the switched-root observer: {reason}")
+
+
+def retain_initrd_prefix(work, logs, expected_bytes):
+    serial = (logs / "serial.log").read_bytes()
+    loader, handover, next_boot = serial.partition(b"RAM_QA_KEXEC_HANDOVER")
+    if not handover or b"Initramfs unpacking failed:" not in next_boot:
+        raise RuntimeError("Missing second-kernel initramfs failure witness")
+    segments = re.findall(rb"Loaded initrd at 0x([0-9a-f]+) bufsz=0x([0-9a-f]+) memsz=0x([0-9a-f]+)", loader)
+    if len(segments) != 1:
+        raise RuntimeError("Missing or ambiguous kexec initrd destination")
+    start, size, reserved = (int(value, 16) for value in segments[0])
+    if size != expected_bytes or not (size <= reserved < size + 65536):
+        raise RuntimeError("kexec destination length differs from the sealed initrd")
+    if not 0x40000000 <= start < start + size <= 0x280000000:
+        raise RuntimeError("kexec initrd lies outside the virtual RAM bank")
+    count = min(12 * 1024 * 1024, size)
+    if start < 0xbe300000 and start + count > 0xbe000000:
+        count = 0xbe000000 - start
+    if count <= 0:
+        raise RuntimeError("kexec initrd prefix intersects the framebuffer")
+    output = logs / "initrd-prefix.bin"
+    if output.exists() or output.is_symlink():
+        raise RuntimeError("Refusing to replace an existing prefix capture")
+    with drive.connect(work, "qmp.sock") as sock, sock.makefile("rwb") as stream:
+        sock.settimeout(15)
+        if "QMP" not in json.loads(stream.readline()):
+            raise RuntimeError("Unexpected QMP greeting")
+        for command in (
+            {"execute": "qmp_capabilities"},
+            {"execute": "pmemsave", "arguments": {"val": start, "size": count, "filename": str(output)}},
+        ):
+            stream.write(json.dumps(command).encode("ascii") + b"\n")
+            stream.flush()
+            while True:
+                reply = json.loads(stream.readline())
+                if "error" in reply:
+                    raise RuntimeError("QMP rejected the scoped initrd capture")
+                if "return" in reply:
+                    break
+    if output.stat().st_size != count:
+        raise RuntimeError("QMP wrote an incomplete initrd prefix")
+    print(f"RAM_TRIAL_PANIC_INITRD_PREFIX addr=0x{start:x} bytes={count} file={output.name}", flush=True)
+
+
+def send_observer(work, logs, guest):
     with drive.connect(work, "qa-seed.sock") as seed:
         seed.settimeout(1)
         ready = bytearray()
         deadline = time.monotonic() + (650 if os.getenv("RAM_TRIAL_KEXEC") == "1" else 420)
+        serial = logs / "serial.log"
         while b"\n" not in ready and time.monotonic() < deadline:
+            check_boot_panic(serial)
             try:
                 packet = seed.recv(64)
             except TimeoutError:
@@ -45,6 +105,7 @@ def send_observer(work, guest):
                     raise RuntimeError("Guest exited before switched-root observer startup")
                 continue
             if not packet:
+                check_boot_panic(serial)
                 break
             ready.extend(packet)
             if len(ready) > 32:
@@ -129,11 +190,18 @@ def main(work, logs, expected_bytes, command):
     with (logs / "qemu.log").open("xb") as qemu_log:
         guest = subprocess.Popen(args, cwd=work, stdin=subprocess.DEVNULL, stdout=qemu_log, stderr=subprocess.STDOUT)
         try:
-            send_observer(work, guest)
+            send_observer(work, logs, guest)
             touch_only(work, logs, guest)
             if guest.wait(190) != 0:
                 raise RuntimeError("QEMU exited unsuccessfully")
             verify(logs, expected_bytes)
+        except GuestBootPanic:
+            if os.getenv("RAM_TRIAL_RETAIN_PANIC") == "1" and guest.poll() is None:
+                try:
+                    retain_initrd_prefix(work, logs, expected_bytes)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    print(f"RAM_TRIAL_PANIC_INITRD_PREFIX unavailable={exc}", flush=True)
+            raise
         finally:
             if guest.poll() is None:
                 guest.terminate()
