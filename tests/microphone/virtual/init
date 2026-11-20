@@ -1,0 +1,21 @@
+#!/bin/busybox sh
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+trap 'rc=$?; echo "MIC_FIXTURE_EXIT=$rc"; poweroff -f' EXIT
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+test "$(cat /sys/block/vda/ro)" = 1
+mount -t ext4 -o ro,noload /dev/vda /lower
+mount -t tmpfs tmpfs /run
+mkdir /run/upper /run/work
+mount -t overlay overlay -o lowerdir=/lower,upperdir=/run/upper,workdir=/run/work /guest
+for name in proc sys dev; do mount --bind "/$name" "/guest/$name"; done
+mount -t tmpfs tmpfs /guest/run
+mkdir -p /guest/dev/pts /guest/dev/shm /guest/opt/mic-fixture
+mount -t tmpfs -o mode=1777 tmpfs /guest/dev/shm
+mount -t devpts devpts /guest/dev/pts
+mount -t debugfs debugfs /guest/sys/kernel/debug
+mount --bind /test /guest/opt/mic-fixture
+chroot /guest /bin/bash /opt/mic-fixture/guest.sh
