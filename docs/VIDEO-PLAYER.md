@@ -65,3 +65,5 @@ bash tests/video-userspace/run-qemu.sh "$DEV12_8_ROOT_EXT4" "$KERNEL" \
     "$ARM64_BUSYBOX" "$ARM64_UV" "$ARM64_XORG_DUMMY_DEB" \
     out/video-player/new-clips --player out/video-player/y700-dev12.8-parole-arm64.tar.gz
 ```
+
+For the 1920 × 1080 desktop fixtures, pass `--full-hd` to `tests/video-userspace/make-clips.py` and supply its output to `extend-clips.py`. The three files in `out/video-player/full-hd/` each contain 48 frames over 24 seconds. Host software decoding verified both color panels on every frame of every file. Their SHA-256 values are in `out/video-player/full-hd-verification.log`. The six source NV12 frames have a 1920-byte stride and 1088 luma storage rows.
