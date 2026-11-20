@@ -8,7 +8,7 @@ import struct
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 api = runpy.run_path(str(Path(__file__).with_name("capture-input.py")))
 HOST = "112233445566"
@@ -50,6 +50,12 @@ class CaptureTests(unittest.TestCase):
                 buf[:len(reply)] = reply
             with patch("os.open", return_value=fd), patch.object(fcntl, "ioctl", ioctl_answer):
                 self.assertEqual(api["candidate"](node, {HOST}, stack), (HOST, fd, True, False))
+                for keys, expected in ((1 << 272, (HOST, fd, False, True)),
+                                       ((1 << 272) | (1 << 185), (HOST, fd, True, True)),
+                                       (1 << 273, None), (0, None)):
+                    replies[0x21] = keys.to_bytes(96, "little")
+                    replies[0x22] = (3).to_bytes(8, "little")
+                    self.assertEqual(api["candidate"](node, {HOST}, Mock(spec=ExitStack)), expected)
 
     def test_pair_is_unambiguous_and_same_peer(self):
         key = (HOST, 10, True, False)
@@ -127,6 +133,13 @@ class CaptureTests(unittest.TestCase):
                     self.assertRaises(BlockingIOError):
                 api["read_events"]((50, 51), directory, time.monotonic() + 1)
             self.assertEqual(os.listdir(directory), [])
+
+    def test_fixed_pointer_rejects_button_events(self):
+        for value in (0, 1):
+            with self.subTest(value=value):
+                reports = api["Reports"](8, 9)
+                with self.assertRaisesRegex(RuntimeError, "Unexpected button"):
+                    reports.event(9, 1, api["BTN_LEFT"], value)
 
 
 if __name__ == "__main__":

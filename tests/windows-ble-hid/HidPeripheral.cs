@@ -9,7 +9,7 @@ using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 
 // A fixed test report map. The keyboard advertises just F15, and the mouse
-// advertises two relative axes. Advertising this profile emits no HID input.
+// advertises a left button (always released) and two relative axes.
 public sealed class HidPeripheral
 {
     private GattServiceProvider provider;
@@ -18,13 +18,17 @@ public sealed class HidPeripheral
     private BluetoothLEAdvertisementPublisher controlPublisher;
     private volatile string advertisementError = "No status event";
 
+    private static readonly byte[] mouseStep = {0, 1, 0xff};
     private static readonly byte[] reportMap = {
         0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x85, 0x01,
         0x05, 0x07, 0x09, 0x6a, 0x15, 0x00, 0x25, 0x01,
         0x75, 0x01, 0x95, 0x01, 0x81, 0x02, 0x75, 0x07,
         0x95, 0x01, 0x81, 0x03, 0xc0,
         0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x02,
-        0x09, 0x01, 0xa1, 0x00, 0x09, 0x30, 0x09, 0x31,
+        0x09, 0x01, 0xa1, 0x00, 0x05, 0x09, 0x09, 0x01,
+        0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x01,
+        0x81, 0x02, 0x75, 0x07, 0x95, 0x01, 0x81, 0x03,
+        0x05, 0x01, 0x09, 0x30, 0x09, 0x31,
         0x15, 0x81, 0x25, 0x7f, 0x75, 0x08, 0x95, 0x02,
         0x81, 0x06, 0xc0, 0xc0
     };
@@ -82,7 +86,7 @@ public sealed class HidPeripheral
             finally { deferral.Complete(); }
         };
         keyboard = await AddInput(1, 1);
-        mouse = await AddInput(2, 2);
+        mouse = await AddInput(2, mouseStep.Length);
     }
 
     private async Task CreateService(Guid service)
@@ -175,7 +179,7 @@ public sealed class HidPeripheral
         var mouseClient = await VerifiedClient(mouse, tablet);
         await Send(keyboard, keyClient, new byte[] {1});
         await Send(keyboard, keyClient, new byte[] {0});
-        await Send(mouse, mouseClient, new byte[] {1, 0xff});
+        await Send(mouse, mouseClient, mouseStep);
     }
     public static async Task<string> AdapterAddress()
     {

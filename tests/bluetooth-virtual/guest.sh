@@ -5,6 +5,7 @@ grep -qw 'y700.virtual_hid=1' /proc/cmdline
 grep -zFxq 'linux,dummy-virt' /proc/device-tree/compatible
 [[ $(uname -m) == aarch64 && -z $(ls -A /sys/class/bluetooth 2>/dev/null) ]]
 cd /opt/y700-virtual-hid
+if grep -qw y700.windows_report=1 /proc/cmdline; then export Y700_WINDOWS_REPORT=1; fi
 if grep -qw y700.virtual_typing=1 /proc/cmdline; then
     export Y700_BT_TYPING=1
     dpkg-query -W bluez onboard y700-platform

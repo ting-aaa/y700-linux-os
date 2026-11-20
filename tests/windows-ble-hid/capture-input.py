@@ -13,6 +13,7 @@ import struct
 import time
 
 KEY_F15 = 185
+BTN_LEFT = 272
 EV_KEY, EV_REL = 1, 2
 BUS_BLUETOOTH = 5
 EVIOCGRAB = 0x40044590
@@ -65,13 +66,15 @@ def candidate(node, peers, stack):
     uniq = query(fd, 0x08, 128).split(b"\0", 1)[0].decode("ascii", errors="replace")
     if bus != BUS_BLUETOOTH or address(uniq) != peer:
         return None
-    # Require the Windows fixture's narrow capabilities. It declares only F15
-    # on the keyboard and only REL_X, REL_Y on the pointer.
+    # The Windows sender advertises exactly one pointer button so udev
+    # classifies it as a mouse. Its fixed movement keeps that button released.
     keys = int.from_bytes(query(fd, 0x20 + EV_KEY, 96), "little")
     rel = int.from_bytes(query(fd, 0x20 + EV_REL, 8), "little")
-    if keys not in (0, 1 << KEY_F15) or rel not in (0, 3):
-        return None
-    return peer, fd, bool(keys), bool(rel)
+    if rel == 0 and keys == 1 << KEY_F15:
+        return peer, fd, True, False
+    if rel == 3 and keys in (1 << BTN_LEFT, (1 << BTN_LEFT) | (1 << KEY_F15)):
+        return peer, fd, bool(keys & (1 << KEY_F15)), True
+    return None
 
 
 def unique_pair(candidates):
@@ -98,6 +101,8 @@ class Reports:
             elif self.key_state == 1 and value == 0:
                 self.key_state = 2
         if fd == self.mouse:
+            if typ == EV_KEY and code == BTN_LEFT:
+                raise RuntimeError("Unexpected button event in fixed motion")
             if typ == EV_REL and code in (0, 1):
                 self.movement[code] = value
             elif typ == 0 and code == 0:

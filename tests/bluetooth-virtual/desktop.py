@@ -108,6 +108,8 @@ def main(address, ready_path, nonce=None):
     baseline = []
     events = {}
     required = {"f15-down", "f15-up", "left-down", "left-up", "motion", "wheel-up"}
+    if os.environ.get("Y700_WINDOWS_REPORT") == "1":
+        required = {"f15-down", "f15-up", "motion"}
     complete = False
     received = []
 
@@ -174,7 +176,7 @@ def main(address, ready_path, nonce=None):
         if required != events.keys() or (typing and not typing.passed()):
             return True
         if any(events[down][0] > events[up][0]
-               for down, up in (("f15-down", "f15-up"), ("left-down", "left-up"))):
+               for down, up in (("f15-down", "f15-up"), ("left-down", "left-up")) if down in required):
             return True
         complete = True
         Gtk.main_quit()

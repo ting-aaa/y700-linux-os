@@ -1,4 +1,5 @@
 """HID over GATT test peripheral for the marked two-controller QEMU guest."""
+import os
 import socket
 import sys
 import time
@@ -69,10 +70,16 @@ class HidApplication(gatt.Application):
         service = gatt.Service(bus, 0, HID, True)
         self.add_service(service)
         Characteristic(bus, service, "2a4a", ["read"], b"\x11\x01\x00\x02")
-        Characteristic(bus, service, "2a4b", ["read"], keyboard.REPORT_MAP)
+        self.windows_motion = None
+        report_map = keyboard.REPORT_MAP
+        if os.environ.get("Y700_WINDOWS_REPORT") == "1":
+            report_map = Path("report-map.bin").read_bytes()
+            self.windows_motion = Path("motion.bin").read_bytes()
+        Characteristic(bus, service, "2a4b", ["read"], report_map)
         Characteristic(bus, service, "2a4c", ["write-without-response"], b"\x00")
         self.key = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"], keyboard.CLEAR, 1)
-        self.mouse = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"], bytes(4), 2)
+        self.mouse = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"],
+                                    bytes(len(self.windows_motion) if self.windows_motion else 4), 2)
 
     def handle_control(self, listener, condition, advertise_again):
         client, _ = listener.accept()
@@ -87,8 +94,11 @@ class HidApplication(gatt.Application):
             if command == b"emit" and ready:
                 self.key.send(keyboard.report(keyboard.F15))
                 self.key.send(keyboard.CLEAR)
-                self.mouse.send([1, 7, 253, 1])
-                self.mouse.send([0, 0, 0, 0])
+                if self.windows_motion:
+                    self.mouse.send(self.windows_motion)
+                else:
+                    self.mouse.send([1, 7, 253, 1])
+                    self.mouse.send([0, 0, 0, 0])
             if command.startswith(b"type:") and ready:
                 for report in keyboard.typing_reports(command[5:].decode("ascii")):
                     self.key.send(report)

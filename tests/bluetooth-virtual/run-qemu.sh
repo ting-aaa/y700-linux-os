@@ -2,7 +2,7 @@
 # Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked]' >&2
+    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -20,6 +20,10 @@ greeter=${Y700_BT_GREETER:-0}
 if (( $# == 7 )); then
     case "$7" in
         --classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS ;;
+        --windows-report)
+            [[ -n ${XORG_DUMMY_DEB:-} && -n ${Y700_WINDOWS_REPORT_DIR:-} && ${Y700_BT_TYPING:-0} == 0 ]] || exit 2
+            extra_cmdline=y700.windows_report=1; marker=Y700_WINDOWS_REPORT_PASS
+            if [[ ${Y700_EXPECT_LEGACY_MOUSE:-0} == 1 ]]; then extra_cmdline+=" y700.legacy_mouse=1"; fi ;;
         --cold-classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_COLD_SEED_PASS ;;
         --cold-reboot) marker=Y700_COLD_SEED_PASS ;;
         --cold-reboot-linked) marker=Y700_COLD_SEED_PASS; shutdown_case=y700.virtual_linked_shutdown=1 ;;
@@ -63,6 +67,10 @@ cp "$work/module/hci_vhci.ko" "$work/init/test/"
 cp "$bluez/test/example-gatt-server" "$work/init/test/gatt.py"
 cp "$bluez/test/example-advertisement" "$work/init/test/adv.py"
 cp "$fixture/"{central.py,peer.py,classic.py,keyboard.py,cold-boot.py,guest.sh} "$work/init/test/"
+if [[ $variant == --windows-report ]]; then
+    cp "$Y700_WINDOWS_REPORT_DIR/"{report-map.bin,motion.bin} "$work/init/test/"
+    cp "$fixture/../windows-ble-hid/"{verify-report.py,capture-input.py} "$work/init/test/"
+fi
 install -m755 "$busybox" "$work/init/bin/busybox"
 install -m755 "$uv" "$work/init/test/uv"
 install -m755 "$btvirt" "$work/init/test/btvirt"
@@ -152,6 +160,13 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
     exit 0
 fi
 if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
+    if [[ $variant == --windows-report ]]; then
+        if [[ ${Y700_EXPECT_LEGACY_MOUSE:-0} != 1 ]]; then
+            grep -Fxq Y700_GTK_HID_INPUT_PASS "$work/run.log"
+            grep -Fxq F15_PRESS_RELEASE_AND_RELATIVE_XY_VERIFIED "$work/run.log"
+        fi
+        exit 0
+    fi
     expected=3
     [[ $marker != Y700_VIRTUAL_CLASSIC_INPUT_PASS ]] || expected=2
     [[ $(grep -Fxc Y700_GTK_HID_INPUT_PASS "$work/run.log") == "$expected" ]]

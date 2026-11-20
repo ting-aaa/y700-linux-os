@@ -186,6 +186,11 @@ def main():
         wait("HOG_CONNECTED_AND_RESOLVED", lambda: state()["Connected"] and state()["ServicesResolved"])
         wait("REPORTS_SUBSCRIBED", lambda: control(b"ready"))
         wait("BT_EVDEV_CREATED " + address, lambda: list(inputs_for(address)))
+        if os.environ.get("Y700_WINDOWS_REPORT") == "1":
+            import runpy
+            runpy.run_path("verify-report.py")["check"](address)
+            print("Y700_WINDOWS_REPORT_PASS", flush=True)
+            return
         verify_inputs(address, lambda: control(b"emit"), lambda nonce: control(b"type:" + nonce.encode("ascii")))
         check_onboard_peer(address, "connected")
         if attempt == 0:
