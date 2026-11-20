@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Graph test only. The physical WCD variant and a valid BOB consumer vote are unresolved. */
+#if !defined(Y700_VERIFY_MIC_GRAPH) || (defined(Y700_TEST_9380) == defined(Y700_TEST_9385))
+#error Select one WCD hypothesis in the offline graph check
+#endif
+
+/ {
+	trial_wcd: audio-codec {
+#ifdef Y700_TEST_9380
+		compatible = "qcom,wcd9380-codec";
+#else
+		compatible = "qcom,wcd9385-codec";
+#endif
+		#sound-dai-cells = <1>;
+		reset-gpios = <&tlmm 43 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&trial_wcd_active>;
+		pinctrl-1 = <&trial_wcd_sleep>;
+		vdd-io-supply = <&pm8350_s10>;
+		vdd-rxtx-supply = <&pm8350_s10>;
+		vdd-buck-supply = <&pm8350_s10>;
+		vdd-mic-bias-supply = <&vreg_bob>;
+		qcom,micbias1-microvolt = <2700000>;
+		qcom,micbias2-microvolt = <2700000>;
+		qcom,micbias3-microvolt = <2700000>;
+		qcom,micbias4-microvolt = <2700000>;
+		qcom,rx-device = <&trial_wcd_rx>;
+		qcom,tx-device = <&trial_wcd_tx>;
+	};
+};
+
+&tlmm {
+	trial_wcd_active: wcd-reset-active-state {
+		pins = "gpio43";
+		function = "gpio";
+		drive-strength = <16>;
+		output-high;
+	};
+
+	trial_wcd_sleep: wcd-reset-sleep-state {
+		pins = "gpio43";
+		function = "gpio";
+		drive-strength = <16>;
+		bias-disable;
+		output-low;
+	};
+};
+
+&tx_swr_active {
+	clk-pins {
+		drive-strength = <4>;
+	};
+	data-pins {
+		drive-strength = <4>;
+	};
+};
+
+&vamacro {
+	/* The TX and RX macros use fsgen. Factory VA DMICs remain unrouted. */
+	qcom,dmic-sample-rate = <600000>;
+	status = "okay";
+};
+
+&swr1 {
+	status = "okay";
+
+	trial_wcd_rx: codec@0,4 {
+		compatible = "sdw20217010d00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
+
+&swr2 {
+	status = "okay";
+
+	trial_wcd_tx: codec@0,3 {
+		compatible = "sdw20217010d00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <2 3 2 3>;
+	};
+};
+
+&sound {
+	audio-routing = "Speaker Left", "SPK1 SPK",
+			"Speaker Right", "SPK2 SPK",
+			"AMIC1", "Analog Mic1",
+			"AMIC1", "MIC BIAS1",
+			"AMIC4", "Analog Mic4",
+			"AMIC4", "MIC BIAS3",
+			"TX SWR_INPUT4", "ADC1_OUTPUT",
+			"TX SWR_INPUT8", "ADC3_OUTPUT";
+
+	internal-mic-capture-dai-link {
+		link-name = "Internal Mic Capture";
+
+		cpu {
+			sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+		};
+		codec {
+			sound-dai = <&trial_wcd 1>, <&swr2 0>, <&txmacro 0>;
+		};
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+};
