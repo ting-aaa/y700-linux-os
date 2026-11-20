@@ -31,7 +31,8 @@ EOF
 
 qcam=y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb
 blueman=blueman_2.4.4-1+y7001_arm64.deb
-for name in dev8 dev9 dev10 dev11.1; do
+versions=(dev8 dev9 dev10 dev11.1 dev12.1)
+for name in "${versions[@]}"; do
     printf 'Synthetic platform fixture\n' > "$bundle/y700-platform_0.1.0~${name}_all.deb"
 done
 printf 'Synthetic qcam fixture\n' > "$bundle/$qcam"
@@ -47,7 +48,7 @@ mkfs.ext4 -q -F "$base/root.ext4.zst"
 debugfs -w -R 'mkdir /etc' "$base/root.ext4.zst" 2> "$work/debugfs.log"
 debugfs -w -R 'mkdir /etc/y700' "$base/root.ext4.zst" 2>> "$work/debugfs.log"
 ln -s base/root.ext4.zst "$bundle/root.ext4"
-for name in dev8 dev9 dev10 dev11.1; do
+for name in "${versions[@]}"; do
     (cd "$bundle" && qemu-img create -q -f qcow2 -F raw -b root.ext4 "$name.qcow2")
 done
 rm -- "$bundle/root.ext4"
@@ -85,10 +86,12 @@ reject() {
     check_rolled_back
 }
 
-manifest dev11.1 "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
-unpack --verify >/dev/null
-manifest dev11.1 "$qcam" "$blueman" chinese-ime.tar
-reject 'Unsupported update manifest' --verify
+for version in dev11.1 dev12.1; do
+    manifest "$version" "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
+    unpack --verify >/dev/null
+    manifest "$version" "$qcam" "$blueman" chinese-ime.tar
+    reject 'Unsupported update manifest' --verify
+done
 manifest dev10 "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
 unpack --verify >/dev/null
 printf 'Corrupt panel archive\n' >> "$bundle/xorg-dsi.tar"
