@@ -314,6 +314,21 @@ bash rebuild/build-dev12.1-image.sh /path/to/combined-kms-dev11.1 \
     ./y700-platform_0.1.0~dev12.1_all.deb /new/dev12.1-rebuild
 ```
 
+### Dev12.2 Xfce panel volume control
+
+The local `out/dev12.2-board` bundle upgrades `y700-platform` on the sealed dev12.1 root. The other 1,111 installed packages, U-Boot and EFI partition have the same versions or hashes. Use the standard `unpack.sh` commands above to expand the complete portable bundle on a Linux PC. See the included Chinese `README.md` for generic and per-tablet Bluetooth setup. [Panel control and hardware volume buttons](PANEL-AUDIO.md)
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `8291d6c2f3b5763627687dcc93abc855323ffaeaba003a1542246d80a5d58463` |
+| `TOOLS-SHA256SUMS` | `1773e8451d0c5c24c0fbaa5850260cc80e5d66b22ff6596e22fb0f4eda7fb0cd` |
+| Portable `dev12.2.qcow2` | `395d45e8348881e5b2df9ff00c53aff99b12d44ff468af8cee31a79002cf1801` |
+| Generic 6 GiB `root.ext4` | `1b93f405a9be7249fb4672a950877a89e7a882d82be80fcd5d8ccbca6ffe9cc6` |
+| 1,112 installed package tuples | `18312de3bbfa9aff87769b7e7f03f9d5e7d2eb617ce3815854a3c2aaea2372ce` |
+| `y700-platform_0.1.0~dev12.2_all.deb` | `9e49a2a1b2fa5bb826db4066d0a2de5cc0ba12cd4b2ddce0dd0c960c77db629d` |
+
+Independent generic and synthetic Bluetooth extractions passed the complete filesystem and package inventory checks. The exact root booted through virtual U-Boot and EFI to systemd, rejected a mismatched touchscreen enrollment and completed a normal LightDM/PAM Xfce login. The new user had one running PulseAudio wrapper, ID 19 next to the top-panel notification area, and the original bottom-panel layout. On this emulated first login the helper reported a D-Bus timeout during panel restart and left its completion marker absent. A subsequent observation in that same login confirmed the wrapper had started. The guest shut down normally. The physical tablet received the package update separately. Full-image physical cold boot remains untested. See `out/dev12.2-board-verified/efi/report.log` for the ordered observations.
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
