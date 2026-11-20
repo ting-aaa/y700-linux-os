@@ -1,0 +1,13 @@
+[Unit]
+Description=Load the signed wireless regulatory database from the Y700 root filesystem
+After=local-fs.target
+Before=NetworkManager.service
+ConditionPathExists=/sys/module/cfg80211
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/iw reg reload
+RemainAfterExit=yes
+
+[Install]
+WantedBy=NetworkManager.service

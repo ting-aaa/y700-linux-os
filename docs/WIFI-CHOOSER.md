@@ -1,5 +1,33 @@
 # Xfce Wi-Fi chooser on Y700
 
+## Radio bands and reconnection on the physical tablet
+
+The current boot's supplicant journal recorded a completed association on 5220 MHz. After 2,639.6 seconds the station reported disconnect reason 34. It scanned, associated on 2437 MHz with another BSSID advertising the same SSID and completed the WPA key negotiation 6.728 seconds after the disconnect. The supplicant network ID stayed the same. This measures link-layer recovery on one actual network. Application traffic was measured separately on 2.4 GHz. To obtain the same reduced result from a retained boot journal, pass the wireless interface name to the [association history check](../tests/wifi-association-history.py).
+
+In a later passive scan on this tablet, `iw` returned 30 BSS entries on 2.4 GHz and 14 on 5 GHz. No 6 GHz entry appeared. NetworkManager advertises all three bands, and the active 2437 MHz WPA2 connection stayed up. The scan counts include separate BSSes advertising the same network name. [Privacy-preserving survey](../tests/wifi-band-survey.sh)
+
+## Signed wireless regulatory database
+
+The physical `7.3.4-asphalt-prc` kernel requested `regulatory.db` at boot time 4.293 s, before it ran `/init` at 4.299 s. Its old initramfs lacked the file. The installed Debian root also selected a database signed with the Debian key, while this kernel trusts the upstream `sforshee` and `wens` keys. Debian's `wireless-regdb` package supplies both signatures and supports selecting the upstream pair for a custom kernel. The WCN6855's `ath11k` regulatory domain is managed by its firmware. Its separate `regdb.bin` and board calibration are distinct from cfg80211's signed database. [Debian maintainer's instructions](https://lists.debian.org/debian-release/2026/02/msg00250.html) · [Linux wireless regulatory database](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/wireless-regdb.html) · [ath11k self-managed domain](https://github.com/torvalds/linux/blob/v7.0/drivers/net/wireless/ath/ath11k/reg.c)
+
+The board-image builder now places the authenticated upstream pair in the initramfs and selects the same pair inside the staged Debian root. The original and KMS kernels each passed three radio-free cold boots in ARM64 QEMU. Without the file they reported a missing database. With the Debian signature they rejected it. With the upstream signature they loaded the test rules. A separate 994-package image assembled with the production script passed FAT and ext4 readback and booted through EFI to systemd. Previously sealed images keep their original initramfs. [Early-boot test and hashes](../tests/wifi-regdb/README.md)
+
+The running tablet retained its original boot files. Its root now selects the upstream pair, and the compatibility unit reloads it after the root mounts and before NetworkManager starts on legacy installations. Starting the unit on the running tablet returned success from the kernel. Across the reload, all 51 WLAN-bound gateway pings returned, the active connection profile stayed the same, and NetworkManager, the supplicant, SSH, LightDM and Bluetooth kept their service invocations. The before/after `iw reg get` rules for the self-managed PHY matched. The test made no country selection on the tablet.
+
+For a Y700 Debian installation that uses the old initramfs and this upstream-key kernel, install Debian's `iw` and `wireless-regdb` packages. Note the existing `update-alternatives --query regulatory.db` selection for rollback, then use the following from the product checkout. New images built with the corrected initramfs already carry the signed early-boot files. [Legacy systemd unit](../packaging/wifi-regdb/y700-wireless-regdb.service)
+
+```sh
+sudo apt-get install iw wireless-regdb
+sudo update-alternatives --set regulatory.db /lib/firmware/regulatory.db-upstream
+sudo install -m 644 packaging/wifi-regdb/y700-wireless-regdb.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now y700-wireless-regdb.service
+systemctl show y700-wireless-regdb.service -p Result -p ExecMainStatus
+iw reg get
+```
+
+To remove this compatibility setup, disable and stop the unit, remove its file from `/etc/systemd/system`, run `systemctl daemon-reload` and restore the previous alternatives mode and selection. On the tested tablet the previous setting was automatic. A rollback script and the original selection were retained locally.
+
 ## Physical LAN transfer
 
 On November 20 the running TB320FC_PRC exchanged data directly with a Windows WLAN peer on its existing access point. The tablet used `ath11k_pci`. Its supplicant reported a completed WPA2-PSK association with CCMP, 2,437 MHz and 40 MHz channel width. The host bound its Wi-Fi IPv4 address, and the tablet bound the address selected by its on-link wireless route back to that peer. USB SSH started the test and returned measurements. [Linux wireless station information](https://wireless.docs.kernel.org/en/latest/en/users/documentation/iw.html)
