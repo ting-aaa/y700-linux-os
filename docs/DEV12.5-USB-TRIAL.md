@@ -38,13 +38,17 @@ tar -C scripts -cf - stage-file-trial-images.sh manage-file-trial-entry.sh |
     bash "$USB_SSH" "tar -C $scratch -xf -"
 bash "$USB_SSH" "mkdir $scratch/entry && tar -C $scratch/entry -xzf -" < "$supplement"
 cat "$base/root.ext4.zst" "$base/linux-boot.fat.zst" |
-    bash "$USB_SSH" "bash -o pipefail -c 'zstd -qdc | bash $scratch/stage-file-trial-images.sh /'"
+    bash "$USB_SSH" "bash -o pipefail -c 'zstd -qdc | bash $scratch/stage-file-trial-images.sh --inherit-bluetooth /'"
 bash "$USB_SSH" "bash $scratch/manage-file-trial-entry.sh add $scratch/entry /boot"
 ```
 
 数据接收程序先在私有目录预分配空间，再校验完整输入的长度、摘要和根文件系统身份，最后一起发布两个文件。目标已有这一版时会保留原先的设置并结束。菜单工具最后才放置 `y700-file.conf`，然后读回四个新增文件，并核对原来六个启动文件的摘要。以上操作完成后，平板仍处于当前会话。[接收程序](../scripts/stage-file-trial-images.sh) · [菜单工具](../scripts/manage-file-trial-entry.sh)
 
-通用镜像启动后会尝试从本机 `persist` 分区读取扬声器校准。首次启动传感器服务时也会尝试导入本机出厂校准。蓝牙地址需要单独设置。可在制作镜像时按指南写入本机地址，或在试用系统内配置。原系统已有的蓝牙配对记录保存在原系统中。[蓝牙地址配置](DEV12.5-IMAGE.md) · [扬声器校准](SPEAKERS.md) · [传感器校准](SSC-CALIBRATION.md)
+上述命令适用于原 Debian 已配置本机蓝牙地址的平板。`--inherit-bluetooth` 在校验通用镜像后，从平板上的 `/etc/y700/bluetooth-address` 读取本机地址，直接写入试用根镜像并读回核对。个人地址全程留在平板上。电脑上的回环文件系统已用虚构地址验证这一流程。原系统缺少地址时，去掉该参数可暂存通用镜像，稍后按指南配置。[蓝牙地址配置](DEV12.5-IMAGE.md) · [暂存回归测试](../tests/file-trial-staging.sh)
+
+原 Debian 保留自己的配对密钥。首次在试用系统使用蓝牙键鼠时需要配对。如果配件在重新配对时替换了旧密钥，回到原 Debian 后也可能需要再配一次。[BlueZ 配对记录格式](https://bluez.readthedocs.io/en/latest/settings-storage/)
+
+通用镜像启动后会尝试从本机 `persist` 分区读取扬声器校准。首次启动传感器服务时也会尝试导入本机出厂校准。[扬声器校准](SPEAKERS.md) · [传感器校准](SSC-CALIBRATION.md)
 
 ## 试启动和返回
 

@@ -4,7 +4,13 @@ set -euo pipefail
 export LC_ALL=C
 umask 077
 die() { echo "File trial staging: $*" >&2; exit 1; }
-[[ $# == 1 || $# == 2 ]] || die 'usage: stage-file-trial-images.sh MOUNTED_BASELINE [EXPECTED_PERSONAL_ROOT_SHA256]'
+inherit_bt=false
+if [[ ${1:-} == --inherit-bluetooth ]]; then
+    set +x
+    inherit_bt=true
+    shift
+fi
+[[ $# == 1 || $# == 2 && $inherit_bt == false ]] || die 'usage: stage-file-trial-images.sh [--inherit-bluetooth] MOUNTED_BASELINE [EXPECTED_PERSONAL_ROOT_SHA256]'
 [[ $EUID == 0 ]] || die 'the images and their staging directories must belong to root'
 root_sha=${2:-041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6}
 esp_sha=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
@@ -13,6 +19,25 @@ base=$(realpath -e -- "$1")
 [[ $(findmnt -nro FSTYPE -M "$base") == ext4 ]] || die 'expected the mounted ext4 baseline'
 [[ $(findmnt -nro UUID -M "$base") == ef306764-2315-4235-8796-69e2c9b61946 ]] || die 'baseline filesystem UUID mismatch'
 [[ $(cat "$base/etc/y700/image-id") == asphalt-prc-debian13-xfce-7.3.4-v1 ]] || die 'baseline image ID mismatch'
+if $inherit_bt; then
+    source_id="${base%/}/etc/y700/bluetooth-address"
+    [[ -f $source_id && ! -L $source_id && $(realpath -e -- "$source_id") == "$source_id" &&
+       $(findmnt -nro TARGET -T "$source_id") == "$base" ]] || die 'expected the installed identity on this baseline'
+    exec {id_fd}<"$source_id"
+    opened_id=/proc/$$/fd/$id_fd
+    [[ $(stat -Lc '%d:%i' "$opened_id") == "$(stat -c '%d:%i' -- "$source_id")" &&
+       $(stat -Lc '%u:%h:%a' "$opened_id") =~ ^0:1:(400|600)$ ]] || die 'expected a private root-owned identity'
+    id_size=$(stat -Lc %s "$opened_id")
+    [[ $id_size == 17 || $id_size == 18 ]] || die 'invalid identity size'
+    address=$(cat "$opened_id")
+    [[ $address =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]] || die 'invalid Bluetooth address'
+    if [[ $id_size == 18 ]]; then fmt='%s\n'; else fmt='%s'; fi
+    printf "$fmt" "$address" | cmp -s - "$opened_id" || die 'invalid identity encoding'
+    exec {id_fd}<&-
+    address=${address^^}
+    case $address in 00:00:00:00:00:00|FF:FF:FF:FF:FF:FF|02:00:00:00:00:00) die 'placeholder Bluetooth address';; esac
+    (( (16#${address:0:2} & 1) == 0 )) || die 'expected a unicast Bluetooth address'
+fi
 parent="${base%/}/var/lib/y700-trial"
 [[ $(realpath -e -- "${parent%/*}") == "${parent%/*}" ]] || die 'unexpected baseline directory link'
 if ! mkdir -m700 -- "$parent" 2>/dev/null; then
@@ -25,7 +50,7 @@ target=$parent/dev12.5
 [[ ! -e $target && ! -L $target ]] || die 'dev12.5 already exists; its saved state is retained'
 stage=$(mktemp -d -- "$parent/.stage-dev12.5.XXXXXXXX")
 cleanup() {
-    if [[ -d $stage ]]; then rm -f -- "$stage/root.ext4" "$stage/linux-boot.fat"; rmdir -- "$stage"; fi
+    if [[ -d $stage ]]; then rm -f -- "$stage/root.ext4" "$stage/linux-boot.fat" "$stage/.bluetooth-input"; rmdir -- "$stage"; fi
 }
 trap cleanup EXIT
 trap 'exit 129' HUP
@@ -50,6 +75,23 @@ receive linux-boot.fat 1024 "$esp_sha"
 [[ $(head -c 1 | wc -c) -eq 0 ]] || die 'trailing bytes after the EFI image'
 [[ $(blkid -p -o value -s UUID root.ext4) == 171a4adb-916b-4763-9e6f-722b4a99988f ]] || die 'unexpected inner root UUID'
 [[ $(debugfs -R 'cat /etc/y700/image-id' root.ext4 2>/dev/null) == y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ]] || die 'inner system identity mismatch'
+if $inherit_bt; then
+    # This mode accepts only the exact generic root hash, before personalization.
+    # Never open the baseline image or its pairing database for writing.
+    path=/etc/y700/bluetooth-address
+    printf '%s\n' "$address" > .bluetooth-input
+    unset address
+    write_report=$(debugfs -w -R "write .bluetooth-input $path" root.ext4 2>&1)
+    grep -Eq '^Allocated inode: [0-9]+$' <<< "$write_report" || die 'could not add the identity to the trial'
+    info=$(debugfs -R "stat $path" root.ext4 2>/dev/null)
+    grep -Eq '^Inode: [0-9]+[[:blank:]]+Type: regular[[:blank:]]+Mode:[[:blank:]]+0600' <<< "$info" &&
+        grep -Eq '^User:[[:blank:]]+0[[:blank:]]+Group:[[:blank:]]+0[[:blank:]].*Size: 18$' <<< "$info" &&
+        grep -Eq '^Links: 1[[:blank:]]' <<< "$info" || die 'incorrect identity metadata in the trial'
+    debugfs -R "cat $path" root.ext4 2>/dev/null | cmp -s -- .bluetooth-input - || die 'identity readback mismatch'
+    rm -- .bluetooth-input
+    e2fsck -fn root.ext4 >/dev/null 2>&1 || die 'personalized trial filesystem check failed'
+    echo 'FILE_TRIAL_BLUETOOTH_PASS source=baseline mode=0600'
+fi
 cd "$parent"
 mv -nT -- "$stage" "$target"
 [[ ! -e $stage ]] || die 'destination appeared during staging'

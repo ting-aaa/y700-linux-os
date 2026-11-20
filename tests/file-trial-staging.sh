@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Exercise the production stream receiver on a disposable ext4 image.
 set -euo pipefail
-[[ $EUID == 0 && $# == 1 ]] || { echo 'Usage (root): file-trial-staging.sh UNPACKED_GENERIC_DIRECTORY' >&2; exit 2; }
+[[ $EUID == 0 && ( $# == 1 || $# == 2 && $2 == --inherit-bluetooth ) ]] || { echo 'Usage (root): file-trial-staging.sh UNPACKED_GENERIC_DIRECTORY [--inherit-bluetooth]' >&2; exit 2; }
 if [[ ${Y700_STAGING_PRIVATE:-0} != 1 ]]; then
     exec unshare --mount --propagation private env Y700_STAGING_PRIVATE=1 bash "$0" "$@"
 fi
@@ -32,11 +32,49 @@ flock -n "$lock_fd"
 if bash "$receiver" "$host" </dev/null; then exit 1; fi
 flock -u "$lock_fd"
 exec {lock_fd}<&-
-cat "$images/root.ext4" "$images/linux-boot.fat" | bash "$receiver" "$host"
+options=()
+if [[ ${2:-} == --inherit-bluetooth ]]; then
+    options=(--inherit-bluetooth)
+    source_id=$host/etc/y700/bluetooth-address
+    reject_identity() {
+        if bash "$receiver" --inherit-bluetooth "$host" </dev/null > "$work/rejected" 2>&1; then exit 1; fi
+        grep -Fq -- "$1" "$work/rejected"
+        [[ -z $(ls -A "$parent") ]]
+    }
+    reject_identity 'expected the installed identity'
+    ln -s "$host/etc/y700/image-id" "$source_id"
+    reject_identity 'expected the installed identity'
+    rm -- "$source_id"
+    printf '%s\n' '02:00:00:00:00:00' > "$source_id"
+    chmod 0644 "$source_id"
+    reject_identity 'private root-owned identity'
+    chmod 0600 "$source_id"
+    reject_identity 'placeholder Bluetooth address'
+    printf '03:00:00:00:00:ab\n' > "$source_id"
+    reject_identity 'unicast Bluetooth address'
+    printf '02:00:00:00:00:ab\0' > "$source_id"
+    reject_identity 'invalid identity encoding'
+    printf '02:00:00:00:00:ab' > "$source_id"
+    chmod 0400 "$source_id"
+    mkdir -p "$host/var/lib/bluetooth/synthetic"
+    touch "$host/var/lib/bluetooth/synthetic/pairing-sentinel"
+fi
+cat "$images/root.ext4" "$images/linux-boot.fat" | bash "$receiver" "${options[@]}" "$host" | tee "$work/staging.log"
 if bash "$receiver" "$host" </dev/null; then exit 1; fi
 for file in root.ext4 linux-boot.fat; do
     dest=$parent/dev12.5/$file
-    cmp "$images/$file" "$dest"
+    if [[ ${2:-} == --inherit-bluetooth && $file == root.ext4 ]]; then
+        printf '%s\n' '02:00:00:00:00:AB' | cmp - <(debugfs -R 'cat /etc/y700/bluetooth-address' "$dest" 2>/dev/null)
+        printf '02:00:00:00:00:ab' | cmp - "$source_id"
+        [[ $(stat -c %a "$source_id") == 400 ]]
+        [[ ! -e $parent/dev12.5/.bluetooth-input ]]
+        debugfs -R 'stat /var/lib/bluetooth/synthetic/pairing-sentinel' "$dest" 2>&1 | grep -Fq 'File not found'
+        grep -Fq 'FILE_TRIAL_BLUETOOTH_PASS' "$work/staging.log"
+        if grep -Fqi '02:00:00:00:00:' "$work/staging.log"; then exit 1; fi
+        e2fsck -fn "$dest" >/dev/null
+    else
+        cmp "$images/$file" "$dest"
+    fi
     [[ $(stat -c '%u:%g:%a:%h' "$dest") == 0:0:600:1 ]]
     (( $(stat -c %b "$dest") * 512 >= $(stat -c %s "$dest") ))
 done
