@@ -67,3 +67,17 @@ bash tests/video-userspace/run-qemu.sh "$DEV12_8_ROOT_EXT4" "$KERNEL" \
 ```
 
 For the 1920 × 1080 desktop fixtures, pass `--full-hd` to `tests/video-userspace/make-clips.py` and supply its output to `extend-clips.py`. The three files in `out/video-player/full-hd/` each contain 48 frames over 24 seconds. Host software decoding verified both color panels on every frame of every file. Their SHA-256 values are in `out/video-player/full-hd-verification.log`. The six source NV12 frames have a 1920-byte stride and 1088 luma storage rows.
+
+### BT.709 control for hardware negotiation
+
+Use `--full-hd --bt709` to generate limited-range 8-bit BT.709. The red, green and blue patches have Y′CbCr values (63, 102, 240), (173, 42, 26) and (32, 240, 118). The generator sets the range, matrix, transfer function and primaries on the raw frames before encoding. In the first control, output flags alone left the transfer and primaries unspecified. The preserved `full-hd-bt709/` files identify that experiment.
+
+The fully signalled 24-second files are in `out/video-player/full-hd-bt709-v2/`. The dev12.8 ARM64 GStreamer libraries with the Debian parsers reported `colorimetry=(string)bt709`, 4:2:0 and 8-bit luma/chroma for all three original tracks and all three stream-copy loops. Software decoding recovered both expected colors in each of the 144 looped frames. The caps verifier also rejected the earlier H.264 control, which reported `0:3:0:0`. The ARM64 receipt `out/video-player/full-hd-bt709-v2-verification.log` has SHA-256 `a657ba9ea925ca0381a06cdc23cb08630798189bcc2d558cc2f6abef8a8c6c64`. [Parser caps verification](../tests/video-player/check-bt709.sh)
+
+```sh
+uv run --no-project --with imageio-ffmpeg==0.6.0 python tests/video-userspace/make-clips.py \
+    --full-hd --bt709 out/video-player/new-bt709-source
+uv run --no-project --with imageio-ffmpeg==0.6.0 python tests/video-player/extend-clips.py \
+    out/video-player/new-bt709-source out/video-player/new-bt709
+bash tests/video-player/check-bt709.sh out/video-player/new-bt709-source out/video-player/new-bt709
+```
