@@ -9,9 +9,15 @@ from pathlib import Path
 
 qemu, bios, out = map(Path, sys.argv[1:4])
 scenario = sys.argv[4]
-reasons = {"absent": "Matching y700-test-root partition unavailable",
-           "wrong-identity": "Unexpected image identity"}
-expected_error = f"y700-sd-trial: {reasons[scenario]}; rebooting to the default entry".encode()
+errors = {
+    "absent": "y700-sd-trial: Matching y700-test-root partition unavailable; rebooting to the default entry",
+    "wrong-identity": "y700-sd-trial: Unexpected image identity; rebooting to the default entry",
+    "file-absent": "y700-file-trial: unsafe trial directory; rebooting to default",
+    "file-symlink": "y700-file-trial: unsafe root image; rebooting to default",
+    "file-identity": "y700-file-trial: unexpected inner image identity; rebooting to default",
+}
+expected_error = errors[scenario].encode()
+title = sys.argv[5].encode() if len(sys.argv) > 5 else b"Y700 candidate (microSD)"
 libs = qemu / "usr/lib/x86_64-linux-gnu"
 env = dict(os.environ, LD_LIBRARY_PATH=str(libs), QEMU_MODULE_DIR=str(libs / "qemu"))
 cmd = [str(qemu / "usr/bin/qemu-system-aarch64"), "-L", str(qemu / "usr/share/qemu"),
@@ -59,7 +65,7 @@ try:
                 stage, window = ("menu" if boots == 1 else "default"), b""
             elif stage == "menu":
                 # Two Linux entries precede automatically generated firmware actions.
-                titles = [b"Debian 13 Xfce", b"Y700 candidate (microSD)"]
+                titles = [b"Debian 13 Xfce", title]
                 if all(title in window for title in titles):
                     slot = 1 if window.index(titles[1]) < window.index(titles[0]) else 2
                     send(str(slot).encode() + b"\r")
@@ -73,7 +79,8 @@ try:
             raise TimeoutError(f"{scenario}: {stage}, see {log}")
     if stage != "poweroff" or boots != 2 or proc.wait(timeout=15) != 0:
         raise RuntimeError(f"{scenario}: incomplete return in {stage} after {boots} boots, see {log}")
-    print(f"SD_TRIAL_RETURN_PASS case={scenario} boots={boots} default=debian.conf pid1=1 qemu_exit=0", flush=True)
+    media = "FILE" if scenario.startswith("file-") else "SD"
+    print(f"{media}_TRIAL_RETURN_PASS case={scenario} boots={boots} default=debian.conf pid1=1 qemu_exit=0", flush=True)
 finally:
     if proc.poll() is None:
         proc.kill()
