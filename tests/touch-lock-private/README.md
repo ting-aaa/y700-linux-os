@@ -27,6 +27,13 @@ The November 20 full-system ARM64 run passed with one dialog and one keyboard. A
 
 ## Rotation during native lock and unlock
 
-Append `--rotation-package "$platform_deb"` to the QEMU command above. The runner uses the rotation entry point, implementation and GSettings schema from that Debian archive and prints its version and SHA-256. An ordinary session process runs the client on the same D-Bus session as Debian's real Xfce screensaver. A separate private bus supplies a synthetic accelerometer and an active logind session whose `LockedHint` stays false. The display helper records each requested rotation.
+Append `--rotation-package "$platform_deb"` to either runner. For example, the tablet command is
+
+```sh
+bash tests/touch-lock-private/run.sh "$pinned_usb_ssh" out/touch-lock/archives "$device_helper_usr" \
+    --rotation-package "$platform_deb"
+```
+
+Both runners extract the rotation entry point, implementation and GSettings schema from that Debian archive on the PC and print its version and SHA-256. They verify the test files against the staging manifest in the guest. On the tablet, the runner transfers the extracted files into tmpfs, and the before-and-after check includes the installed `y700-platform` version. An ordinary session process runs the client on the same D-Bus session as Debian's real Xfce screensaver. A separate private bus supplies a synthetic accelerometer and an active logind session whose `LockedHint` stays false. The display helper records each requested rotation.
 
 After the client applies left, the sensor sends right and the fixture locks the desktop before the 3.5-second settling interval expires. The client must release its lease, ignore the pending right rotation, and issue no display request when the locked device changes to inverted. The normal Onboard/PAM exercise rejects a wrong password, then accepts the correct password in the same dialog. The client must obtain a new lease and apply the current inverted orientation. This fixture checks session policy and command dispatch. Real RandR, libinput coordinates and the tablet's inertial sensors have separate tests. [Display and direct-touch test](../rotation-touch/README.md)

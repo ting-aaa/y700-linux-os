@@ -1,8 +1,8 @@
 #!/bin/bash
 # Verify an extracted lock candidate against private display/PAM on a running tablet.
 set -euo pipefail
-if (( $# != 3 )); then
-    echo 'Usage: run.sh PINNED_USB_SSH ARCHIVE_DIRECTORY DEVICE_XVFB_USR' >&2
+if (( $# != 3 && $# != 5 )) || [[ $# == 5 && $4 != --rotation-package ]]; then
+    echo 'Usage: run.sh PINNED_USB_SSH ARCHIVE_DIRECTORY DEVICE_XVFB_USR [--rotation-package PLATFORM.deb]' >&2
     exit 2
 fi
 ssh=$(realpath -e "$1")
@@ -19,11 +19,13 @@ cleanup() {
     rm -rf -- "$local_stage"
 }
 trap cleanup EXIT
-bash "$here/stage.sh" "$archives" "$local_stage"
+bash "$here/stage.sh" "$archives" "$local_stage" "${@:4}"
 cd "$local_stage"
 remote=$(bash "$ssh" 'set -eu; umask 077; test "$(findmnt -nro FSTYPE -T /run)" = tmpfs; mktemp -d /run/y700-private-lock.XXXXXXXX')
 [[ $remote =~ ^/run/y700-private-lock\.[[:alnum:]]{8}$ ]]
-tar -cf - *.deb namespace.sh session.sh exercise.py SHA256SUMS | bash "$ssh" "umask 077; tar -xf - -C '$remote'"
+inputs=(*.deb namespace.sh session.sh exercise.py SHA256SUMS)
+if [[ -d rotation ]]; then inputs+=(rotation retry-in-place); fi
+tar -cf - -- "${inputs[@]}" | bash "$ssh" "umask 077; tar -xf - -C '$remote'"
 bash "$ssh" bash -s -- "$remote" "$helper" <<'DEVICE'
 set -euo pipefail
 cd "$1"
@@ -37,7 +39,7 @@ snapshot() {
     printf 'boot=%s seat=%s\n' "$(cat /proc/sys/kernel/random/boot_id)" "$active"
     loginctl show-session "$active" -p Active -p LockedHint
     systemctl show lightdm.service ssh.service NetworkManager.service bluetooth.service -p Id -p InvocationID
-    for pkg in libxss1 xfce4-screensaver y700-touch-lock libdbus-glib-1-2; do
+    for pkg in libxss1 xfce4-screensaver y700-touch-lock libdbus-glib-1-2 y700-platform; do
         dpkg-query -W -f='${binary:Package} ${db:Status-Abbrev} ${Version}\n' "$pkg" 2>/dev/null || true
     done
 }

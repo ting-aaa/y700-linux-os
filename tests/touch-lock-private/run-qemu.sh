@@ -15,25 +15,12 @@ stage=$init/check
 mkdir -p "$init/"{bin,dev,proc,sys,base} "$stage/helpers/"{bin,lib/aarch64-linux-gnu}
 printf '%s  %s\n' 041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6 "$root" \
     4e23cb29a382da7d66f4476d72fd8ac3b11960749649875b00cd8453f4aa3bf1 "$kernel" | sha256sum --strict -c -
-bash "$here/stage.sh" "$5" "$stage"
+bash "$here/stage.sh" "$5" "$stage" "${@:7}"
 install -m755 "$3" "$init/bin/busybox"
 install -m755 "$4" "$stage/uv"
 install -m755 "$6/bin/"{Xvfb,xdotool} "$stage/helpers/bin/"
 install -m644 "$6/lib/aarch64-linux-gnu/libxdo.so.3" "$stage/helpers/lib/aarch64-linux-gnu/"
 touch "$stage/retry-in-place"
-if (( $# == 8 )); then
-    platform=$(realpath -e "$8")
-    [[ $(dpkg-deb -f "$platform" Package) == y700-platform && $(dpkg-deb -f "$platform" Architecture) == all ]]
-    echo "ROTATION_PACKAGE version=$(dpkg-deb -f "$platform" Version) sha256=$(sha256sum "$platform" | cut -d' ' -f1)"
-    dpkg-deb -x "$platform" "$work/platform"
-    mkdir "$stage/rotation"
-    cp "$work/platform/usr/lib/y700/"{y700-auto-rotate.py,rotation_session.py} "$stage/rotation/"
-    cp "$work/platform/usr/share/glib-2.0/schemas/org.y700.tablet.gschema.xml" "$stage/rotation/"
-    glib-compile-schemas --strict "$stage/rotation"
-    cp "$here/../rotation-session.py" "$stage/rotation/providers.py"
-    cp "$here/rotation.py" "$stage/rotation/"
-    (cd "$stage" && sha256sum rotation/* >> SHA256SUMS)
-fi
 cat > "$init/init" <<'INIT'
 #!/bin/busybox sh
 set -eu
