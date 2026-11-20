@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ ${1:-} != --session ]]; then
     mode=${1:-fresh}
-    [[ $mode == fresh || $mode == opt-out ]] || exit 2
+    [[ $mode == fresh || $mode == opt-out || $mode == detection-toggle ]] || exit 2
     work=$(mktemp -d)
     trap 'rm -rf -- "$work"' EXIT
     mkdir -m 700 "$work/home" "$work/config" "$work/cache" "$work/run" "$work/state" "$work/tmp"
@@ -69,13 +69,47 @@ wait_visible() {
     return 1
 }
 
+keyboard_monitor_count() {
+    local pid=$1 fd
+    for fd in /proc/"$pid"/fd/*; do
+        readlink "$fd" || :
+    done | sed -n 's/^socket:\[\([0-9]*\)\]$/\1/p' |
+        awk 'NR==FNR { socket[$1]=1; next }
+             $2==15 && ($10 in socket) { monitors++ }
+             END { print monitors+0 }' - /proc/net/netlink
+}
+
+check_detection_toggle() {
+    local key=keyboard-device-detection-enabled pid current value expected
+    pid=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.GetConnectionUnixProcessID org.onboard.Onboard |
+        sed -nE 's/^\(uint32 ([0-9]+),\)$/\1/p')
+    [[ $pid =~ ^[0-9]+$ ]] || { echo 'Could not locate the Onboard bus owner' >&2; return 1; }
+    current=$(keyboard_monitor_count "$pid")
+    [[ $current == 1 ]] || { echo "Expected one initial keyboard monitor, found $current" >&2; return 1; }
+    for value in false true false true; do
+        expected=0
+        if [[ $value == true ]]; then expected=1; fi
+        gsettings set org.onboard.auto-show "$key" "$value"
+        for _ in {1..80}; do
+            current=$(keyboard_monitor_count "$pid")
+            [[ $current != "$expected" ]] || break
+            sleep 0.1
+        done
+        [[ $current == "$expected" ]] || { echo "Expected $expected keyboard monitors after setting $value, found $current" >&2; return 1; }
+        wait_visible true
+    done
+    gsettings reset org.onboard.auto-show "$key"
+    echo 'PASS: four live detection changes toggled the same Onboard process monitor while the focused field retained its screen keyboard.'
+}
+
 wait_visible false
 for _ in {1..120}; do
     [[ ! -e "$XDG_STATE_HOME/y700/desktop-defaults-v1" ]] || break
     sleep 0.1
 done
 test -f "$XDG_STATE_HOME/y700/desktop-defaults-v1"
-if [[ $mode == fresh ]]; then
+if [[ $mode != opt-out ]]; then
     [[ $(gsettings get "${toolkit[@]}") == true && $(gsettings get "${autoshow[@]}") == true ]]
     [[ $(gsettings get "${height[@]}") == 420 ]]
     gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
@@ -92,8 +126,9 @@ entry=$!
 window=$(timeout 20 xdotool search --sync --onlyvisible --name '^keyboard-fixture - Thunar$')
 xdotool windowactivate --sync "$window"
 xdotool key ctrl+l
-if [[ $mode == fresh ]]; then
+if [[ $mode != opt-out ]]; then
     wait_visible true
+    if [[ $mode == detection-toggle ]]; then check_detection_toggle; fi
     xdotool key alt+F4
     wait_visible false
     echo 'PASS: fresh Xfce account, AT-SPI focus showed Onboard without a modal and blur hid it.'

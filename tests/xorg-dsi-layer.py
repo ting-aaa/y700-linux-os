@@ -51,6 +51,7 @@ with TemporaryDirectory() as directory:
     write_status(root, db)
     before = verify(root)
     verify(root, '--check-upgrade', 'blueman')
+    verify(root, '--check-upgrade', 'onboard')
     upgrade = ('--check-upgrade', 'xorg-dsi')
     verify(root, *upgrade)
 
@@ -62,6 +63,8 @@ with TemporaryDirectory() as directory:
         verify(root, *upgrade, error=f'Unexpected installed {key[0]}:{key[1]}')
     write_status(root, {**db, ('blueman', 'arm64'): '1.0'})
     verify(root, '--check-upgrade', 'blueman', error='Unexpected installed blueman:arm64')
+    write_status(root, {**db, ('onboard', 'arm64'): '1.0'})
+    verify(root, '--check-upgrade', 'onboard', error='Unexpected installed onboard:arm64')
 
     receipt = receipts / 'xorg-dsi.lock.json'
     shutil.copyfile(config / receipt.name, receipt)
@@ -85,5 +88,13 @@ with TemporaryDirectory() as directory:
     lock['packages'][0]['sha256'] = '0' * 64
     receipt.write_text(json.dumps(lock))
     verify(root, error='receipt differs')
+    shutil.copyfile(config / receipt.name, receipt)
+    onboard = load('onboard')['packages'][0]
+    db['onboard', 'arm64'] = onboard['version']
+    write_status(root, db)
+    verify(root, error='Package mismatch')
+    shutil.copyfile(config / 'onboard.lock.json', receipts / 'onboard.lock.json')
+    verify(root, '--check-upgrade', 'onboard')
+    assert verify(root).splitlines()[0] == after.splitlines()[0]
     print(f'Before optional Xorg layer:\n{before}After optional Xorg layer:\n{after}', end='')
     print('XORG_DSI_LAYER_LOCK_PASS')

@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('root', type=Path)
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
-mode.add_argument('--check-upgrade', choices=('blueman', 'xorg-dsi'),
+mode.add_argument('--check-upgrade', choices=('blueman', 'onboard', 'xorg-dsi'),
                   help='Check replacement-package parents before the offline upgrade')
 args = parser.parse_args()
 
@@ -53,7 +53,7 @@ if args.check_upgrade:
 control = (repo / 'packaging/control').read_text().splitlines()
 version = next(line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
-for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'blueman', 'chinese-ime', 'xorg-dsi',
+for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'blueman', 'onboard', 'chinese-ime', 'xorg-dsi',
               'camera-qcam', 'camera-pipewire', 'camera-portal'):
     name = f'{layer}.lock.json'
     receipt = args.root / 'var/lib/y700/build' / name

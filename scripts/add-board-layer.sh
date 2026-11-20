@@ -2,12 +2,12 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 cp -- "$archives/"*.deb "$stage/"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$stage" "$lock"
-if [[ $layer == blueman || $layer == xorg-dsi ]]; then
+if [[ $layer == blueman || $layer == onboard || $layer == xorg-dsi ]]; then
     "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --check-upgrade "$layer"
 fi
 debs=()
@@ -71,6 +71,10 @@ case $layer in
     blueman)
         test -x "$root/usr/bin/blueman-applet"
         test -s "$root/etc/xdg/autostart/blueman.desktop"
+        ;;
+    onboard)
+        test -x "$root/usr/bin/onboard"
+        test -s "$root/usr/lib/python3/dist-packages/Onboard/Keyboard.py"
         ;;
     xorg-dsi)
         test -x "$root/usr/lib/xorg/Xorg"
