@@ -7,14 +7,17 @@ if [[ ${1:-} != --session ]]; then
     scenarios=(standard)
     if [[ ${1:-} == --scale ]]; then
         scenarios=(standard tablet landscape custom-dpi dpi-resource qt-override external other-desktop unknown-dpi)
+    elif [[ ${1:-} == --locale ]]; then
+        scenarios=(en zh)
     elif (( $# )); then
-        echo 'Usage: camera-qcam-x11.sh [--scale]' >&2
+        echo 'Usage: camera-qcam-x11.sh [--scale|--locale]' >&2
         exit 2
     fi
     for scenario in "${scenarios[@]}"; do
         export HOME=$work/$scenario/home XDG_CONFIG_HOME=$work/$scenario/config XDG_RUNTIME_DIR=$work/$scenario/run
         mkdir -p -m 700 "$HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR"
         export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=XFCE XDG_CONFIG_DIRS=/etc/xdg LC_ALL=C
+        if [[ $scenario == zh ]]; then export LC_ALL=zh_CN.UTF-8; fi
         unset DISPLAY WAYLAND_DISPLAY GDK_SCALE GDK_DPI_SCALE QT_SCALE_FACTOR QT_SCREEN_SCALE_FACTORS QT_FONT_DPI
         unset QT_USE_PHYSICAL_DPI QT_ENABLE_HIGHDPI_SCALING QT_SCALE_FACTOR_ROUNDING_POLICY QT_DPI_ADJUSTMENT_POLICY
         unset QT_DEVICE_PIXEL_RATIO QT_AUTO_SCREEN_SCALE_FACTOR QT_QPA_PLATFORMTHEME
@@ -102,6 +105,12 @@ if ! dialog=$(timeout 20 xdotool search --sync --onlyvisible --class '^qcam$'); 
     exit 1
 fi
 pid=$(xdotool getwindowpid "$dialog")
+if [[ $test_scale == --locale ]]; then
+    expected='Select camera'
+    if [[ $scenario == zh ]]; then expected='选择镜头'; fi
+    [[ $(xdotool getwindowname "$dialog") == "$expected" ]]
+    printf 'QCAM_CHOOSER_LOCALE=%s\n' "$scenario"
+fi
 tr '\0' '\n' < "/proc/$pid/environ" | awk '
     $0 == "LIBCAMERA_SOFTISP_MODE=cpu" { cpu = 1 }
     $0 == "QT_XCB_GL_INTEGRATION=none" { xcb_without_gl = 1 }
