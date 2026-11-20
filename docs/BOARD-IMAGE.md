@@ -265,6 +265,31 @@ tar -xf "$bundle/xorg-dsi.tar" -C "$packages"
 bash scripts/add-board-layer.sh xorg-dsi "$root" "$packages"
 ```
 
+### Brightness and speaker gain
+
+The local `out/combined-kms-dev11.1` bundle updates one of the 1,112 package tuples in the dev10 panel image. The new `y700-platform` archive includes the internal brightness control, Xfce Hardware entries for brightness, scale and rotation, and the corrected board speaker profile. The image retains the KMS kernel, camera and sensor support, Bluetooth, Chinese input and packaged Xorg DSI fix from the parent. [Brightness](BRIGHTNESS.md) · [Speaker controls](SPEAKERS.md)
+
+| File or receipt | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `ff01ef5dd5ee7fa8b1849d45087db18cc605caa29725a2884ee40d34e0d06dc1` |
+| Portable `dev11.1.qcow2` (341,311,488 bytes) | `56e3f841c58c61dfbf4476e7ccfddee2ae3b98da69e175d06e345991027ccd7e` |
+| Generic 6 GiB `root.ext4` | `1ae52734b95e261fb4464ea127c7f59f0c9179b64da34de66f974c316697409b` |
+| Installed package tuples | `e4cf4234ecc66c2f8a0680dd66ed60b64cd5013b38a9d9a3b6e1ab7ec5eec3dc` |
+| `y700-platform_0.1.0~dev11.1_all.deb` | `f322973f3bc774d2ce14e18f279a4bfdb49999ef7cc680fa50a4b5d7a928bb1d` |
+
+Both generic and per-tablet extraction passed ext4 and FAT checks. Independent package database reads from both outputs matched all 1,112 tuples. Private readback of the personalized root matched the tablet's saved Android identity, with owner root and mode 0600. The bootloader and FAT outputs matched the generic files byte for byte.
+
+An ARM64 EFI guest booted the same generic root through U-Boot. Touchscreen enrollment rejected mismatched passwords, accepted a matching pair and unlocked the account. LightDM authenticated the user into Xfce. The installed brightness launcher opened a visible window on that desktop and the guest powered off. The virtual hardware had no KTZ8866 or CS35L45. Measurements from the actual backlight and amplifiers appear in the hardware reports above.
+
+Use the same generic and per-tablet unpack commands as for dev10. To update the platform package on an existing qualified dev10 installation, copy the bundle's `upgrade/` directory and the new platform archive to that tablet. Run the following command from the bundle directory.
+
+```sh
+sudo bash upgrade/upgrade-platform-dev11.sh install \
+    upgrade/y700-platform_0.1.0~dev10_all.deb ./y700-platform_0.1.0~dev11.1_all.deb
+```
+
+The helper preserves the original platform package and the previously unowned speaker profile in `/var/backups/y700-platform-dev10-to-dev11/`. Keep that backup to roll back with `sudo bash upgrade/upgrade-platform-dev11.sh rollback`. The next desktop login loads the installed sound profile. The physical installation reloaded the active user's idle WirePlumber to test it in the existing session. An independent ARM64 installation repeated the update twice, rolled back twice and reinstalled the new package. Rollback reproduced the original file bytes, root ownership, mode 0644 and unowned dpkg status. Reinstallation reproduced the release package tuples. [Upgrade helper](../scripts/upgrade-platform-dev11.sh)
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
