@@ -2,7 +2,7 @@
 # Apply one locked layer to a copy of its sealed generic predecessor.
 set -euo pipefail
 if (( EUID != 0 || $# != 4 )); then
-    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform SEALED_ROOT.ext4 LOCKED_ARCHIVES NEW_LINUX_DIRECTORY' >&2
+    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player SEALED_ROOT.ext4 ARCHIVE_DIRECTORY_OR_PLAYER_TAR NEW_LINUX_DIRECTORY' >&2
     exit 2
 fi
 if [[ ${Y700_POWER_PRIVATE:-} != 1 ]]; then
@@ -26,6 +26,12 @@ case $layer in
         parent_sha=869745fbe9e9eacb2eb981731b2b8bc6ad162756282a2244f297063a7f79a5a4
         inventory_sha=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
         prior_args=(--platform-version '0.1.0~dev12.6')
+        lock_args=()
+        ;;
+    video-player)
+        parent_sha=2d03b3d2e312f1a425c5b8f657f20fddd45f07caa54b4a937590a720fa2cf511
+        inventory_sha=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
+        prior_args=()
         lock_args=()
         ;;
     *) echo "Unsupported image layer: $layer" >&2; exit 2 ;;
@@ -58,9 +64,43 @@ mount -t proc -o nosuid,nodev,noexec proc "$root/proc"
 for path in run sys dev; do mount -t tmpfs -o nosuid,mode=755 tmpfs "$root/$path"; done
 for pair in null:3 zero:5 random:8 urandom:9; do mknod -m666 "$root/dev/${pair%:*}" c 1 "${pair#*:}"; done
 ln -s /proc/self/fd "$root/dev/fd"
-touch "$root/.y700-disposable-build-root"
-bash "$repo/scripts/add-board-layer.sh" "${lock_args[@]}" "$layer" "$root" "$archives" | tee "$w/result/install.log"
-rm -- "$root/.y700-disposable-build-root"
+if [[ $layer == video-player ]]; then
+    grep -Fxq 'package_digest=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84' "$w/result/parent-inventory.log"
+    lock=$repo/config/video-player.lock.json
+    record=$root/var/lib/y700/build
+    (cd "$record" && sha256sum -- *.lock.json) > "$w/result/inherited-SHA256SUMS"
+    # Keep both compressed inputs and every temporary package outside the ext4.
+    stage=$root/run/media-build
+    install -d -m755 "$stage" "$root/dev/pts"
+    mount -t devpts -o newinstance,ptmxmode=0666 devpts "$root/dev/pts"
+    ln -s pts/ptmx "$root/dev/ptmx"
+    mknod -m666 "$root/dev/tty" c 5 0
+    cp -- "$archives" "$stage/player.tar.gz"
+    [[ $(stat -c %s "$stage/player.tar.gz") == "$(jq -er .size "$lock")" ]]
+    echo "$(jq -er .sha256 "$lock")  $stage/player.tar.gz" | sha256sum --strict -c -
+    tar -xzf "$stage/player.tar.gz" -C "$stage"
+    tar -xzOf "$stage/y700-parole-iris/debian-player.tar.gz" y700-video-player/debian.lock.json > "$stage/debian.lock.json"
+    echo "$(jq -er .debian_lock_sha256 "$lock")  $stage/debian.lock.json" | sha256sum --strict -c -
+    cmp "$repo/tests/video-player/debian.lock.json" "$stage/debian.lock.json"
+    [[ ! -e $root/usr/sbin/policy-rc.d && ! -L $root/usr/sbin/policy-rc.d ]]
+    printf '#!/bin/sh\nexit 101\n' > "$root/usr/sbin/policy-rc.d"
+    chmod 755 "$root/usr/sbin/policy-rc.d"
+    run=(chroot "$root" env TMPDIR=/run SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive)
+    # Debian maintainer scripts expect the normal system umask.
+    (umask 022; "${run[@]}" /run/media-build/y700-parole-iris/install.sh --install) | tee "$w/result/install.log"
+    "${run[@]}" /run/media-build/y700-parole-iris/install.sh --verify
+    "${run[@]}" apt-get check
+    [[ -z $("${run[@]}" dpkg --audit) ]]
+    rm -- "$root/usr/sbin/policy-rc.d"
+    install -m644 "$lock" "$record/video-player.lock.json"
+    install -m644 "$stage/debian.lock.json" "$record/video-player-debian.lock.json"
+    chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$record/packages.tsv"
+    (cd "$record" && sha256sum --strict -c "$w/result/inherited-SHA256SUMS")
+else
+    touch "$root/.y700-disposable-build-root"
+    bash "$repo/scripts/add-board-layer.sh" "${lock_args[@]}" "$layer" "$root" "$archives" | tee "$w/result/install.log"
+    rm -- "$root/.y700-disposable-build-root"
+fi
 chmod 644 "$root/var/lib/y700/build/packages.tsv"
 "${check[@]}" "${lock_args[@]}" | tee "$w/result/inventory.log"
 grep -Fxq "package_digest=$inventory_sha" "$w/result/inventory.log"
@@ -75,7 +115,7 @@ for path in "$root"/{etc/NetworkManager/system-connections,var/lib/bluetooth,var
 done
 [[ -f $root/etc/machine-id && ! -s $root/etc/machine-id ]]
 [[ $(chroot "$root" passwd -S y700 | cut -d' ' -f2) == L ]]
-for path in "$root"/{etc/y700/maintenance*,etc/y700/bluetooth-address,etc/y700/user-configured,etc/ssh/ssh_host_*,home/y700/.ssh,root/.ssh,var/lib/y700-ssc/registry}; do
+for path in "$root"/{etc/y700/maintenance*,etc/y700/bluetooth-address,etc/y700/user-configured,etc/ssh/ssh_host_*,home/y700/.ssh,root/.ssh,var/lib/y700-ssc/registry,var/lib/y700/ssh,var/lib/systemd/random-seed,var/lib/systemd/credential.secret}; do
     [[ ! -e $path && ! -L $path ]]
 done
 umount -R "$root"

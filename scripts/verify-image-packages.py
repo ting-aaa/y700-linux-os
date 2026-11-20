@@ -122,6 +122,22 @@ if camera_receipt.exists():
 elif args.camera_lock:
     raise SystemExit('Integrated camera layer receipt is missing')
 
+build = args.root / 'var/lib/y700/build'
+media_receipt = build / 'video-player.lock.json'
+media_packages = build / 'video-player-debian.lock.json'
+if media_receipt.exists() or media_receipt.is_symlink() or media_packages.exists() or media_packages.is_symlink():
+    lock = json.loads((repo / 'config/video-player.lock.json').read_text())
+    if media_receipt.is_symlink() or not media_receipt.is_file() or json.loads(media_receipt.read_text()) != lock:
+        raise SystemExit('Combined player receipt differs from the build input lock')
+    if (media_packages.is_symlink() or not media_packages.is_file()
+            or hashlib.sha256(media_packages.read_bytes()).hexdigest() != lock['debian_lock_sha256']):
+        raise SystemExit('Debian player package receipt differs from the authenticated input')
+    wanted.update(map(package_tuple, json.loads(media_packages.read_text())['packages']))
+    for name, digest in lock['files'].items():
+        file = args.root / name
+        if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
+            raise SystemExit(f'Player file differs from the build input: {name}')
+
 if wanted != actual:
     raise SystemExit(f'Package mismatch: missing={sorted(wanted-actual)} extra={sorted(actual-wanted)}')
 records = ''.join('\t'.join(record) + '\n' for record in sorted(actual))

@@ -1,0 +1,17 @@
+{
+  "edition": "dev12.9",
+  "archive": "y700-dev12.8-parole-iris-arm64.tar.gz",
+  "size": 77257181,
+  "sha256": "0abe5888335940419fe49d7ca2e03ca17a5f767aeb6b10d2c01de5b34081e64f",
+  "debian_lock_sha256": "2829a8394a01b8f73cf60dcbb6774a6ac644416ebed4d472faf8846680a4e15e",
+  "files": {
+    "usr/local/bin/y700-parole": "d68be3ab1b2ae6ded237e0f875e75d12a5fdd44126a617e94f8429e173be1d82",
+    "usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so": "7c3e57f206c81fa0af09a3cf34d9836a686527212c7738dc4657d6c315ec9962",
+    "usr/local/share/applications/org.xfce.Parole.desktop": "73054627fbd85f218a2213583368a9007c5e98f7049d5525b2b13f2ba417f4c4",
+    "usr/local/share/doc/y700-parole/COPYING": "6095e9ffa777dd22839f7801aa845b31c9ed07f3d6bf8a26dc5d2dec8ccc0ef3",
+    "usr/local/share/doc/y700-parole/NOTICE": "de28660afffc07f5411fc1c96a7b116e102a5170e63542a287bfe7d6847960d7",
+    "usr/local/share/doc/y700-parole/debian-copyright": "5cb4538b43d0850d634b7d9a7d9e2f81d8c28f0d2dc1d2803d8c93e2eb50564b",
+    "usr/share/applications/org.xfce.Parole.desktop": "04583897047fbd73626013b99297721f366f5f3b2ecd87dc657cf58eb6c56f04",
+    "usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideo4linux2.so": "844986bb49db504a7e5611af2496b4f80f85af74fdc6ce068f0d259fa9c1c93f"
+  }
+}
