@@ -17,7 +17,7 @@
 }
 /^    \[\[ \$\(findmnt -nro UUID \/\)/ { next }
 /^    echo "COMBINED_EFI / {
-    print "    echo \"RAM_TRIAL_PACKAGES count=1112 digest=${digest%% *} account=$account\""
+    print "    echo \"RAM_TRIAL_PACKAGES count=$count digest=${digest%% *} account=$account\""
     next
 }
 /^greeter\(\) / { print "greeter() { systemctl is-active --quiet lightdm; }"; next }
@@ -40,6 +40,7 @@
     exit
 }
 {
+    gsub("/boot/lock-mode", "/run/y700-ram-qa/lock-mode")
     gsub("/boot/combined-", "/run/y700-ram-qa/combined-")
     print
 }

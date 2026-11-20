@@ -1,10 +1,12 @@
-# Diskless dev12.5 RAM boot
+# Diskless dev12.5 and dev12.6 RAM boot
 
 Run on a Linux PC with an ARM64 QEMU system emulator, an AArch64 cross compiler, uv, `dtc` tooling and room to run a 9 GiB guest. Provide the sealed RAM trial directory and the same virtual board DT used by the combined EFI fixture.
 
 ```sh
 bash tests/ram-trial/run.sh "$sealed_ram_trial" "$virt_dtb" "$new_log_dir"
 ```
+
+The default verifies the 1,112-package dev12.5 desktop. Set `RAM_TRIAL_VERSION=dev12.6` for the sealed 1,115-package dev12.6 root, including in the EFI-first fixture below. The host and guest both check the inventory selected by the caller. The dev12.6 host check requires zero active swap at startup. [dev12.6 build and evidence](../../docs/DEV12.6-RAM-TRIAL.md)
 
 The host verifies the input manifest and the exact candidate kernel before and after the run. It copies the virtual DT and adjusts only its RAM size, keeping the original 1024×768 simple-framebuffer at `0xbe000000`. QEMU directly boots the sealed kernel and its unchanged production initrd without disks or a NIC. After the production RAM init switches to systemd, a temporary unit accepts the small observer and touchscreen program over private virtio serial. All QA changes live inside this disposable guest.
 

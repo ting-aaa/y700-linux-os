@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Build a private, volatile dev12.5 desktop from ordinary sealed image files.
+# Build a private, volatile desktop from ordinary sealed image files.
 set -euo pipefail
 umask 077
 export LC_ALL=C
+root_sha=041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6
+if [[ ${1:-} == --dev12.6 ]]; then
+    root_sha=74374ce94db4d88c20ba49d7cdff4cdbe6b5931ba047bea3460cede2c93b70cd
+    shift
+fi
 if [[ $# != 2 ]]; then
-    echo "Usage: build-ram-trial.sh IMAGES NEW_DIRECTORY" >&2
+    echo "Usage: build-ram-trial.sh [--dev12.6] IMAGES NEW_DIRECTORY" >&2
     exit 2
 fi
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 images=$(realpath -e -- "$1")
 [[ -d $images && ! -e $2 && ! -L $2 ]]
 dest=$(realpath -m -- "$2")
-root_sha=041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6
 fat_sha=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
 epoch=1795150416
 for input in root.ext4 linux-boot.fat; do

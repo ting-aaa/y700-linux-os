@@ -153,11 +153,22 @@ def touch_only(work, logs, guest):
 
 def verify(logs, expected_bytes):
     lines = (logs / "report.log").read_text().splitlines()
+    release = os.getenv("RAM_TRIAL_VERSION", "dev12.5")
+    inventories = {
+        "dev12.5": (1112, "ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21"),
+        "dev12.6": (1115, "a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98"),
+    }
+    count, digest = inventories[release]
+    packages = [line for line in lines if line.startswith("RAM_TRIAL_PACKAGES ")]
+    if packages != [f"RAM_TRIAL_PACKAGES count={count} digest={digest} account=locked"]:
+        raise RuntimeError(f"Guest inventory or first-login account state differs from sealed {release}")
     origin = "kexec" if os.getenv("RAM_TRIAL_KEXEC") == "1" else "direct"
     if [line for line in lines if line.startswith("RAM_TRIAL_BOOT_ORIGIN=")] != [f"RAM_TRIAL_BOOT_ORIGIN={origin}"]:
         raise RuntimeError("The live DT reports a different kernel boot origin")
     if not any(re.fullmatch(r"RAM_TRIAL_SWAP zram=\d+ disk_backed=0", line) for line in lines):
         raise RuntimeError("Missing the RAM-only swap witness")
+    if release == "dev12.6" and "RAM_TRIAL_SWAP zram=0 disk_backed=0" not in lines:
+        raise RuntimeError("Expected the dev12.6 trial to run without active swap")
     if "RAM_TRIAL_TOPOLOGY root=overlay carrier=squashfs_ro lower=ext4_ro upper=tmpfs external_disks=0 boot_mount=0 write_confined=1" not in lines:
         raise RuntimeError("Missing the diskless RAM root topology witness")
     bounds = [match.groups() for line in lines if (match := re.fullmatch(
