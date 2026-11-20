@@ -2,7 +2,7 @@
 # Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report]' >&2
+    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report|--blueman]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -20,6 +20,9 @@ greeter=${Y700_BT_GREETER:-0}
 if (( $# == 7 )); then
     case "$7" in
         --classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS ;;
+        --blueman)
+            [[ -n ${XORG_DUMMY_DEB:-} && ${Y700_BT_TYPING:-0} == 0 ]] || exit 2
+            extra_cmdline=y700.blueman_pair=1; marker=Y700_BLUEMAN_HOG_PASS ;;
         --windows-report)
             [[ -n ${XORG_DUMMY_DEB:-} && -n ${Y700_WINDOWS_REPORT_DIR:-} && ${Y700_BT_TYPING:-0} == 0 ]] || exit 2
             extra_cmdline=y700.windows_report=1; marker=Y700_WINDOWS_REPORT_PASS
@@ -70,6 +73,9 @@ cp "$fixture/"{central.py,peer.py,classic.py,keyboard.py,cold-boot.py,guest.sh} 
 if [[ $variant == --windows-report ]]; then
     cp "$Y700_WINDOWS_REPORT_DIR/"{report-map.bin,motion.bin} "$work/init/test/"
     cp "$fixture/../windows-ble-hid/"{verify-report.py,capture-input.py} "$work/init/test/"
+fi
+if [[ $variant == --blueman ]]; then
+    cp "$fixture/../blueman-pairing/"{probe.py,numeric-link.py,numeric-session.sh,numeric-trace.py} "$work/init/test/"
 fi
 install -m755 "$busybox" "$work/init/bin/busybox"
 install -m755 "$uv" "$work/init/test/uv"
@@ -125,6 +131,7 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
 fi
 boot() {
     local ram=680 bound=190
+    if [[ $variant == --blueman ]]; then ram=1024; bound=260; fi
     if [[ $extra_cmdline == *y700.virtual_greeter=1* ]]; then ram=1400; bound=350; fi
     timeout -k 4 "$bound" "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     -machine virt,gic-version=3 -cpu max -m "$ram" -smp 2 -nodefaults -no-user-config \
@@ -160,6 +167,13 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
     exit 0
 fi
 if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
+    if [[ $variant == --blueman ]]; then
+        grep -Fxq Y700_GTK_HID_INPUT_PASS "$work/run.log"
+        extra_cmdline+=" y700.blueman_deny=1"
+        marker=Y700_BLUEMAN_HOG_REJECT_PASS
+        boot
+        exit 0
+    fi
     if [[ $variant == --windows-report ]]; then
         if [[ ${Y700_EXPECT_LEGACY_MOUSE:-0} != 1 ]]; then
             grep -Fxq Y700_GTK_HID_INPUT_PASS "$work/run.log"

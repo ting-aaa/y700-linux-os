@@ -5,6 +5,7 @@ grep -qw 'y700.virtual_hid=1' /proc/cmdline
 grep -zFxq 'linux,dummy-virt' /proc/device-tree/compatible
 [[ $(uname -m) == aarch64 && -z $(ls -A /sys/class/bluetooth 2>/dev/null) ]]
 cd /opt/y700-virtual-hid
+if grep -qw y700.blueman_pair=1 /proc/cmdline; then export Y700_BLUEMAN_PAIR=1; fi
 if grep -qw y700.windows_report=1 /proc/cmdline; then export Y700_WINDOWS_REPORT=1; fi
 if grep -qw y700.virtual_typing=1 /proc/cmdline; then
     export Y700_BT_TYPING=1
@@ -30,7 +31,16 @@ pids=()
 stage=kernel
 cleanup() {
     local rc=$?
-    if (( rc != 0 )) && [[ -z $bond_phase ]]; then
+    if (( rc != 0 )) && [[ ${Y700_BLUEMAN_PAIR:-0} == 1 && -f /run/bluez.log ]]; then
+        for event in 'Default agent set' 'Calling Agent.RequestConfirmation' 'Calling Agent.RequestAuthorization' 'Calling Agent.RequestPasskey'; do
+            echo "BLUEZ_AGENT_STAGE $event count=$(grep -Fc "$event" /run/bluez.log || :)"
+        done
+        if [[ -s /run/cold-bond/trace ]]; then
+            btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
+            grep -E 'SMP: (Pairing (Request|Response|DHKey Check|Failed)|Security Request)|IO capability:|Authentication requirement:|@ MGMT Event: User Confirmation Request' /run/cold-bond/decoded | sort -u || :
+        fi
+    fi
+    if (( rc != 0 )) && [[ -z $bond_phase && ${Y700_BLUEMAN_PAIR:-0} != 1 ]]; then
         for log in /run/{peer,bluez,btvirt,Xorg}.log; do
             [[ ! -e $log ]] || grep -vE 'method_(return|call)|\[signal\]|command 0x' "$log" | tail -65 || :
         done
@@ -74,10 +84,11 @@ if (( ! greeter )); then
     if [[ -f dummy.deb ]]; then source ./desktop-xorg.sh; fi
 fi
 stage=bluetooth
+if [[ ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then umask 077; fi
 mode=()
 controller=()
 if grep -qw y700.virtual_classic=1 /proc/cmdline; then mode=(classic); controller=(-B); fi
-if [[ -n $bond_phase ]]; then
+if [[ -n $bond_phase || ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then
     install -d -m700 /run/cold-bond
     btmon -w /run/cold-bond/trace >/dev/null 2>&1 & monitor=$!; pids+=("$monitor")
     wait_for test -s /run/cold-bond/trace
@@ -95,7 +106,7 @@ if ((${#mode[@]})); then options+=(--compat); fi
 for controller in hci0 hci1; do
     path=/org/bluez/$controller
     wait_for busctl --system --no-pager get-property org.bluez "$path" org.bluez.Adapter1 Address 2>/dev/null
-    if [[ -n $bond_phase ]]; then
+    if [[ -n $bond_phase || ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then
         wait_for adapter_boolean "$path" Powered true
         value=true
         [[ $bond_phase != resume ]] || value=false
@@ -111,6 +122,43 @@ fi
 if [[ $bond_phase == resume ]]; then mode+=(resume); fi
 ./uv run --offline --no-project --python /usr/bin/python3 python -B peer.py "${mode[@]}" >/run/peer.log 2>&1 & pids+=($!)
 wait_for grep -q '^PEER_READY$' /run/peer.log
+if [[ ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then
+    # rfkill predates this chroot's udevd. Replay its normal coldplug event.
+    echo add >/sys/class/misc/rfkill/uevent
+    wait_for runuser -u y700 -- test -r /dev/rfkill
+    chown y700:y700 /run/y700-virtual-hid.sock
+    chmod 600 /run/y700-virtual-hid.sock
+    xrandr --newmode 2560x1600 268.50 2560 2608 2640 2720 1600 1603 1609 1646 +hsync -vsync
+    xrandr --addmode DUMMY0 2560x1600
+    xrandr --output DUMMY0 --mode 2560x1600
+    (for ((i=0;i<300;i++)); do
+        if grep -qE 'Default agent set to .* /org/bluez/agent/blueman' /run/bluez.log; then
+            touch /run/blueman-default-ready; exit
+        fi
+        sleep .2
+    done) & pids+=("$!")
+    timeout -k 3 145 runuser -u y700 -- dbus-run-session -- bash ./numeric-session.sh
+    kill -INT "$monitor"
+    wait "$monitor"
+    btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
+    for agent in /org/bluez/agent/blueman /org/y700/test/peer; do
+        [[ $(grep -c "Calling Agent.RequestConfirmation: .*path=$agent," /run/bluez.log) == 1 ]]
+    done
+    if grep -qw y700.blueman_deny=1 /proc/cmdline; then
+        grep -Fq 'User Confirmation Negative Reply' /run/cold-bond/decoded
+        grep -Fq 'SMP: Pairing Failed' /run/cold-bond/decoded
+        if grep -Fq 'Enabled with AES-CCM' /run/cold-bond/decoded; then exit 1; fi
+        echo Y700_BLUEMAN_HOG_REJECT_PASS
+        exit 0
+    fi
+    for pattern in 'SMP: Pairing Request' 'SMP: Pairing Response' 'SMP: Pairing DHKey Check' 'Authenticated key from P-256' 'Enabled with AES-CCM'; do
+        grep -Fq "$pattern" /run/cold-bond/decoded || { echo "Missing link stage $pattern"; exit 1; }
+    done
+    ./uv run --offline --no-project --python /usr/bin/python3 python -B numeric-trace.py
+    echo 'HCI_REAL_PAIR numeric_comparison=1 authenticated_p256=1 aes_ccm=1 att_notify=1'
+    echo Y700_BLUEMAN_HOG_PASS
+    exit 0
+fi
 if (( greeter )); then
     stage=display
     source ./greeter-seat.sh

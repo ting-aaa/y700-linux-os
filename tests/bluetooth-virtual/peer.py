@@ -145,7 +145,7 @@ def main():
         raise RuntimeError("Requires the marked VM")
     DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    if "resume" not in sys.argv[1:]:
+    if "resume" not in sys.argv[1:] and os.environ.get("Y700_BLUEMAN_PAIR") != "1":
         agent = VirtualAgent(bus)
         agent_manager = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez"), BLUEZ + ".AgentManager1")
         agent_manager.RegisterAgent(agent.path, "NoInputNoOutput")
@@ -174,10 +174,25 @@ def main():
         failures.append(error)
         loop.quit()
 
+    def ready():
+        print("PEER_READY", flush=True)
+
+    if os.environ.get("Y700_BLUEMAN_PAIR") == "1":
+        desktop_advertisement = adv.Advertisement(bus, 1, "peripheral")
+        desktop_advertisement.add_local_name("Y700 Virtual Desktop")
+        desktop_adapter = bus.get_object(BLUEZ, "/org/bluez/hci0")
+
     def registered():
         dbus.Interface(adapter, BLUEZ + ".LEAdvertisingManager1").RegisterAdvertisement(
-            advertisement.get_path(), {}, reply_handler=lambda: print("PEER_READY", flush=True),
+            advertisement.get_path(), {}, reply_handler=ready,
             error_handler=failed)
+
+    def start_advertising():
+        if os.environ.get("Y700_BLUEMAN_PAIR") == "1":
+            dbus.Interface(desktop_adapter, BLUEZ + ".LEAdvertisingManager1").RegisterAdvertisement(
+                desktop_advertisement.get_path(), {}, reply_handler=registered, error_handler=failed)
+        else:
+            registered()
 
     def advertise_again():
         # Real peripherals explicitly restart connectable advertising after boot.
@@ -193,7 +208,7 @@ def main():
 
     GLib.io_add_watch(control, GLib.IO_IN, app.handle_control, advertise_again)
     dbus.Interface(adapter, BLUEZ + ".GattManager1").RegisterApplication(
-        app.get_path(), {}, reply_handler=registered, error_handler=failed)
+        app.get_path(), {}, reply_handler=start_advertising, error_handler=failed)
     loop.run()
     if failures:
         sys.exit(str(failures[0]))
