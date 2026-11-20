@@ -1,0 +1,21 @@
+[Unit]
+Description=Prepare this tablet's factory speaker calibration
+After=local-fs.target
+Before=display-manager.service
+ConditionPathExists=/proc/device-tree/region_country
+ConditionPathExists=/usr/libexec/y700-ssc/import-calibration
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/y700-speaker-calibration prepare-live
+Group=audio
+RuntimeDirectory=y700-speaker-calibration
+RuntimeDirectoryMode=0750
+RemainAfterExit=yes
+UMask=0027
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
