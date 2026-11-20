@@ -1,0 +1,69 @@
+#!/bin/busybox sh
+# The trial kernel receives both the early firmware and the sealed desktop in RAM.
+export PATH=/bin
+/bin/busybox --install -s /bin || exit 1
+mount -t devtmpfs devtmpfs /dev || exit 1
+exec </dev/console >/dev/console 2>&1
+fail() {
+    echo "y700-ram-trial: $*; restarting" >/dev/console
+    reboot -f
+    exit 1
+}
+mount -t proc proc /proc && mount -t sysfs sysfs /sys || fail 'cannot mount kernel interfaces'
+mount -t tmpfs -o mode=0755,nodev,nosuid,strictatime tmpfs /run || fail 'cannot mount /run'
+cmdline=$(cat /proc/cmdline)
+for option in y700.media=ram fstab=no systemd.gpt_auto=0 noresume; do
+    case " $cmdline " in *" $option "*) ;; *) fail "missing $option" ;; esac
+done
+for option in $cmdline; do
+    case "$option" in
+        y700.media=ram|fstab=no|systemd.gpt_auto=0) ;;
+        y700.media=*|fstab=*|systemd.gpt_auto=*|root=*|resume=*) fail "conflicting boot option" ;;
+    esac
+done
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    [ "$(tr -d '\000' </proc/device-tree/region_country)" = PRC ] || fail 'unexpected board region'
+elif [ "$compat" != linux,dummy-virt ]; then
+    fail 'unexpected board'
+fi
+
+ram=/run/y700-ram
+umask 077
+mkdir -p "$ram/carrier" "$ram/lower" "$ram/changes" || fail 'cannot create RAM mountpoints'
+attach_ro() {
+    dev=$(losetup -f) && losetup -r "$dev" "$1" && printf '%s\n' "$dev"
+}
+carrier=$(attach_ro /y700-root.squashfs) || fail 'cannot attach RAM payload'
+mount -t squashfs -o ro,nodev,nosuid,noexec "$carrier" "$ram/carrier" || fail 'invalid RAM payload'
+base=$ram/carrier/root.ext4
+[ -f "$base" ] && [ ! -L "$base" ] && [ "$(stat -c %s "$base")" = 6442450944 ] || fail 'incorrect root image'
+rootdev=$(attach_ro "$base") || fail 'cannot attach root image'
+mount -t ext4 -o ro,noload "$rootdev" "$ram/lower" || fail 'cannot open sealed root'
+[ "$(cat "$ram/lower/etc/y700/image-id")" = y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ] || fail 'unexpected image identity'
+# Desktop writes, including password setup and /home, disappear at shutdown.
+mount -t tmpfs -o mode=0700,size=25% tmpfs "$ram/changes" || fail 'cannot create session storage'
+mkdir "$ram/changes/upper" "$ram/changes/work" || fail 'cannot create overlay directories'
+chmod 0755 "$ram/changes/upper" || fail 'cannot set desktop root permissions'
+mount -t overlay -o "lowerdir=$ram/lower,upperdir=$ram/changes/upper,workdir=$ram/changes/work" overlay /newroot || fail 'cannot mount the desktop'
+
+# The stock fstab names a persistent root and ESP. Override only the RAM view.
+printf '# Temporary Y700 RAM desktop\n' > /newroot/etc/fstab || fail 'cannot set volatile fstab'
+chmod 0644 /newroot/etc/fstab || fail 'cannot set fstab permissions'
+rules=/newroot/etc/udev/rules.d/99-y700-ram-media.rules
+cat > "$rules" <<'RULES' || fail 'cannot install RAM media policy'
+SUBSYSTEM=="block", ENV{UDISKS_IGNORE}:="1"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*|mmcblk*|nvme*n*|vd*", ATTR{ro}=="0", RUN+="/usr/sbin/blockdev --setro $devnode"
+RULES
+chmod 0644 "$rules" || fail 'cannot set media policy permissions'
+# Apply read-only protection to devices already enumerated before udev starts.
+for block in /sys/class/block/*; do
+    name=${block##*/}
+    case "$name" in sd*|mmcblk*|nvme*n*|vd*) ;; *) continue ;; esac
+    [ "$(cat "$block/ro")" = 1 ] || blockdev --setro "/dev/$name" || fail "cannot protect $name"
+done
+echo "y700-ram-trial: RAM overlay ready; carrier=$carrier root=$rootdev"
+for fs in dev proc sys run; do
+    mount --move "/$fs" "/newroot/$fs" || fail "cannot move $fs"
+done
+exec switch_root /newroot /sbin/init
