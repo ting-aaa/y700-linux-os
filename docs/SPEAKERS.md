@@ -12,6 +12,8 @@ With calibration active and the earlier raw-249 gain (−40 dB), the owner heard
 
 On the same tablet, the dev12 package was installed and its boot service enabled. Reloading the signed-in user's WirePlumber reopened Chromium's speaker stream and automatically restored raw 361, both factory-selected resistances, zero DSP errors and the 40% desktop volume. On a system without a prepared per-device record the profile retains raw 249. To check an actively playing tablet, run `sudo /usr/libexec/y700-speaker-calibration verify-live`. Per-device calibration words stay off distributable media. The local test receipts are under `out/speaker-ucm/`, including `physical-factory--reload.log`, `physical-factory-sustain.log` and `physical-dev12-automatic.log`.
 
+After the owner closed YouTube, dev12.1 passed an independent, silent hardware check. The boot calibration service re-created its runtime record, WirePlumber reopened the profile and eight seconds of digital zero reached the protected output. Both DSPs again selected their individual resistances, with zero firmware errors and −12 dB on each side. The PCM then closed and both amplifiers returned to runtime suspend. The tablet stayed on the same boot. Long-term crackle frequency, behavior at a cold boot and system suspend/resume require further observation. The local receipt is `out/speaker-ucm/physical-dev12p1-quiet.log`. [Android mixer, signal path and hardware readback](SPEAKER-ANDROID-COMPARISON.md)
+
 ## Read-only observations with the dev10 profile
 
 | Part of the signal path | Observation |
@@ -43,10 +45,10 @@ The stream drained successfully. The sink returned to suspended with zero stream
 The complete old and new profiles ran through the packaged `alsaucm -c hw:Y700Dummy set _verb HiFi set _enadev Speaker` on the Y700 kernel with Debian `libasound2t64 1.2.14-1+deb13u1`. A virtual ALSA card exposed the measured raw range and TLV. Both digital controls began each test at a nonzero value. Stock UCM moved both to 0 and the simple mixer printed its mute indicator. Corrected UCM moved both to 249 and the simple mixer printed `[-40.00dB]`. The regression also checked each DAC input, all eight DSP input selections, both protection firmware selections, analog gain and the remaining profile bytes.
 
 ```sh
-bash tests/speaker-ucm/run-qemu.sh "$prepared_y700_kernel_tree" "$dev10_or_dev11_qcow2" "$arm64_static_busybox"
+bash tests/speaker-ucm/run-qemu.sh "$prepared_y700_kernel_tree" "$dev11_1_qcow2" "$arm64_static_busybox" "$arm64_uv"
 ```
 
-The runner builds the upstream `snd-dummy` module in a temporary directory, attaches the product root read-only and executes the test in a RAM overlay. The fixture opens only a sound control device. It passed with `Y700_SPEAKER_UCM_PASS` and `SPEAKER_FIXTURE_EXIT=0`. [Regression](../tests/speaker-ucm/guest.sh)
+The runner builds the upstream `snd-dummy` module in a temporary directory, attaches the product root read-only and executes the test in a RAM overlay. The dev12.1 run exercised the packaged ALSA UCM parser as the desktop user. With synthetic calibration, it observed both gains move from 249 to 361 while both power stages were still off. Without a record, the gains stayed at 249. With an invalid record, ALSA returned an error, kept the Speaker device inactive and left both power stages off. This error propagation requires the UCM `shell` action with the fixed helper command. [Regression](../tests/speaker-ucm/guest.sh)
 
 ## Touch volume and mute
 

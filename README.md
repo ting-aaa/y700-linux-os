@@ -34,7 +34,7 @@
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 管理器选择设备。键盘要求输入配对码时，在键盘上键入平板显示的六位数字。Blueman y7001 已修复输完最后一位时界面报错的问题。实机已识别无线键鼠报告，隔离桌面验证了码值显示及确认按钮。低功耗和经典蓝牙的键鼠输入与重连通过了原生 ARM64 虚拟设备测试，实际配件仍待上手验证。[实机无线](docs/BLUETOOTH-HID-RADIO.md) · [配对界面](docs/BLUEMAN-PAIRING.md) · [输入与重连](docs/BLUETOOTH-VIRTUAL.md)
 - **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
-国行 KMS 开发镜像采用 Debian 13 ARM64。dev11.1 增加亮度设置，修正了两颗扬声器功放被错误设为静音的问题。镜像包含首次设密屏幕键盘、三摄 PipeWire 接口、中英文输入、SSC 本机校准、Blueman，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。测试机现已安装 dev12 平板组件，两颗功放分别加载本机出厂校准。用户确认桌面音量 40% 时 YouTube 持续出声、音量合适。完整组合镜像的实机启动仍待验证。[镜像组成与校验值](docs/BOARD-IMAGE.md#brightness-and-speaker-gain) · [扬声器验证](docs/SPEAKERS.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
+国行 KMS 开发镜像采用 Debian 13 ARM64。dev11.1 增加亮度设置，修正了两颗扬声器功放被错误设为静音的问题。镜像包含首次设密屏幕键盘、三摄 PipeWire 接口、中英文输入、SSC 本机校准、Blueman，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。测试机现已安装 dev12.1 平板组件，两颗功放分别加载本机出厂校准。用户确认桌面音量 40% 时 YouTube 持续出声、音量合适。完整组合镜像的实机启动仍待验证。[镜像组成与校验值](docs/BOARD-IMAGE.md#brightness-and-speaker-gain) · [扬声器验证](docs/SPEAKERS.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
 镜像沿用 dev10 的 Xorg 内屏尺寸修复。平板内核能读出 118 × 190 毫米，实机当前运行的原版 Xorg 向应用报告 0 × 0。dev10 的 ARM64 虚拟 DSI 测试在四个方向都读到了正确尺寸，并在 200% 缩放下通过了点按、双指滚动和捏合测试。[内屏尺寸原理与实测](docs/PANEL-GEOMETRY.md)
 
