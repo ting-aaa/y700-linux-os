@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import signal
 import sys
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "combined-efi"))
 import drive
@@ -29,6 +30,34 @@ def wait_marker(work, marker, budget):
     shared_wait_marker(work, marker, budget)
 
 
+def exercise(work, secret, cold=False):
+    drive.boot(work)
+    with drive.connect(work, "login-phase.sock") as stage:
+        if cold:
+            wait_marker(work, "COMBINED_COLD_GREETER enrollment_skipped=1 account=configured", 260)
+        else:
+            wait_marker(work, "COMBINED_FIRSTBOOT_READY", 240)
+            time.sleep(4)
+        with drive.connect(work, "touch.sock") as sock, sock.makefile("rwb") as stream:
+            if not cold:
+                other = ("s" if secret[0] == "a" else "a") + secret[1:]
+                drive.enter(stream, drive.ENROLL, secret, (940, 723))
+                drive.enter(stream, drive.ENROLL, other, (940, 723))
+                wait_marker(work, "COMBINED_MISMATCH_STILL_LOCKED", 100)
+                time.sleep(3)
+                drive.enter(stream, drive.ENROLL, secret, (940, 723))
+                drive.enter(stream, drive.ENROLL, secret, (940, 723))
+                wait_marker(work, "COMBINED_MATCH_GREETER", 220)
+            greeter_ready(work, "username")
+            drive.enter(stream, drive.GREETER, "y700", (894, 648))
+            greeter_ready(work, "password")
+            drive.enter(stream, drive.GREETER, secret, (894, 648))
+            stage.sendall(b"LOGIN_SUBMITTED\n")
+            wait_marker(work, "FILE_TRIAL_TOUCH_SUBMITTED acknowledged=1", 20)
+            wait_marker(work, "COMBINED_PAM_XFCE account=y700 ordinary=1 active=1 local=1 seat=seat0 type=x11", 455)
+            wait_marker(work, "COMBINED_PASS", 200)
+
+
 def verify_file_boot(logs, cold):
     lines = (logs / "report.log").read_text().splitlines()
     account = "configured" if cold else "locked"
@@ -37,6 +66,17 @@ def verify_file_boot(logs, cold):
         raise RuntimeError("Incorrect enrollment state on file-backed boot")
     if "COMBINED_PASS" not in lines:
         raise RuntimeError("Missing file-backed desktop acceptance")
+    stages = (
+        r"FILE_TRIAL_TOUCH_SUBMITTED acknowledged=1",
+        r"FILE_TRIAL_PAM_SESSION ordinary=1 service=lightdm seat=seat0 type=x11 elapsed=\d+s",
+        r"FILE_TRIAL_XFCE_READY same_pam_session=1 elapsed=\d+s",
+    )
+    position = 0
+    for stage in stages:
+        result = [index for index, line in enumerate(lines) if re.fullmatch(stage, line)]
+        if len(result) != 1 or result[0] < position:
+            raise RuntimeError(f"Missing or out-of-order login stage {stage}")
+        position = result[0] + 1
     boot_ids = [match[1] for line in lines if (match := re.fullmatch(r"COMBINED_BOOT_ID id=([0-9a-f-]{36})", line))]
     if len(boot_ids) != 1:
         raise RuntimeError("Expected one Linux boot ID")
@@ -61,8 +101,8 @@ def verify_file_boot(logs, cold):
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, qemu.interrupted)
     signal.signal(signal.SIGINT, qemu.interrupted)
-    # Keep its exact touch and pixel checks with a longer virtual greeter budget.
-    drive.greeter_ready = greeter_ready
-    drive.wait_marker = wait_marker
+    # Use the same authenticated input and pixels while recording the exact
+    # completion of each touch submission and session phase.
+    qemu.exercise = exercise
     qemu.verify_boot = verify_file_boot
     qemu.main(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve(), sys.argv[3], sys.argv[4:])

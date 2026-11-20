@@ -75,51 +75,81 @@ awk '
     }
     /^wait_for 200 greeter greeter$/ {
         print "if ! wait_for 280 greeter-service greeter >/dev/null; then"
-        print "    /bin/bash /run/y700-file-qa/onboard-diagnostics.sh || :"
+        print "    timeout -k 1 8 /bin/bash /run/y700-file-qa/onboard-diagnostics.sh || :"
         print "    echo COMBINED_FAIL timeout=greeter-service"
         print "    false"
         print "fi"
         greeter_wait++
         next
     }
+    /^desktop\(\) / {
+        print "source /run/y700-file-qa/check-login-stage.sh"
+        login_stage++
+    }
+    /^wait_for 300 desktop desktop$/ {
+        print "if ! wait_for 300 desktop desktop >/dev/null; then login_timeout xfce-ready; fi"
+        desktop_stage++
+        next
+    }
+    /^\[\[ -n \$sid && \$uid != 0 \]\]$/ {
+        print "[[ -n $sid && $uid != 0 && $sid == \"$pam_session\" ]]"
+        session_match++
+        next
+    }
+    /^echo .*COMBINED_PAM_XFCE / {
+        print "printf \047FILE_TRIAL_XFCE_READY same_pam_session=1 elapsed=%ss\\n\047 \"$((SECONDS - pam_time))\""
+    }
+    /^        sleep \.35$/ { print "        sleep 1.5"; next }
     /^wait_for 220 onboard onboard_ready$/ { optional++; exit }
     { gsub("/boot/combined-", "/run/y700-file-qa/combined-")
       gsub("root=/dev/vda2 esp=/dev/vda1", "root=$(findmnt -nro SOURCE /) esp=$(findmnt -nro SOURCE /boot)")
       print }
-    END { if (changed != 1 || cold_marker != 1 || greeter_service != 1 || greeter_wait != 1 || optional != 1) exit 1 }
+    END { if (changed != 1 || cold_marker != 1 || greeter_service != 1 || greeter_wait != 1 || login_stage != 1 || desktop_stage != 1 || session_match != 1 || optional != 1) exit 1 }
 ' "$combined/observe.sh" > combined-observe.sh
 cat >> combined-observe.sh <<'OPTIONAL_DESKTOP'
-if wait_for 45 onboard onboard_ready >/dev/null; then
-    if [[ $(asuser gsettings get org.onboard.auto-show enabled) == true &&
-          $(asuser gsettings get org.onboard.auto-show keyboard-device-detection-enabled) == true ]]; then
-        echo 'COMBINED_ONBOARD ordinary=1 autostart=1 auto_show=1 detect_keyboard=1'
+# Optional user-bus reads can stall, even on an already verified desktop. Give
+# their private log a short collection window and never wait for this job.
+optional_dir=$(mktemp -d /run/y700-file-optionals.XXXXXXXX)
+(
+    exec >"$optional_dir/report" 2>&1
+    trap - ERR
+    if onboard_ready; then
+        if [[ $(asuser timeout -k 1 3 gsettings get org.onboard.auto-show enabled) == true &&
+              $(asuser timeout -k 1 3 gsettings get org.onboard.auto-show keyboard-device-detection-enabled) == true ]]; then
+            echo 'COMBINED_ONBOARD ordinary=1 autostart=1 auto_show=1 detect_keyboard=1'
+        else
+            echo 'FILE_TRIAL_OPTIONAL_CHECK onboard=unconfirmed-settings'
+        fi
     else
-        echo 'FILE_TRIAL_OPTIONAL_CHECK onboard=unexpected-settings'
+        onboard_process=absent
+        if pgrep -u "$uid" -x onboard >/dev/null; then onboard_process=present; fi
+        echo "FILE_TRIAL_OPTIONAL_CHECK onboard=dbus-owner-unconfirmed process=$onboard_process"
     fi
-else
-    onboard_process=absent
-    if pgrep -u "$uid" -x onboard >/dev/null; then onboard_process=present; fi
-    echo "FILE_TRIAL_OPTIONAL_CHECK onboard=dbus-owner-timeout process=$onboard_process"
-fi
-/bin/bash /run/y700-file-qa/onboard-diagnostics.sh || :
-scale=$(asuser xfconf-query -c xsettings -p /Gdk/WindowScalingFactor 2>/dev/null || :)
-printf 'COMBINED_XFCE_SCALE factor=%s virtual_display=1024x768\n' "${scale:-default}"
-if wait_for 25 panel-marker test -f "$audio_marker" >/dev/null &&
-   [[ $(asuser xfconf-query -c xfce4-panel -p /plugins/plugin-19) == pulseaudio ]] &&
-   ids=$(asuser xfconf-query -c xfce4-panel -p /panels/panel-1/plugin-ids | awk '/^[0-9]+$/{printf "%s ",$0}') &&
-   [[ $ids == '1 2 3 4 5 6 19 7 8 9 10 ' ]] &&
-   wrapper=$(pgrep -o -u "$uid" -f '^/usr/lib/[^ ]+/xfce4/panel/wrapper-2\.0 .*/libpulseaudio-plugin\.so 19( |$)') &&
-   grep -Fq '/libpulseaudio-plugin.so' "/proc/$wrapper/maps"; then
-    echo 'COMBINED_AUDIO_PANEL ordinary=1 marker=1 top_panel=1 mapped_wrapper=1'
-else
-    echo 'FILE_TRIAL_OPTIONAL_CHECK audio-panel=unconfirmed'
+    scale=$(asuser timeout -k 1 3 xfconf-query -c xsettings -p /Gdk/WindowScalingFactor 2>/dev/null || :)
+    printf 'COMBINED_XFCE_SCALE factor=%s virtual_display=1024x768\n' "${scale:-unconfirmed}"
+    if test -f "$audio_marker" &&
+       [[ $(asuser timeout -k 1 3 xfconf-query -c xfce4-panel -p /plugins/plugin-19) == pulseaudio ]] &&
+       ids=$(asuser timeout -k 1 3 xfconf-query -c xfce4-panel -p /panels/panel-1/plugin-ids | awk '/^[0-9]+$/{printf "%s ",$0}') &&
+       [[ $ids == '1 2 3 4 5 6 19 7 8 9 10 ' ]] &&
+       wrapper=$(pgrep -o -u "$uid" -f '^/usr/lib/[^ ]+/xfce4/panel/wrapper-2\.0 .*/libpulseaudio-plugin\.so 19( |$)') &&
+       grep -Fq '/libpulseaudio-plugin.so' "/proc/$wrapper/maps"; then
+        echo 'COMBINED_AUDIO_PANEL ordinary=1 marker=1 top_panel=1 mapped_wrapper=1'
+    else
+        echo 'FILE_TRIAL_OPTIONAL_CHECK audio-panel=unconfirmed'
+    fi
+    touch "$optional_dir/done"
+) &
+sleep 6
+if test -f "$optional_dir/report"; then cat "$optional_dir/report"; fi
+if ! test -f "$optional_dir/done"; then
+    echo 'FILE_TRIAL_OPTIONAL_CHECK collection=budget-exhausted unfinished=unconfirmed'
 fi
 echo COMBINED_PASS
 systemctl --no-block poweroff
 OPTIONAL_DESKTOP
 bash -n combined-observe.sh
 "${AARCH64_CC:-aarch64-linux-gnu-gcc}" -O2 -Wall -Wextra -Werror -static "$combined/touch.c" -o combined-touch
-mcopy -i outer-esp.fat combined-observe.sh combined-touch "$here/check-topology.sh" "$here/onboard-diagnostics.sh" ::/
+mcopy -i outer-esp.fat combined-observe.sh combined-touch "$here/check-topology.sh" "$here/check-login-stage.sh" "$here/onboard-diagnostics.sh" ::/
 cat > probe.service <<'UNIT'
 [Unit]
 Description=Probe Y700 file-backed EFI desktop trial
@@ -174,7 +204,10 @@ timeout -k 25 2480 "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/
     "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_data[@]}" \
     -machine virt,gic-version=3 -cpu max -smp 3 -m 2048 -nodefaults -no-user-config -display none -nic none \
     -device ramfb -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0 \
-    -device virtio-serial-device -bios "$bios" -no-reboot -monitor none | tee "$out/touch.log"
+    -device virtio-serial-device \
+    -chardev socket,id=login-phase,path=login-phase.sock,server=on,wait=off \
+    -device virtserialport,chardev=login-phase,name=org.y700.login-phase \
+    -bios "$bios" -no-reboot -monitor none | tee "$out/touch.log"
 grep -Fxq 'COMBINED_COLD_RELOGIN_PASS two_processes=1 boot_ids_distinct=1 overlay_reused=1' "$out/touch.log"
 for report in "$out/first/report.log" "$out/cold/report.log"; do
     grep -Fxq 'FILE_TRIAL_EFI entry=y700-file.conf firmware_disk=/dev/vda1 sector=4096 options_preserved=1' "$report"
