@@ -52,7 +52,14 @@ sudo env UV_BIN="$(command -v uv)" bash scripts/add-board-layer.sh \
 
 For a copy of the sealed dev12.5 root, pass `--sealed-dev12-5 --qcam-lock tests/onboard-image/camera-qcam.lock.json` before `touch-lock`. The first option selects the original platform version. The second selects the sealed camera application. After upgrading either package, omit its corresponding option. The verifier checks the installed package inventory against the selected versions.
 
-The dev12.6 platform package requires positive confirmation from the session locker before automatic rotation can move the display. Include the touch-lock layer for Xfce desktops that use automatic rotation. To reproduce the package tested on the tablet, run the following from the repository root on Linux.
+The dev12.8 platform package adds the optional ambient-light worker and the bilingual brightness preference. Two independent builds produced the SHA-256 below. Run these commands from the dev12.8 source on Linux. [Board image assembly](ADAPTIVE-BRIGHTNESS-IMAGE.md) · [Desktop tests](BRIGHTNESS.md#automatic-brightness)
+
+```sh
+SOURCE_DATE_EPOCH=1795182000 bash scripts/build-platform.sh out/platform-dev12.8
+(cd out/platform-dev12.8 && echo '95b8e4419a40080e98b78dbfe63839476c20479714ffb7257cfb7bbafc927583  y700-platform_0.1.0~dev12.8_all.deb' | sha256sum -c -)
+```
+
+The previous dev12.6 platform package requires positive confirmation from the session locker before automatic rotation can move the display. Include the touch-lock layer for Xfce desktops that use automatic rotation. To reproduce the previous package, use the dev12.6 source and its build epoch.
 
 ```sh
 SOURCE_DATE_EPOCH=1795170250 bash scripts/build-platform.sh out/platform-dev12.6

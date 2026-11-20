@@ -2,7 +2,21 @@
 
 Open **Settings → Hardware → Tablet brightness** in Xfce, or **设置 → 硬件 → 平板屏幕亮度** in Simplified Chinese. Use **−** and **+** to adjust the internal display in small steps, or choose one of the percentage buttons. The percentage shows the requested backlight level as a share of the driver's range. **Restore opening level** reapplies the exact nonzero setting read when the window opened. The 5% preset and ordinary dimming floor use the same raw level as the Y700 driver's initial setting, 102 on its 0–2047 range.
 
-The three tablet display tools use Xfce's Hardware settings category. Brightness uses the systemd and GTK components already installed by the product. Debian's dedicated Xfce Power Manager and its brightness panel plugin were absent on the measured desktop. [Xfce panel plugin](https://docs.xfce.org/xfce/xfce4-power-manager/panel-plugin) · [Debian package](https://packages.debian.org/trixie/xfce4-power-manager-plugins)
+The Xfce Hardware settings category includes all three tablet display tools. The top bar also includes Xfce Power Manager on the current board image. [Power manager and battery menu](POWER-MANAGER-TOUCH.md)
+
+## Automatic brightness
+
+After a normal Xfce login with platform dev12.8 installed, open **Tablet brightness** and select **Automatic brightness** (简体中文 **自动亮度**). The setting defaults to off. The desktop follows ambient light while the internal panel is lit and the local session is unlocked. Choosing a different manual level turns the option off. If the sensor service is unavailable, the window displays a waiting message and the current brightness stays in effect. On the development tablet the sensor DSP normally stays offline between bounded hardware trials.
+
+The Linux policy interpolates eight control points from the CN350 Android framework resources. The resource arrays map ambient light to target nits, then target nits to a backlight request on a 0–255 scale. The worker converts that request to the Linux driver's range, waits four seconds for a stable target and filters changes within four Android backlight units. These are requested brightness levels. Optical luminance and the response to changing light on the physical panel still need measurement. [AOSP display configuration](https://android.googlesource.com/platform/frameworks/base/+/5b361c07f928fd8c02a347b074a50b977e044f97/services/core/java/com/android/server/display/DisplayDeviceConfig.java) · [AOSP brightness resource definitions](https://android.googlesource.com/platform/frameworks/base/+/7951f5d173cbf3904399ebd042c771a88e894c61/core/res/res/values/config.xml)
+
+| Ambient light (lux) | 0 | 10 | 60 | 210 | 350 | 420 | 1000 | 1001 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Android backlight request | 20 | 20 | 51 | 77 | 153 | 214 | 250 | 255 |
+
+To verify the curve against your own copy of CN350 `/system/framework/framework-res.apk`, run `uv run --no-project --python 3.13 python tests/brightness/check-stock-curve.py "$aapt2" "$apk"`. The verifier checks the exact APK digest, reads the four default arrays with Android AAPT2 and compares their composition with the packaged worker. [Verifier](../tests/brightness/check-stock-curve.py)
+
+On the physical tablet with dev12.8 installed, the GUI and worker ran on a private 2560 × 1600 display at 200% scaling. The test used synthetic light, backlight, lock and display-power states. Pointer taps in the English and Chinese windows exercised the same commands as the installed desktop entries. At 10 lux the worker requested 161/2047. At 350 lux it requested 1228/2047 and the UI displayed 60%. Locking and blanking released the sensor. Tapping the manual 25% preset requested 511/2047 and stopped subsequent automatic writes. The saved choice survived reopening and the Chinese window indicated sensor loss. The owner session, real backlight, sensor DSP and services retained their initial state. A prior bounded test measured **17.7435 lux from the real sensor**. [Tablet GUI fixture](../tests/brightness/run-ambient-tablet.sh) · [Physical sensor reading](SSC-TRIAL.md#read-from-the-ordinary-desktop-account)
 
 ## Driver and session authorization
 

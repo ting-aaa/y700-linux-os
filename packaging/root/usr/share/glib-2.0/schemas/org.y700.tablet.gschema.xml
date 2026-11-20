@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.y700.tablet" path="/org/y700/tablet/">
+    <key name="automatic-brightness" type="b">
+      <default>false</default>
+      <summary>Adjust the tablet backlight to ambient light</summary>
+      <description>Use ambient light readings while the built-in display is on and the desktop is unlocked.</description>
+    </key>
     <key name="auto-rotate" type="b">
       <default>false</default>
       <summary>Rotate the tablet automatically</summary>

@@ -24,6 +24,8 @@ bash "$repo/tests/tablet-xsession-scale.sh" "$temp/root/etc/X11/Xsession.d/60y70
 test -s "$temp/root/usr/share/y700/tablet-xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
 test -x "$temp/root/usr/libexec/y700-tablet-rotation"
 test -x "$temp/root/usr/libexec/y700-tablet-brightness"
+test -x "$temp/root/usr/libexec/y700-ambient-backlight"
+grep -Fxq 'Exec=/usr/libexec/y700-ambient-backlight' "$temp/root/etc/xdg/autostart/y700-ambient-backlight.desktop"
 brightness="$temp/root/usr/share/applications/y700-tablet-brightness.desktop"
 grep -Fxq 'Exec=/usr/libexec/y700-tablet-brightness' "$brightness"
 for setting in brightness scale rotation; do
@@ -38,6 +40,7 @@ schemas="$temp/root/usr/share/glib-2.0/schemas"
 test ! -e "$schemas/gschemas.compiled"
 glib-compile-schemas --strict "$schemas"
 test "$(GSETTINGS_SCHEMA_DIR="$schemas" GSETTINGS_BACKEND=memory gsettings get org.y700.tablet auto-rotate)" = false
+test "$(GSETTINGS_SCHEMA_DIR="$schemas" GSETTINGS_BACKEND=memory gsettings get org.y700.tablet automatic-brightness)" = false
 grep -Fxq 'Exec=/usr/lib/y700/y700-auto-rotate.py --session' "$temp/root/etc/xdg/autostart/y700-rotation.desktop"
 grep -Fxq 'Exec=/usr/libexec/y700-tablet-rotation' "$temp/root/usr/share/applications/y700-tablet-rotation.desktop"
 test -x "$temp/root/usr/libexec/y700-bluetooth-identity"

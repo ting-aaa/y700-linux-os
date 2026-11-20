@@ -12,6 +12,9 @@ DEVICE = "ktz8866-backlight"
 BACKLIGHT = Path("/sys/class/backlight") / DEVICE
 LOGIN = "org.freedesktop.login1"
 SESSION = "/org/freedesktop/login1/session/auto"
+AUTO_KEY = "automatic-brightness"
+SENSOR = "net.hadess.SensorProxy"
+SENSOR_PATH = "/net/hadess/SensorProxy"
 CHINESE = GLib.get_language_names()[0].startswith("zh")
 
 
@@ -35,6 +38,13 @@ class BrightnessWindow(Gtk.ApplicationWindow):
         self.set_resizable(False)
         self.original = None
         self.pending = False
+        source = Gio.SettingsSchemaSource.get_default()
+        schema = source.lookup("org.y700.tablet", True) if source else None
+        self.settings = Gio.Settings.new_full(schema, None, None) if schema and schema.has_key(AUTO_KEY) else None
+        self.watch = 0
+        self.poll = 0
+        self.sensor = None
+        self.query = None
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, margin=24)
         self.add(content)
 
@@ -63,10 +73,23 @@ class BrightnessWindow(Gtk.ApplicationWindow):
         text = label("Restore opening level", "恢复打开时的亮度")
         self.restore = self.button(text, text, self.restore_level)
         content.add(self.restore)
+        toggle = Gtk.CheckButton(label=label("Automatic brightness", "自动亮度"))
+        toggle.set_size_request(-1, 56)
+        content.add(toggle)
+        self.auto_hint = Gtk.Label(wrap=True, max_width_chars=44, xalign=0)
+        self.auto_hint.set_no_show_all(True)
+        content.add(self.auto_hint)
         self.status = Gtk.Label(wrap=True, xalign=0)
         self.status.set_no_show_all(True)
         content.add(self.status)
         self.connect("focus-in-event", self.focused)
+        self.connect("destroy", self.close_monitor)
+        if self.settings:
+            self.settings.bind(AUTO_KEY, toggle, "active", Gio.SettingsBindFlags.DEFAULT)
+            self.pref_handler = self.settings.connect("changed::" + AUTO_KEY, self.mode_changed)
+            self.mode_changed()
+        else:
+            toggle.set_sensitive(False)
         self.refresh()
         self.show_all()
 
@@ -84,6 +107,68 @@ class BrightnessWindow(Gtk.ApplicationWindow):
     def focused(self, *_):
         self.show_status("")
         self.refresh()
+
+    def mode_changed(self, *_):
+        automatic = self.settings.get_boolean(AUTO_KEY)
+        self.auto_hint.set_visible(automatic)
+        if automatic and not self.watch:
+            self.sensor_hint(False)
+            self.watch = Gio.bus_watch_name(Gio.BusType.SYSTEM, SENSOR, Gio.BusNameWatcherFlags.NONE,
+                                            self.sensor_appeared, self.sensor_gone)
+            self.poll = GLib.timeout_add_seconds(2, self.observe)
+        elif not automatic:
+            self.stop_monitor()
+
+    def sensor_hint(self, available):
+        self.auto_hint.set_text(
+            label("Manual adjustment turns automatic brightness off.", "手动调节会关闭自动亮度。")
+            if available else label("Waiting for the ambient light sensor.", "正在等待环境光传感器。"))
+
+    def sensor_appeared(self, bus, _name, owner):
+        self.sensor_gone()
+        self.sensor = (bus, owner)
+        self.observe()
+
+    def sensor_gone(self, *_):
+        if self.query:
+            self.query.cancel()
+        self.query = self.sensor = None
+        self.sensor_hint(False)
+
+    def observe(self):
+        self.refresh()
+        if self.sensor and self.query is None:
+            # SensorProxy can unicast changes to the claiming process. The
+            # settings window checks availability without claiming or starting it.
+            bus, owner = self.sensor
+            self.query = Gio.Cancellable()
+            bus.call(owner, SENSOR_PATH, "org.freedesktop.DBus.Properties", "Get",
+                     GLib.Variant("(ss)", (SENSOR, "HasAmbientLight")), GLib.VariantType.new("(v)"),
+                     Gio.DBusCallFlags.NO_AUTO_START, 1500, self.query, self.observed, self.query)
+        return GLib.SOURCE_CONTINUE
+
+    def observed(self, bus, result, query):
+        try:
+            available, = bus.call_finish(result).unpack()
+        except GLib.Error:
+            available = False
+        if self.query is query:
+            self.query = None
+            self.sensor_hint(available is True)
+
+    def stop_monitor(self):
+        if self.watch:
+            Gio.bus_unwatch_name(self.watch)
+            self.watch = 0
+        if self.poll:
+            GLib.source_remove(self.poll)
+            self.poll = 0
+        self.sensor_gone()
+
+    def close_monitor(self, *_):
+        if self.settings:
+            self.settings.disconnect(self.pref_handler)
+        self.stop_monitor()
 
     def refresh(self):
         try:
@@ -129,6 +214,10 @@ class BrightnessWindow(Gtk.ApplicationWindow):
 
     def request(self, current, target):
         if self.pending or current == target:
+            return
+        if self.settings and self.settings.get_boolean(AUTO_KEY) and not self.settings.set_boolean(AUTO_KEY, False):
+            self.show_status(label("Automatic brightness is managed for this account.",
+                                   "此账户的自动亮度由管理员管理。"))
             return
         try:
             bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)

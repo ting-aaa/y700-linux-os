@@ -21,13 +21,32 @@ glib-compile-schemas --strict --dry-run "$stage/usr/share/glib-2.0/schemas"
 install -Dm644 "$repo/config/chromium/99-y700-software-rendering" "$stage/etc/chromium.d/99-y700-software-rendering"
 find "$stage/usr/libexec" -type f -exec chmod 755 {} +
 find "$stage/etc" -type f | sed "s|^$stage||" | LC_ALL=C sort > "$stage/DEBIAN/conffiles"
-export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$repo" log -1 --format=%ct)}
+version=$(sed -n 's/^Version: //p' "$repo/packaging/control")
+if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
+    # A documentation commit must not change the bytes of a locked build.
+    read -r locked_version locked_epoch < <(
+        "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python - "$repo/config/platform.lock.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+lock = json.loads(Path(sys.argv[1]).read_text())
+package, = lock["packages"]
+print(package["version"], lock["source_date_epoch"])
+PY
+    )
+    if [[ $version == "$locked_version" ]]; then
+        SOURCE_DATE_EPOCH=$locked_epoch
+    else
+        SOURCE_DATE_EPOCH=$(git -C "$repo" log -1 --format=%ct)
+    fi
+fi
+export SOURCE_DATE_EPOCH
 [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]
 (( SOURCE_DATE_EPOCH <= $(date -u +%s) )) || { echo 'Build epoch must not be in the future.' >&2; exit 1; }
 install -d "$stage/usr/lib/y700"
 printf '%s\n' "$SOURCE_DATE_EPOCH" > "$stage/usr/lib/y700/build-epoch"
 find "$stage" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
-version=$(sed -n 's/^Version: //p' "$repo/packaging/control")
 package="y700-platform_${version}_all.deb"
 dpkg-deb --root-owner-group --uniform-compression -Zxz -z6 --build "$stage" "$out/$package"
 cd "$out"
