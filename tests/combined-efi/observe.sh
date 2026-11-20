@@ -49,6 +49,13 @@ if [[ $1 == setup ]]; then
     done
     test -z "$(dpkg -V onboard y700-platform y700-camera-qcam y700-ssc-runtime y700-firstboot-drm y700-warm-greeter)"
     echo "COMBINED_EFI root=/dev/vda2 esp=/dev/vda1 pid1=systemd packages=1112 digest=${digest%% *} account=$account"
+    if [[ -d /boot/lock-archives ]]; then
+        dpkg --install /boot/lock-archives/*.deb
+        apt-get check
+        [[ -z $(dpkg --audit) && -z $(dpkg -V xfce4-screensaver y700-touch-lock) ]]
+        install -m755 /boot/lock-test-uv /run/y700-lock-test-uv
+        install -m644 /boot/lock-witness.py /run/y700-lock-witness.py
+    fi
     printf 'COMBINED_BOOT_ID id=%s\n' "$(cat /proc/sys/kernel/random/boot_id)"
     if grep -qw y700.combined_regdb=1 /proc/cmdline; then
         test -d /sys/module/cfg80211
@@ -133,5 +140,8 @@ ids=$(asuser xfconf-query -c xfce4-panel -p /panels/panel-1/plugin-ids | awk '/^
 wrapper=$(pgrep -o -u "$uid" -f '^/usr/lib/[^ ]+/xfce4/panel/wrapper-2\.0 .*/libpulseaudio-plugin\.so 19( |$)')
 grep -Fq '/libpulseaudio-plugin.so' "/proc/$wrapper/maps"
 echo 'COMBINED_AUDIO_PANEL ordinary=1 marker=1 top_panel=1 mapped_wrapper=1'
+if [[ -f /boot/lock-mode ]]; then
+    bash /boot/observe-lock.sh "$(cat /boot/lock-mode)" "$sid" "$pid"
+fi
 echo COMBINED_PASS
 systemctl --no-block poweroff
