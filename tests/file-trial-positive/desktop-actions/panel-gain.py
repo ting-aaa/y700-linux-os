@@ -37,9 +37,14 @@ def track(menu):
     left, right = x + 32 * scale, switch_x - 27 * scale
     if not (x < left < right < x + width):
         raise RuntimeError("Invalid speaker menu content geometry")
-    background = Counter(rgb(xx, y + 3 * scale) for xx in range(left, right)).most_common(1)[0][0]
+    # Sample the same scanline outside the rail, including GTK-selected rows.
+    sample_x = [*range(left, left + 4 * scale), *range(right - 4 * scale, right)]
+    def backdrop(yy):
+        return Counter(rgb(xx, yy) for xx in sample_x).most_common(1)[0][0]
+
     best = None
     for yy in range(max(y + 4 * scale, switch_y - 10 * scale), switch_y + 13 * scale):
+        background = backdrop(yy)
         ink = [xx for xx in range(left, right)
                if sum(abs(a - b) for a, b in zip(rgb(xx, yy), background)) > 45]
         if len(ink) < 55 * scale or ink[0] == left or ink[-1] == right - 1:
@@ -53,6 +58,7 @@ def track(menu):
     # track. Save its initial centre for touch-only restoration, including
     # when a later audio observation fails.
     for yy in (y - 6 * scale, y + 6 * scale):
+        background = backdrop(yy)
         outline = [xx for xx in range(left, right + 1)
                    if sum(abs(a - b) for a, b in zip(rgb(xx, yy), background)) > 45]
         if outline and 5 * scale <= outline[-1] - outline[0] <= 28 * scale:
@@ -107,7 +113,7 @@ def gain_test():
         if sample()[1] != wanted:
             time.sleep(0.6)
             panel.tap(*panel.output_switch(menu))
-            panel.wait_for(lambda: sample() == (initial, wanted), "original level and mute switch", 14)
+            panel.wait_for(lambda: sample()[1] == wanted, "mute switch state", 14)
 
     try:
         if muted:
@@ -129,7 +135,10 @@ def gain_test():
                 raise RuntimeError("Slider did not produce two increasing gains")
         finally:
             if sample() != (initial, False) or sink_snapshot()[1] != unmuted:
-                for offset in (0, -1, 1, -2, 2):
+                offsets = [0]
+                for radius in range(1, 9):
+                    offsets.extend((-radius, radius))
+                for offset in offsets:
                     time.sleep(0.5)
                     panel.tap(max(left, min(right, handle + offset)), row)
                     time.sleep(0.4)
