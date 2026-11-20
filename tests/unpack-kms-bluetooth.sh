@@ -31,7 +31,7 @@ EOF
 
 qcam=y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb
 blueman=blueman_2.4.4-1+y7001_arm64.deb
-versions=(dev8 dev9 dev10 dev11.1 dev12.1)
+versions=(dev8 dev9 dev10 dev11.1 dev12.1 dev12.2)
 for name in "${versions[@]}"; do
     printf 'Synthetic platform fixture\n' > "$bundle/y700-platform_0.1.0~${name}_all.deb"
 done
@@ -86,7 +86,7 @@ reject() {
     check_rolled_back
 }
 
-for version in dev11.1 dev12.1; do
+for version in dev11.1 dev12.1 dev12.2; do
     manifest "$version" "$qcam" "$blueman" chinese-ime.tar xorg-dsi.tar
     unpack --verify >/dev/null
     manifest "$version" "$qcam" "$blueman" chinese-ime.tar

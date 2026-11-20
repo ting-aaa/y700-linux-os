@@ -102,14 +102,14 @@ manifest_names() {
 }
 patch=
 extras=(y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb blueman_2.4.4-1+y7001_arm64.deb chinese-ime.tar xorg-dsi.tar)
-for version in dev8 dev9 dev10 dev11.1 dev12.1; do
+for version in dev8 dev9 dev10 dev11.1 dev12.1 dev12.2; do
     expected=(base/SHA256SUMS base/unpack.sh "$version.qcow2" identity.txt RAW-SHA256SUMS
         "y700-platform_0.1.0~${version}_all.deb")
     case $version in
         dev8) counts=(0) ;;
         dev9) counts=(0 1 2 3) ;;
         dev10) counts=(3 4) ;;
-        dev11.1|dev12.1) counts=(4) ;;
+        dev11.1|dev12.1|dev12.2) counts=(4) ;;
     esac
     for count in "${counts[@]}"; do
         if manifest_names "$bundle/SHA256SUMS" "${expected[@]}" "${extras[@]:0:count}"; then
