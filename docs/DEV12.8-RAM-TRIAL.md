@@ -27,6 +27,20 @@ RAM_TRIAL_VERSION=dev12.8 bash tests/ram-trial/run.sh \
 bash scripts/build-ram-trial.sh --dev12.8 "$images" "$new_bundle"
 ```
 
+## 从原内核切换到内存桌面
+
+电脑上的 ARM64 QEMU 已跑通 dev12.8 的完整切换。U-Boot EFI 先启动平板原 Debian 的内核，测试程序移除虚拟启动盘，通过独立的虚拟串口传入封存的后继内核和完整的 1,265,087,076 字节 initrd。原内核核对摘要并装载三个内存段，实际段位均避开虚拟板的四张活动中断表。新内核接管后，在没有外部磁盘和活动 swap 的情况下启动。来宾核对了 1,124 个软件包，通过虚拟触屏设置密码、登录普通账户的 Xfce，随后正常关机。
+
+测试只在交给第一个内核的虚拟设备树中加入标记。新内核同时读到了该标记和内核交接标志。试验前后封存文件的校验结果一致。平板上的只读检查也确认其九张活动中断表均在内核保留区内。实机能否完成同样的内核切换，以及切换后实体面板和 USB 能否恢复，仍待验证。[实机保留区与设备树](RAM-HANDOVER.md)
+
+复测使用平板原 Debian 的 EFI 内核、项目固定版本的 QEMU U-Boot、EFI 启动程序及虚拟板设备树。缩减记录 `out/dev12.8-ram-handover/uboot.log` 的 SHA-256 为 `96031d2fc39a1e88be093dd0fdf5841d6471e0b15f1f111d15755df6b34e2e3d`。
+
+```bash
+RAM_TRIAL_VERSION=dev12.8 RAM_TRIAL_BASELINE_KERNEL="$baseline_kernel" \
+    bash tests/ram-handover/uboot-first.sh "$virt_uboot" "$bootaa64" \
+    out/dev12.8-ram-trial "$virt_dtb" "$new_log_dir"
+```
+
 ## 平板原内核上的隔离桌面
 
 平板通过 USB 接收同一份 initrd，校验载体、完整 ext4 和运行时 1,124 个已安装包。测试沿用正在运行的 `7.3.4-asphalt-prc` 内核，在独立的挂载、进程、网络和 IPC 命名空间中运行普通账户 Xfce。根文件系统由只读镜像和 tmpfs 上层组成。Xvfb 提供 2560×1600、200% 的私有显示，测试进程只能访问私有 D-Bus 和虚拟指针。[实机验证入口](../tests/ram-userspace/run.sh)

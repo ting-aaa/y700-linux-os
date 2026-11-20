@@ -17,8 +17,11 @@ grep -qw y700.media=ram /proc/cmdline
 test "$(cat /proc/1/comm)" = systemd
 base=/run/y700-ram
 if test -e /proc/device-tree/chosen/linux,booted-from-kexec; then
+    grep -zFxq first-kernel /proc/device-tree/chosen/y700,qa-fdt-source
+    echo RAM_TRIAL_FDT_SOURCE=first-kernel
     echo RAM_TRIAL_BOOT_ORIGIN=kexec
 else
+    test ! -e /proc/device-tree/chosen/y700,qa-fdt-source
     echo RAM_TRIAL_BOOT_ORIGIN=direct
 fi
 hex() { od -An -tx1 "$1" | tr -d ' \n'; }

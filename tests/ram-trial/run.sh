@@ -107,6 +107,8 @@ if [[ -n ${QEMU_DATA:-} ]]; then qemu_data=(-L "$QEMU_DATA"); fi
 kernel=$trial/kernel.efi
 initrd=$trial/initrd
 if [[ ${RAM_TRIAL_KEXEC:-0} == 1 ]]; then
+    # Only the first virtual kernel receives this FDT from its bootloader.
+    fdtput -t s "$work/ram.dtb" /chosen y700,qa-fdt-source first-kernel
     kernel=$(realpath -e "${RAM_TRIAL_BASELINE_KERNEL:?Set RAM_TRIAL_BASELINE_KERNEL to the sealed baseline kernel}")
     printf '%s  %s\n' 9afa9b69763b33133f20d137047084343c5e5465cbb1a0bbfa56b01b9d76b4db "$kernel" | sha256sum --strict -c -
     bash "$here/../ram-handover/prepare.sh" "$trial" "$work/first.cpio"
