@@ -1,0 +1,271 @@
+#!/usr/bin/python3
+"""Follow ambient light only while the local Xfce user can see the internal LCD."""
+import math
+import os
+from pathlib import Path
+import signal
+import time
+
+from gi.repository import Gio, GLib
+
+
+LOGIN = "org.freedesktop.login1"
+MANAGER = "/org/freedesktop/login1"
+SENSOR = "net.hadess.SensorProxy"
+SENSOR_PATH = "/net/hadess/SensorProxy"
+SAVER = "org.xfce.ScreenSaver"
+SAVER_PATH = "/org/xfce/ScreenSaver"
+PROPS = "org.freedesktop.DBus.Properties"
+DBUS = "org.freedesktop.DBus"
+BUS_PATH = "/org/freedesktop/DBus"
+DEVICE = "ktz8866-backlight"
+BACKLIGHT = Path("/sys/class/backlight") / DEVICE
+DRM = Path("/sys/class/drm")
+KEY = "automatic-brightness"
+TICK_MS = 2000  # Sysfs DPMS and unclaimed sensor availability have no reliable D-Bus signal.
+SETTLE = 4.0
+QUIET_RENEW = 30.0
+
+# CN350 framework-res lux/backlight control points. Interpolate the 0..255
+# request; actual luminance also depends on the panel and its driver.
+CURVE = ((0, 20), (10, 20), (60, 51), (210, 77), (350, 153),
+         (420, 214), (1000, 250), (1001, 255))
+DEADBAND = 4.0  # About 1.6% of the driver range, independent of its resolution.
+
+
+def target_level(lux):
+    if not math.isfinite(lux) or lux < 0:
+        return None
+    for (start, low), (end, high) in zip(CURVE, CURVE[1:]):
+        if lux <= end:
+            return low + (high - low) * (lux - start) / (end - start)
+    return CURVE[-1][1]
+
+
+def lit_panel():
+    try:
+        connector, = DRM.glob("card*-DSI-1")
+        for name, expected in (("status", "connected"), ("enabled", "enabled"), ("dpms", "On")):
+            if (connector / name).read_text().strip() != expected:
+                return None
+        if int((BACKLIGHT / "bl_power").read_text()) != 0:
+            return None
+        current = int((BACKLIGHT / "brightness").read_text())
+        maximum = int((BACKLIGHT / "max_brightness").read_text())
+        if 0 < current <= maximum:
+            return current, maximum
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def call(bus, destination, path, interface, method, args=None):
+    result = bus.call_sync(destination, path, interface, method, args, None,
+                           Gio.DBusCallFlags.NO_AUTO_START, 1500, None)
+    return result.unpack()
+
+
+def properties(bus, owner, path, interface):
+    return call(bus, owner, path, PROPS, "GetAll", GLib.Variant("(s)", (interface,)))[0]
+
+
+class Session:
+    def __init__(self):
+        self.settings = Gio.Settings.new("org.y700.tablet")
+        self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        self.desktop = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.sources = []
+        self.timer = self.wake = 0
+        self.sensor = self.owner = None
+        self.claimed = self.stopping = False
+        self.unit = None
+        self.last_activity = 0.0
+        self.applied = self.candidate = None
+        self.since = 0.0
+        self.settings.connect("changed::" + KEY, self.configure)
+
+    def seat(self):
+        session_id = os.environ.get("XDG_SESSION_ID")
+        if session_id:
+            method, args = "GetSession", GLib.Variant("(s)", (session_id,))
+        else:
+            method, args = "GetSessionByPID", GLib.Variant("(u)", (os.getpid(),))
+        path, = call(self.system, LOGIN, MANAGER, LOGIN + ".Manager", method, args)
+        state = properties(self.system, LOGIN, path, LOGIN + ".Session")
+        if (state.get("Active") is True and state.get("LockedHint") is False
+                and state.get("State") == "active" and state.get("Class") == "user"
+                and state.get("Type") == "x11" and state.get("Remote") is False
+                and state.get("Seat", (None,))[0] == "seat0"
+                and state.get("User", (None,))[0] == os.getuid()
+                and call(self.desktop, SAVER, SAVER_PATH, SAVER, "GetActive") == (False,)):
+            return path
+        return None
+
+    def drop(self):
+        self.applied = self.candidate = None
+        if self.sensor is not None:
+            # A pending ClaimLight may await the first sample. Closing this
+            # private sender frees its lease even if polkit now rejects release.
+            try:
+                call(self.sensor, self.owner, SENSOR_PATH, SENSOR, "ReleaseLight")
+            except GLib.Error:
+                pass
+            if not self.sensor.is_closed():
+                self.sensor.close_sync(None)
+        self.sensor = self.owner = None
+        self.claimed = False
+        self.unit = None
+
+    def begin_claim(self, owner):
+        flags = Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION
+        address = Gio.dbus_address_get_for_bus_sync(Gio.BusType.SYSTEM, None)
+        self.sensor = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
+        self.owner = owner
+        self.sensor.signal_subscribe(owner, PROPS, "PropertiesChanged", SENSOR_PATH, SENSOR,
+                                     Gio.DBusSignalFlags.NONE, self.light_changed)
+        self.claim()
+
+    def claim(self):
+        self.claimed = False
+        self.sensor.call(self.owner, SENSOR_PATH, SENSOR, "ClaimLight", None, None,
+                         Gio.DBusCallFlags.NO_AUTO_START, 10000, None, self.claim_finished)
+
+    def claim_finished(self, bus, result):
+        try:
+            bus.call_finish(result)
+        except GLib.Error:
+            if bus == self.sensor:
+                self.drop()
+            return
+        if bus == self.sensor:
+            self.claimed = True
+            self.last_activity = time.monotonic()
+            self.changed()
+
+    def observe(self, lux):
+        target = target_level(lux) if self.unit == "lux" else None
+        # Anchor the stability window across small changes. Requiring equal
+        # consecutive lux values would prevent convergence under ordinary noise.
+        if target is None or self.candidate is None or abs(target - self.candidate) > DEADBAND:
+            self.candidate, self.since = target, time.monotonic()
+        return target
+
+    def light_changed(self, bus, _owner, _path, _iface, _name, args):
+        if bus != self.sensor or not self.claimed:
+            return
+        _, values, invalid = args.unpack()
+        if values.get("HasAmbientLight") is False or invalid:
+            self.candidate = None
+            self.changed()
+        if "LightLevelUnit" in values and values["LightLevelUnit"] != self.unit:
+            self.unit = values["LightLevelUnit"]
+            self.candidate = None
+        if "LightLevel" in values:
+            # Targeted samples can swing between two scheduled safety
+            # checks. Reset the settling time without a D-Bus round trip.
+            self.observe(values["LightLevel"])
+            self.last_activity = time.monotonic()
+
+    def refresh(self):
+        try:
+            if self.stopping or not self.settings.get_boolean(KEY) or not lit_panel() or not self.seat():
+                self.drop()
+                return
+            owner, = call(self.system, DBUS, BUS_PATH, DBUS, "GetNameOwner", GLib.Variant("(s)", (SENSOR,)))
+            if self.owner != owner:
+                self.drop()
+            light = properties(self.sensor or self.system, owner, SENSOR_PATH, SENSOR)
+            if light.get("HasAmbientLight") is not True or light.get("LightLevelUnit") == "vendor":
+                self.drop()
+                return
+            if self.sensor is None:
+                self.begin_claim(owner)
+                return
+            if not self.claimed:
+                return
+            if time.monotonic() - self.last_activity >= QUIET_RENEW:
+                # Proxy 3.9 forgets claims on driver removal, which can be
+                # shorter than a DPMS check. Duplicate claims are idempotent.
+                self.claim()
+                return
+            self.unit = light.get("LightLevelUnit")
+            target = self.observe(light.get("LightLevel", math.nan))
+            if target is None or time.monotonic() - self.since < SETTLE:
+                return
+            if self.applied is not None and abs(target - self.applied) <= DEADBAND:
+                return
+            # Recheck live guards after the sensor round-trip. A manual change
+            # does not trigger a second write while the light remains stable.
+            path = self.seat()
+            panel = lit_panel()
+            if not path or not panel or self.stopping or not self.settings.get_boolean(KEY):
+                self.drop()
+                return
+            current, maximum = panel
+            raw = max(1, round(maximum * target / 255))
+            if raw != current:
+                call(self.system, LOGIN, path, LOGIN + ".Session", "SetBrightness",
+                     GLib.Variant("(ssu)", ("backlight", DEVICE, raw)))
+            self.applied = target
+        except GLib.Error:
+            self.drop()
+
+    def tick(self):
+        self.refresh()
+        return GLib.SOURCE_CONTINUE
+
+    def changed(self, *_):
+        if self.timer and not self.wake:
+            self.wake = GLib.idle_add(self.run_once)
+
+    def run_once(self):
+        self.wake = 0
+        self.refresh()
+        return GLib.SOURCE_REMOVE
+
+    def configure(self, *_):
+        if self.stopping or not self.settings.get_boolean(KEY):
+            for bus, sub in self.sources:
+                bus.signal_unsubscribe(sub)
+            self.sources.clear()
+            for source in (self.timer, self.wake):
+                if source:
+                    GLib.source_remove(source)
+            self.timer = self.wake = 0
+            self.drop()
+        elif not self.timer:
+            signals = [(self.desktop, SAVER, SAVER, "ActiveChanged", SAVER_PATH, None),
+                       (self.system, LOGIN, PROPS, "PropertiesChanged", None, LOGIN + ".Session"),
+                       (self.system, DBUS, DBUS, "NameOwnerChanged", BUS_PATH, SENSOR)]
+            for bus, sender, interface, name, path, arg in signals:
+                sub = bus.signal_subscribe(sender, interface, name, path, arg,
+                                           Gio.DBusSignalFlags.NONE, self.changed)
+                self.sources.append((bus, sub))
+            self.timer = GLib.timeout_add(TICK_MS, self.tick)
+            self.changed()
+
+    def stop(self):
+        self.stopping = True
+        self.configure()
+
+
+def main():
+    if os.getuid() == 0 or os.environ.get("XDG_SESSION_TYPE") != "x11":
+        return
+    loop = GLib.MainLoop()
+    session = Session()
+    def stop():
+        session.stop()
+        loop.quit()
+        return GLib.SOURCE_REMOVE
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, stop)
+    session.configure()
+    try:
+        loop.run()
+    finally:
+        session.stop()
+
+
+if __name__ == "__main__":
+    main()

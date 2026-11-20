@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Y700 automatic brightness
+Name[zh_CN]=Y700 自动亮度
+Exec=/usr/libexec/y700-ambient-backlight
+OnlyShowIn=XFCE;
+Terminal=false
