@@ -12,6 +12,7 @@ test -z "$(find "$temp/root" -perm /0022 -print)"
 test "$(stat -c %a "$temp/root/usr/lib/systemd/system/y700-usb-maintenance.service")" = 644
 test -x "$temp/root/usr/bin/y700-display"
 test -x "$temp/root/usr/libexec/y700-session"
+test -x "$temp/root/usr/libexec/y700-panel-audio"
 test -x "$temp/root/usr/libexec/y700-speaker-calibration"
 grep -Fxq 'ExecStart=/usr/libexec/y700-speaker-calibration prepare-live' "$temp/root/usr/lib/systemd/system/y700-speaker-calibration.service"
 test -x "$temp/root/usr/libexec/y700-tablet-scale"

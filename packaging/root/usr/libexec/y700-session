@@ -3,6 +3,9 @@ set -euo pipefail
 [[ ${XDG_SESSION_TYPE:-x11} == x11 ]] || exit 0
 state=${XDG_STATE_HOME:-$HOME/.local/state}/y700
 mkdir -p "$state"
+if [[ ! -e "$state/panel-audio-v1" ]]; then
+    /usr/libexec/y700-panel-audio &
+fi
 # Initialize the panel once. Onboard reads its defaults from GSettings.
 initialize_defaults() {
     xfconf-query -c xfce4-panel -p /panels/panel-1/size -n -t uint -s 64

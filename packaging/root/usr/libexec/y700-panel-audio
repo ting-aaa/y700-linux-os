@@ -1,0 +1,132 @@
+#!/usr/bin/python3
+"""Add the native Xfce speaker control once, preserving each user's panel layout."""
+
+import fcntl
+import os
+from pathlib import Path
+import re
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+from gi.repository import Gio, GLib
+
+
+def dbus(service, path, interface, method, args=None):
+    reply = bus.call_sync(service, path, interface, method, args, None,
+                          Gio.DBusCallFlags.NO_AUTO_START, 3000, None)
+    return reply.unpack()
+
+
+def xfconf(method, signature, *args, channel="xfce4-panel"):
+    return dbus("org.xfce.Xfconf", "/org/xfce/Xfconf", "org.xfce.Xfconf", method,
+                GLib.Variant(signature, (channel, *args)))
+
+
+def properties():
+    return xfconf("GetAllProperties", "(ss)", "/")[0]
+
+
+def conflicting_shortcut_groups():
+    shortcuts, = xfconf("GetAllProperties", "(ss)", "/", channel="xfce4-keyboard-shortcuts")
+    groups = {"enable-keyboard-shortcuts": ("LowerVolume", "RaiseVolume", "Mute", "MicMute"),
+              "enable-multimedia-keys": ("Play", "Stop", "Prev", "Next")}
+    assigned = set()
+    for provider in ("commands", "xfwm4"):
+        prefix = f"/{provider}/custom" if shortcuts.get(f"/{provider}/custom/override") else f"/{provider}/default"
+        assigned.update(group for group, keys in groups.items()
+                        if any(shortcuts.get(f"{prefix}/XF86Audio{key}") for key in keys))
+    return assigned
+
+
+def wrappers():
+    xml, = dbus("org.xfce.Panel", "/org/xfce/Panel/Wrapper",
+                "org.freedesktop.DBus.Introspectable", "Introspect")
+    return {int(node.get("name")) for node in ET.fromstring(xml).findall("node")
+            if (node.get("name") or "").isdigit()}
+
+
+def panel_layout(props):
+    panels = props.get("/panels", [])
+    if type(panels) is int:  # Legacy Xfce profiles store a panel count.
+        panels = list(range(panels))
+    return {f"/panels/panel-{n}/plugin-ids": props.get(f"/panels/panel-{n}/plugin-ids", [])
+            for n in panels}
+
+
+def add_control(marker):
+    # The panel imports its initial settings during startup. A current Xfconf
+    # array and a responding panel must be present before editing that array.
+    for _ in range(100):
+        try:
+            props = properties()
+            layout = panel_layout(props)
+            live = wrappers()
+            if any(layout.values()):
+                break
+        except GLib.Error:
+            pass
+        time.sleep(0.2)
+    else:
+        raise RuntimeError("Xfce panel is not ready")
+
+    def name(n):
+        return props.get(f"/plugins/plugin-{n}")
+
+    for ids in layout.values():
+        if any(name(n) == "pulseaudio" for n in ids):
+            marker.touch()
+            return
+
+    # Keep the dock, launchers and all existing plugin IDs in their order.
+    panel = next((key for key, ids in layout.items() if any(name(n) == "systray" for n in ids)), None)
+    if panel is None:
+        panel = next((key for key, ids in layout.items() if any(name(n) == "clock" for n in ids)), None)
+    if panel is None:
+        return  # A custom layout with no status area has no unambiguous destination.
+    ids = layout[panel]
+    tray = next((i for i, n in enumerate(ids) if name(n) == "systray"), None)
+    position = tray + 1 if tray is not None else next(i for i, n in enumerate(ids) if name(n) == "clock")
+    configured = {int(m[1]) for key in props if (m := re.match(r"^/plugins/plugin-(\d+)(?:/|$)", key))}
+    orphan = next((n for n in configured if name(n) == "pulseaudio"
+                   and all(n not in members for members in layout.values())), None)
+    plugin_id = orphan if orphan is not None else max(configured.union(live, *layout.values()), default=0) + 1
+    plugin = f"/plugins/plugin-{plugin_id}"
+    if xfconf("IsPropertyLocked", "(ss)", panel)[0] or xfconf("IsPropertyLocked", "(ss)", plugin)[0]:
+        return
+    if orphan is None:
+        reserved = conflicting_shortcut_groups()
+        xfconf("SetProperty", "(ssv)", plugin, GLib.Variant("s", "pulseaudio"))
+        for group in reserved:
+            xfconf("SetProperty", "(ssv)", f"{plugin}/{group}", GLib.Variant("b", False))
+    # Reread the destination so a concurrent layout edit is not overwritten.
+    if xfconf("GetProperty", "(ss)", panel)[0] != ids:
+        raise RuntimeError("Panel items changed during setup")
+    updated = ids[:position] + [plugin_id] + ids[position:]
+    xfconf("SetProperty", "(ssv)", panel, GLib.Variant("av", [GLib.Variant("i", n) for n in updated]))
+    if plugin_id not in live:
+        dbus("org.xfce.Panel", "/org/xfce/Panel", "org.xfce.Panel", "Terminate", GLib.Variant("(b)", (True,)))
+    for _ in range(100):
+        try:
+            if plugin_id in wrappers() and plugin_id in xfconf("GetProperty", "(ss)", panel)[0]:
+                marker.touch()
+                return
+        except GLib.Error:
+            pass
+        time.sleep(0.2)
+    raise RuntimeError("The new panel plugin did not start")
+
+
+if __name__ == "__main__":
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "y700"
+    marker = state / "panel-audio-v1"
+    if not marker.exists():
+        state.mkdir(parents=True, exist_ok=True)
+        with (state / "panel-audio.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not marker.exists():
+                try:
+                    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                    add_control(marker)
+                except (GLib.Error, OSError, RuntimeError) as error:
+                    sys.exit(f"Y700 speaker icon: {error}")
