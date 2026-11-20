@@ -90,6 +90,9 @@ if [[ ${RAM_TRIAL_KEXEC:-0} == 1 ]]; then
     printf '%s  %s\n' 9afa9b69763b33133f20d137047084343c5e5465cbb1a0bbfa56b01b9d76b4db "$kernel" | sha256sum --strict -c -
     bash "$here/../ram-handover/prepare.sh" "$trial" "$work/first.cpio"
     initrd=$work/first.cpio
+    if [[ -n ${Y700_BOOTAA64:-} ]]; then
+        bash "$here/../ram-handover/uboot-esp.sh" "$kernel" "$initrd" "$work/ram.dtb" "$args" "$work/firmware-boot.img"
+    fi
 fi
 timeout -k 25 2100 "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python -B "$here/qemu-ram.py" \
     "$work" "$logs" "$bytes" "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_data[@]}" \
