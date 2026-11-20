@@ -48,6 +48,29 @@ def inputs_for(address):
             yield event.name
 
 
+def check_onboard_peer(address, phase):
+    if "Y700_GTK_HID" not in os.environ:
+        return
+    from Onboard import osk
+
+    if phase == "disconnected":
+        wait("PEER_EVDEV_REMOVED", lambda: not list(inputs_for(address)))
+    parents = {(Path("/sys/class/input") / event / "device").resolve()
+               for event in inputs_for(address)}
+    assert bool(parents) == (phase == "connected")
+    for parent in parents:
+        output = subprocess.check_output(
+            ["udevadm", "info", "--query=property", str(parent)], text=True)
+        properties = dict(line.split("=", 1) for line in output.splitlines())
+        assert properties["PHYS"].strip('"') and properties["ID_INPUT"] == "1"
+        assert properties.get("ID_INPUT_KEYBOARD") != "1"
+    # This VM has no other input hardware. Both profiles advertise only F15
+    # plus pointer reports; neither should suppress Onboard as a text keyboard.
+    assert not osk.UDev().get_keyboard_devices()
+    print(f"ONBOARD_UDEV phase={phase} peer_inputs_with_phys={len(parents)} text_keyboards=0",
+          flush=True)
+
+
 @contextmanager
 def desktop_observer(address):
     if "Y700_GTK_HID" not in os.environ:
@@ -112,6 +135,7 @@ def main():
     objects = dbus.Interface(bus.get_object(BLUEZ, "/"), "org.freedesktop.DBus.ObjectManager").GetManagedObjects
     central = "/org/bluez/hci0"
     address = objects()["/org/bluez/hci1"][ADAPTER]["Address"]
+    check_onboard_peer(address, "before")
     path = central + "/dev_" + address.replace(":", "_")
     adapter = dbus.Interface(bus.get_object(BLUEZ, central), ADAPTER)
     classic = sys.argv[1:] == ["classic"]
@@ -139,10 +163,12 @@ def main():
                 wait("CLASSIC_BT_EVDEV_CREATED", lambda: list(inputs_for(address)))
                 wait("CLASSIC_CONNECTED_WITH_BOND", lambda: state()["Connected"] and state()["Bonded"])
                 verify_inputs(address, emit)
+                check_onboard_peer(address, "connected")
             if attempt == 0:
                 if state()["Connected"]:
                     dev.Disconnect(timeout=15)
                 wait("CLASSIC_DISCONNECTED_WITH_BOND", lambda: not state()["Connected"] and state()["Bonded"])
+                check_onboard_peer(address, "disconnected")
         print("Y700_VIRTUAL_CLASSIC_INPUT_PASS", flush=True)
         return
     if not state()["Connected"]:
@@ -152,15 +178,18 @@ def main():
         wait("REPORTS_SUBSCRIBED", lambda: control(b"ready"))
         wait("BT_EVDEV_CREATED " + address, lambda: list(inputs_for(address)))
         verify_inputs(address, lambda: control(b"emit"))
+        check_onboard_peer(address, "connected")
         if attempt == 0:
             dev.Disconnect(timeout=15)
             wait("DISCONNECTED_WITH_BOND", lambda: not state()["Connected"] and state()["Bonded"])
+            check_onboard_peer(address, "disconnected")
             dev.Connect(timeout=30)
         elif attempt == 1:
             props.Set(DEVICE, "Trusted", dbus.Boolean(True))
             peer_adapter = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez/hci1"), dbus.PROPERTIES_IFACE)
             peer_adapter.Set(ADAPTER, "Powered", dbus.Boolean(False))
             wait("PERIPHERAL_OFF_WITH_BOND", lambda: not state()["Connected"] and state()["Bonded"])
+            check_onboard_peer(address, "disconnected")
             peer_adapter.Set(ADAPTER, "Powered", dbus.Boolean(True))
             control(b"advertise")
             wait("AUTOMATIC_RECONNECT", lambda: state()["Connected"] and state()["Bonded"], 25)

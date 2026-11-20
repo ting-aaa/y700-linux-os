@@ -17,6 +17,14 @@ For each connection, the GTK observer resolved the event's GDK source device to 
 
 The guest used the Xorg dummy video driver with automatic libinput discovery and a fresh authorized local display. The GTK window received input from the native BlueZ host stack. Real tablet pairing, Xfce keyboard shortcuts and suspend/resume remain separate physical tests. [GTK observer](../tests/bluetooth-virtual/desktop.py)
 
+### Onboard detection of a function key and mouse
+
+In both desktop runs, Xorg exposed the F15 report as a keyboard and the pointer report as a mouse. Each connected peer had two Bluetooth input nodes with a physical path. Debian udev set `ID_INPUT_KEYBOARD` on neither. The installed Onboard 1.4.1-10 enumerator returned zero text keyboards before pairing, during each connection and after each tested disconnect. Both nodes disappeared on disconnect, including when the virtual LE accessory powered off. The existing GTK observer still received the key and mouse events.
+
+The reduced receipts are `out/bluetooth-virtual/onboard/le.log` and `classic.log` in the same directory. The original report map supplies F15 and pointer input for both transports.
+
+Onboard's native filter requires `ID_INPUT_KEYBOARD=1` and a `PHYS` property. Debian's udev input classifier checks the low key bitmap for all keycodes 1 through 31. This excludes the fixture's F15-only interface and the tablet's single power and volume keys. The fixture covers this false-positive case. A text-capable keyboard needs its own positive test. [Onboard udev enumeration](https://sources.debian.org/src/onboard/1.4.1-10/Onboard/osk/osk_udev.c/#L99) · [systemd 257.13 input classifier](https://github.com/systemd/systemd/blob/v257.13/src/udev/udev-builtin-input_id.c#L367-L375)
+
 ## LE bond across two cold boots
 
 On 2026-11-20 the final dev9 image automatically reconnected to a bonded LE keyboard and mouse after a full guest shutdown. A new QEMU process booted the same read-only root and kernel. The two virtual controllers kept their addresses. Each boot ran a fresh stock `bluetoothd` managing both controllers. A private 16 MiB ext4 disk held both reciprocal BlueZ adapter stores across boots.
