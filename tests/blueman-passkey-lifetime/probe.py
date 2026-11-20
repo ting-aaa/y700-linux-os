@@ -48,7 +48,7 @@ def main():
         ["blueman-applet"], stdout=subprocess.DEVNULL, stderr=log,
     ) as applet:
         try:
-            await_value(lambda: registered(bus), "agent-not-registered")
+            await_value(lambda: registered(bus), "agent-not-registered", seconds=40)
             agent = await_value(lambda: system_agent(bus, applet.pid), "agent-not-exported")
 
             def invoke(member, arguments=None):
