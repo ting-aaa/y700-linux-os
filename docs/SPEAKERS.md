@@ -38,6 +38,12 @@ bash tests/speaker-ucm/run-qemu.sh "$prepared_y700_kernel_tree" "$dev10_or_dev11
 
 The runner builds the upstream `snd-dummy` module in a temporary directory, attaches the product root read-only and executes the test in a RAM overlay. The fixture opens only a sound control device. It passed with `Y700_SPEAKER_UCM_PASS` and `SPEAKER_FIXTURE_EXIT=0`. [Regression](../tests/speaker-ucm/guest.sh)
 
+## Touch volume and mute
+
+Tap the speaker icon on the Xfce panel. The top row controls playback. Tap its slider to change volume or its switch to mute and unmute. If your panel has no speaker icon, open **Settings → Panel → Items → Add**, then choose the installed **PulseAudio Plugin**. [Xfce panel settings](https://docs.xfce.org/xfce/xfce4-panel/preferences#items) · [Xfce audio plugin](https://docs.xfce.org/panel-plugins/xfce4-pulseaudio-plugin/start)
+
+In the isolated dev11.1 ARM64 desktop at 200%, the stock plugin responded to synthetic pointer taps. The private PipeWire Pulse server reported playback changing from about 47% to 77%, switching to muted and back at 77%, then returning to the exact selected 47% level in both channels. The software sink carried digital silence to keep its audio format active. It had no hardware audio device. This qualifies the menu and its software control path. Audible output from the tablet speakers still requires separate evidence.
+
 ## Attended stereo check
 
 With the corrected profile active, run the following from a terminal in the tablet's signed-in desktop. The probe checks that the default sink is the protected internal speaker and that both hardware controls already report −40.00 dB. It waits for Enter and sends a 440 Hz tone at 1% of digital full scale, first exclusively left and then exclusively right, with a quarter-second quiet interval. It opens a targeted playback stream and leaves volume and routing controls alone.
