@@ -1,6 +1,6 @@
 # 在电脑上启动 Y700 dev12.6 内存桌面
 
-本地目录 `out/dev12.6-ram-trial/` 中的五个文件包含完整通用 Debian 根文件系统、板型内核、设备树和启动参数。ARM64 QEMU 已用这份内核和 initrd 在无磁盘、无网络的虚拟机中完成触屏设置密码、LightDM 登录、进入 Xfce 和正常关机。物理平板的运行结果需要单独验证。
+本地目录 `out/dev12.6-ram-trial/` 中的五个文件包含完整通用 Debian 根文件系统、板型内核、设备树和启动参数。ARM64 QEMU 已用这份内核和 initrd 在无磁盘、无网络的虚拟机中完成触屏设置密码、LightDM 登录、进入 Xfce 和正常关机。实体平板另有一条 USB 内存测试路径，可以在现有内核上运行同一份根文件系统。
 
 | 文件 | SHA-256 |
 | --- | --- |
@@ -37,6 +37,20 @@ RAM_TRIAL_VERSION=dev12.6 bash tests/ram-trial/run.sh \
 | 会话与关机 | 同一个 seat0 本地 PAM 会话启动 Xfce，内核正常关机，QEMU 退出码 0 |
 
 精简证据在 `out/dev12.6-ram-verified/direct-proof.log`，SHA-256 为 `d1f2fd5767cadd7d3e4dda894725d3c2b10dfda5f87380702a5bbdb69abd9796`。这次测量使用虚拟设备树和触摸屏。Board DT 随包交付；实机显示、触控与存储控制器的行为须在对应硬件验证。
+
+## 在运行 Debian 的平板上从 RAM 验证桌面
+
+在一台 16 GiB 国行 Y700 二代上，USB 用 33 秒将上述 1,261,843,044 字节的 `initrd` 传入平板的 tmpfs。平板核对了 initrd、SquashFS、6 GiB ext4 的 SHA-256，也核对了根文件系统中 1,115 项已安装软件包的版本和架构。当前运行的内核为 `7.3.4-asphalt-prc`。根文件系统的写入进入单独的 512 MiB tmpfs 上层。[内核 OverlayFS 文档](https://docs.kernel.org/filesystems/overlayfs.html)
+
+镜像内的普通账户启动了 Xfce 窗口管理器、面板、桌面和 Onboard。测试使用 2560×1600 私有虚拟屏幕和 GTK 两倍缩放。Thunar 打开新建文件夹对话框后，Onboard 自动弹出。测试用虚拟指针点按五个字母键输入 `hello`，按回车确认，在内存上层找到了对应文件夹。对话框快捷键和回车均由测试程序产生。本轮使用平板 CPU 和原内核，实体玻璃触点、屏幕输出、GPU 和新内核仍需独立验证。[Thunar 文件夹操作源代码](https://github.com/xfce-mirror/thunar/blob/master/thunar/thunar-action-manager.c)
+
+退出后，原系统的启动标识、当前桌面会话、锁屏状态、LightDM、SSH、NetworkManager 和蓝牙服务实例与测试前一致。临时文件、挂载和 loop 设备均已清理。缩减记录位于 `out/dev12.6-ram-verified/tablet-userspace.log`。复测需要已验证主机密钥的 USB SSH 连接，以及平板上已解包的 Debian ARM64 测试工具目录（含 Xvfb、xdotool 和 libxdo3）。[实机测试入口](../tests/ram-userspace/run.sh)
+
+```bash
+bash tests/ram-userspace/run.sh "$usb_ssh" out/dev12.6-ram-trial "$device_xvfb_usr"
+```
+
+另用当前平板的内核启动日志和 `/proc/iomem` 做了只读检查。8 个 CPU 在线，EFI 上报的中断属性表和 8 张 CPU 待处理表全部位于保留内存，共核对 9 张。旧内核向新内核交接和关机返回原系统的实机行为仍待验证。[EFI 交接测试](RAM-HANDOVER.md)
 
 ## 用现有通用镜像重新构建
 

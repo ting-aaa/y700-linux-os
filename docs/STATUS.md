@@ -4,6 +4,8 @@ Evidence through 2026-11-20 covers one TB320FC_PRC with 16 GiB RAM, 512 GB stora
 
 The dev12.6 archive contains the 1,115-package desktop with the touch locker and current camera and rotation packages preinstalled. Two ARM64 QEMU EFI boots used the same account. Touchscreen enrollment succeeded on the first boot. After a full power-off the second boot went straight to the graphical login. In each session, a wrong unlock password was rejected and the correct password restored the open GTK window and its unsaved text. The complete archive was separately extracted as an ordinary Linux user. Physical cold boot of this combination remains open. [Image guide](DEV12.6-IMAGE.md) · [Boot evidence and checksums](BOARD-IMAGE.md#dev126-standalone-image)
 
+The same dev12.6 root filesystem now also runs from RAM on the tablet's existing kernel. A USB transfer took 33 seconds. The board verified the full 6 GiB image and its 1,115 installed packages. An ordinary account ran Xfce at 2560×1600 on a private virtual display with GTK at 200%. Clicking five letters on the visible Onboard keyboard entered a folder name in Thunar. After the test, the original desktop session and services remained active and the RAM staging was removed. The complete RAM system separately passed a diskless ARM64 QEMU boot, touchscreen enrollment, PAM login, and shutdown. [RAM image and tablet evidence](DEV12.6-RAM-TRIAL.md)
+
 | Area | Evidence / current status | Remaining acceptance |
 | --- | --- | --- |
 | Native boot/UFS | Physical Debian boot, expanded root filesystem, EFI chain; B slot successful/bootable confirmed | Repeated cold starts, recovery and update rollback |
