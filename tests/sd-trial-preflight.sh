@@ -27,6 +27,13 @@ if [[ $entry == y700-file ]]; then
     [[ $(findmnt -nro UUID /) == ef306764-2315-4235-8796-69e2c9b61946 ]] || fail 'unexpected backing filesystem'
     [[ $(cat /etc/y700/image-id) == asphalt-prc-debian13-xfce-7.3.4-v1 ]] || fail 'unexpected backing system'
     [[ -c /dev/loop-control && -d /sys/module/loop ]] || fail 'loop devices unavailable'
+    ufs=/sys/class/devfreq/1d84000.ufshc
+    [[ -w $ufs/max_freq ]] && grep -qw 75000000 "$ufs/available_frequencies" || fail 'required UFS operating point unavailable'
+    for dir in /var /var/lib; do
+        [[ -d $dir && ! -L $dir && $(stat -c '%u:%g' "$dir") == 0:0 ]] || fail 'unexpected trial ancestor'
+        perms=$(stat -c %a "$dir")
+        (( (8#$perms & 8#022) == 0 )) || fail 'trial ancestor writable by other users'
+    done
     private=/var/lib/y700-trial
     [[ ! -L $private && ( ! -e $private || ( -d $private && $(stat -c '%u:%g:%a' "$private") == 0:0:700 ) ) ]] || fail 'unexpected staging directory'
     [[ ! -e $private/dev12.5 && ! -L $private/dev12.5 ]] || fail 'trial data already exists'
