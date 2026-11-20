@@ -16,6 +16,24 @@ The host checks the rendered Arctica username and password screens, enters both 
 
 The observer samples optional keyboard and panel state in the background for up to six seconds after Xfce is confirmed. It records an unfinished check as unconfirmed and continues to normal power-off.
 
+Set `DESKTOP_ACTIONS_DIR` to a staging directory on the PC for a single-boot desktop-action run. Put `desktop-actions.sh` and its optional `desktop-actions/` support directory there. The fixture loads them from the read-only guest ESP after the ordinary session passes the Xfce gate. The action script runs as root with the ordinary session's display, X authority, runtime directory and D-Bus environment. Use `Y700_QA_UID` to run session clients as that user. `Y700_QA_SESSION_ID` and `Y700_QA_SESSION_PID` identify the verified session and its Xfce process.
+
+To stage the included keyboard and volume actors, provide an AArch64 `uv` binary as `arm64_uv` and use a fresh log directory.
+
+```sh
+stage=$(mktemp -d)
+mkdir "$stage/desktop-actions"
+cp tests/file-trial-positive/desktop-actions.sh "$stage/"
+cp tests/file-trial-positive/desktop-actions/*.py "$stage/desktop-actions/"
+install -m755 "$arm64_uv" "$stage/desktop-actions/uv-arm64"
+DESKTOP_ACTIONS_DIR="$stage" bash tests/file-trial-positive/run.sh \
+    "$scratch/baseline" "$entry" "$esp" "$virt_uboot" "$virt_dtb" "$scratch/desktop-logs"
+```
+
+The volume actor uses the VM's silent digital `auto_null` output. The account and password are synthetic and local to the disposable guest. No device credentials are required.
+
+To request a touch, the action script writes `DESKTOP_TAP sequence x y` to its report and reads `TAP_OK sequence` from `/dev/virtio-ports/org.y700.login-phase`. Sequence starts at 1. Coordinates use the 1024×768 screen. The relay keeps the original Type-B device and checks every acknowledgement. A script reports `DESKTOP_ACTIONS_DONE` when its actions finish and returns zero on success. The host reports any action failure after the normal shutdown and offline disk checks.
+
 After shutdown the runner exports a read-only view of the modified disk. It requires clean outer and nested ext4 superblocks, no recovery flag and `e2fsck -fn` success. It mounts the outer file system with `ro,noload` to inspect the nested root and FAT. The nested FAT must pass `fsck.fat -vn`. The original source, trial supplement and backing file hashes are rechecked.
 
 Tool overrides are `AARCH64_CC`, `UV_BIN`, `QEMU_SYSTEM_AARCH64`, `QEMU_IMG`, `QEMU_NBD`, `QEMU_DATA`, `QEMU_LIB`, `NBDKIT`, `NBDKIT_SPLIT` and `NBDFUSE`. Keep the work directory on a regular Linux filesystem with room for the nested image data. This test uses a virtual 4Kn disk, the test device tree and automatic selection of the trial menu entry.

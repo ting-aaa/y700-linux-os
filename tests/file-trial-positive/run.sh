@@ -14,6 +14,13 @@ esp=$(realpath -e "$3")
 bios=$(realpath -e "$4")
 dtb=$(realpath -e "$5")
 out=$(realpath -m "$6")
+desktop_mode=double
+if [[ -n ${DESKTOP_ACTIONS_DIR:-} ]]; then
+    desktop_actions=$(realpath -e "$DESKTOP_ACTIONS_DIR")
+    test -r "$desktop_actions/desktop-actions.sh"
+    bash -n "$desktop_actions/desktop-actions.sh"
+    desktop_mode=desktop-actions
+fi
 mkdir -m700 -- "$out"
 work=$(mktemp -d /var/tmp/y700-file-boot.XXXXXXXX)
 [[ $(realpath -e "$work") =~ ^/var/tmp/y700-file-boot\.[a-zA-Z0-9]{8}$ ]]
@@ -58,6 +65,12 @@ mcopy -o -i outer-esp.fat loader.conf ::/loader/loader.conf
 # Keep the real enrollment/desktop checks; substitute the nested topology and
 # read instrumentation only from the private read-only mount of the outer ESP.
 awk '
+    /^trap .*COMBINED_FAIL line=.* ERR$/ {
+        print "observer_pid=$BASHPID"
+        print "trap \047if [[ $BASHPID == \"$observer_pid\" ]]; then echo \"COMBINED_FAIL line=$LINENO\"; printf \"<5>FILE_TRIAL_OBSERVER_ERROR line=%s\\n\" \"$LINENO\" > /dev/kmsg || :; systemctl --no-block poweroff; fi\047 ERR"
+        root_trap++
+        next
+    }
     /^    \[\[ \$\(findmnt -nro SOURCE,FSTYPE \/\) / {
         print "    /bin/bash /run/y700-file-qa/check-topology.sh"
         changed++
@@ -104,9 +117,12 @@ awk '
     { gsub("/boot/combined-", "/run/y700-file-qa/combined-")
       gsub("root=/dev/vda2 esp=/dev/vda1", "root=$(findmnt -nro SOURCE /) esp=$(findmnt -nro SOURCE /boot)")
       print }
-    END { if (changed != 1 || cold_marker != 1 || greeter_service != 1 || greeter_wait != 1 || login_stage != 1 || desktop_stage != 1 || session_match != 1 || optional != 1) exit 1 }
+    END { if (root_trap != 1 || changed != 1 || cold_marker != 1 || greeter_service != 1 || greeter_wait != 1 || login_stage != 1 || desktop_stage != 1 || session_match != 1 || optional != 1) exit 1 }
 ' "$combined/observe.sh" > combined-observe.sh
 cat >> combined-observe.sh <<'OPTIONAL_DESKTOP'
+if test -r /run/y700-file-qa/desktop-actions.sh; then
+    source /run/y700-file-qa/run-desktop-actions.sh
+fi
 # Optional user-bus reads can stall, even on an already verified desktop. Give
 # their private log a short collection window and never wait for this job.
 optional_dir=$(mktemp -d /run/y700-file-optionals.XXXXXXXX)
@@ -150,6 +166,12 @@ OPTIONAL_DESKTOP
 bash -n combined-observe.sh
 "${AARCH64_CC:-aarch64-linux-gnu-gcc}" -O2 -Wall -Wextra -Werror -static "$combined/touch.c" -o combined-touch
 mcopy -i outer-esp.fat combined-observe.sh combined-touch "$here/check-topology.sh" "$here/check-login-stage.sh" "$here/onboard-diagnostics.sh" ::/
+if [[ $desktop_mode == desktop-actions ]]; then
+    mcopy -i outer-esp.fat "$here/run-desktop-actions.sh" "$desktop_actions/desktop-actions.sh" ::/
+    if [[ -d $desktop_actions/desktop-actions ]]; then
+        mcopy -s -i outer-esp.fat "$desktop_actions/desktop-actions" ::/
+    fi
+fi
 cat > probe.service <<'UNIT'
 [Unit]
 Description=Probe Y700 file-backed EFI desktop trial
@@ -200,7 +222,7 @@ for _ in {1..120}; do [[ ! -f view/disk.gpt ]] || break; sleep .05; done
 qemu_data=()
 if [[ -n ${QEMU_DATA:-} ]]; then qemu_data=(-L "$QEMU_DATA"); fi
 timeout -k 25 2480 "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 \
-    python -B "$here/qemu-file.py" "$work" "$out" "$work/session.qcow2" \
+    python -B "$here/qemu-file.py" "$work" "$out" "$work/session.qcow2" "$desktop_mode" \
     "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_data[@]}" \
     -machine virt,gic-version=3 -cpu max -smp 3 -m 2048 -nodefaults -no-user-config -display none -nic none \
     -device ramfb -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0 \
@@ -208,11 +230,21 @@ timeout -k 25 2480 "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/
     -chardev socket,id=login-phase,path=login-phase.sock,server=on,wait=off \
     -device virtserialport,chardev=login-phase,name=org.y700.login-phase \
     -bios "$bios" -no-reboot -monitor none | tee "$out/touch.log"
-grep -Fxq 'COMBINED_COLD_RELOGIN_PASS two_processes=1 boot_ids_distinct=1 overlay_reused=1' "$out/touch.log"
-for report in "$out/first/report.log" "$out/cold/report.log"; do
+reports=("$out/first/report.log")
+if [[ $desktop_mode == double ]]; then
+    grep -Fxq 'COMBINED_COLD_RELOGIN_PASS two_processes=1 boot_ids_distinct=1 overlay_reused=1' "$out/touch.log"
+    reports+=("$out/cold/report.log")
+fi
+for report in "${reports[@]}"; do
     grep -Fxq 'FILE_TRIAL_EFI entry=y700-file.conf firmware_disk=/dev/vda1 sector=4096 options_preserved=1' "$report"
     grep -Eq '^FILE_TRIAL_LOOPS root=/dev/loop[0-9]+ boot=/dev/loop[0-9]+ parent=/dev/vda2 root_inode=verified esp_inode=verified writable=1$' "$report"
 done
 bash "$here/check-offline.sh" "$work" "$work/session.qcow2" | tee "$out/offline.log"
 verify_sources | tee "$out/after.log"
-echo FILE_TRIAL_POSITIVE_PASS
+if [[ $desktop_mode == desktop-actions ]]; then
+    grep -Fxq 'FILE_TRIAL_DESKTOP_ACTIONS status=passed exit=0' "$out/first/report.log"
+    grep -Eq '^FILE_TRIAL_DESKTOP_RELAY status=complete taps=[0-9]+$' "$out/touch.log"
+    echo FILE_TRIAL_DESKTOP_ACTIONS_PASS
+else
+    echo FILE_TRIAL_POSITIVE_PASS
+fi

@@ -3,8 +3,9 @@
 uid=$(id -u y700)
 pam_session=
 pam_started() {
-    local id data
-    for id in $(loginctl show-user "$uid" -p Sessions --value 2>/dev/null); do
+    local id data sessions
+    sessions=$(loginctl show-user "$uid" -p Sessions --value 2>/dev/null) || return 1
+    for id in $sessions; do
         data=$(loginctl show-session "$id" -p User -p Name -p Service -p Class -p Seat -p Remote -p Type 2>/dev/null) || continue
         if grep -Fxq "User=$uid" <<<"$data" && grep -Fxq 'Name=y700' <<<"$data" &&
            grep -Fxq 'Service=lightdm' <<<"$data" && grep -Fxq 'Class=user' <<<"$data" &&
@@ -17,13 +18,15 @@ pam_started() {
 }
 
 login_timeout() {
-    local stage=$1 name present lightdm pam=0 active=0
+    local stage=$1 name present lightdm pam=0 active=0 state
     lightdm=$(systemctl is-active lightdm || :)
     if pam_started; then
         pam=1
         if [[ $(loginctl show-session "$pam_session" -p Active --value) == yes ]]; then active=1; fi
     fi
-    printf 'FILE_TRIAL_STAGE_TIMEOUT stage=%s lightdm=%s ordinary_pam=%s active=%s\n' "$stage" "$lightdm" "$pam" "$active"
+    printf -v state 'FILE_TRIAL_STAGE_TIMEOUT stage=%s lightdm=%s ordinary_pam=%s active=%s' "$stage" "$lightdm" "$pam" "$active"
+    printf '%s\n' "$state"
+    printf '<5>%s\n' "$state" > /dev/kmsg || :
     for name in xfce4-session xfwm4 xfce4-panel xfdesktop; do
         present=0
         if pgrep -u "$uid" -x "$name" >/dev/null; then present=1; fi
