@@ -12,6 +12,12 @@ attempt=${WIFI_ATTEMPT:-retry}
 case $attempt in retry|fresh) ;; editor|onboard) [[ $security == sae && ${WIFI_ACTOR:-root} == seat ]] || exit 2;; *) exit 2;; esac
 actor=${WIFI_ACTOR:-root}
 case "$actor" in root|seat) ;; *) exit 2;; esac
+rejoin=${WIFI_REJOIN:-0}
+case $rejoin in
+    0) ;;
+    1|2) [[ $security == sae && $actor == seat && $attempt == fresh ]] || exit 2 ;;
+    *) exit 2 ;;
+esac
 systemd_target=
 if [[ $actor == seat ]]; then
     # This fixture attaches the root partition only, without the product ESP.
@@ -49,17 +55,21 @@ install -m644 "$HWSIM_MODULE" "$payload/mac80211_hwsim.ko"
 cp -- "$here/"{session.sh,xfce4-panel.xml,probe.py,fixture-guest.sh,prepare-ap.py} "$payload/"
 install -m755 "$here/fixture-systemd.sh" "$here/seat-actor.sh" "$payload/"
 cp -- "$here/fixture-seat.service" "$payload/"
+if (( rejoin )); then
+    install -m644 -D "$here/../wifi-rejoin/cycles.sh" "$payload/rejoin/cycles.sh"
+    install -m644 "$here/../wifi-rejoin/observer.py" "$payload/rejoin/observer.py"
+fi
 (
     cd "$work/init"
     find . -print0 | cpio --null -o -H newc --quiet | gzip -1 > "$work/initramfs.cpio.gz"
 )
 budget=240
-if [[ $attempt == onboard ]]; then budget=360; fi
+if [[ $attempt == onboard || $rejoin != 0 ]]; then budget=360; fi
 timeout -k 5 "$budget" "$QEMU" -L "$QEMU_DATA" \
     -machine virt,gic-version=3 -cpu max -smp 2 -m 1024 \
     -nodefaults -no-user-config -monitor none -display none -serial stdio -nic none -no-reboot \
     -kernel "$KERNEL_IMAGE" -initrd "$work/initramfs.cpio.gz" \
-    -append "console=ttyAMA0 quiet loglevel=3 panic=5 y700.wifi_fixture=1 y700.wifi_security=$security y700.wifi_attempt=$attempt y700.wifi_actor=$actor $systemd_target" \
+    -append "console=ttyAMA0 quiet loglevel=3 panic=5 y700.wifi_fixture=1 y700.wifi_security=$security y700.wifi_attempt=$attempt y700.wifi_actor=$actor y700.wifi_rejoin=$rejoin $systemd_target" \
     -drive "if=none,id=root,format=$root_format,readonly=on,file=$RAW_ROOT" -device virtio-blk-device,drive=root \
     2>&1 | tr -d '\r' | tee "$work/guest.log"
 grep -Fxq 'WIFI_VM_EXIT=0' "$work/guest.log"
@@ -79,4 +89,8 @@ if [[ $attempt == onboard ]]; then
 fi
 if [[ $actor == seat ]]; then
     grep -Fxq 'WIFI_SEAT ordinary_uid=1 active=1 local=1 type=x11 network_control=yes' "$work/guest.log"
+fi
+if (( rejoin )); then
+    [[ $(grep -Ec '^WIFI_REJOIN_RECOVERED ' "$work/guest.log") == $((rejoin + 1)) ]]
+    grep -Fxq 'WIFI_REJOIN_PASS no_prompt=1 no_manual_activation=1' "$work/guest.log"
 fi

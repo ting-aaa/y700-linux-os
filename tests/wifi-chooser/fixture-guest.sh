@@ -29,10 +29,15 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p /run/wifi-fixture /run/dbus
+rejoin=0
+if grep -qw y700.wifi_rejoin=1 /proc/cmdline; then rejoin=1; fi
+if grep -qw y700.wifi_rejoin=2 /proc/cmdline; then rejoin=2; fi
 test ! -e /sys/module/mac80211_hwsim || fail simulator-already-loaded
-insmod ./mac80211_hwsim.ko radios=2 || fail simulator-load
+radio_count=2
+if (( rejoin == 2 )); then radio_count=3; fi
+insmod ./mac80211_hwsim.ko radios="$radio_count" || fail simulator-load
 radios=(/sys/class/net/wlan*)
-test "${#radios[@]}" = 2 || fail expected-two-radios
+test "${#radios[@]}" = "$radio_count" || fail unexpected-radio-count
 for path in "${radios[@]}"; do
     driver=$(readlink -f "$path/device/driver")
     test "${driver##*/}" = mac80211_hwsim || fail unexpected-radio-driver
@@ -55,19 +60,25 @@ test -S /run/udev/control || fail udev-start
 SYSTEMD_IN_CHROOT=0 udevadm trigger --action=add --subsystem-match=net
 SYSTEMD_IN_CHROOT=0 udevadm settle --timeout=8
 "${ap_net[@]}" ip link set lo up
-"${ap_net[@]}" ip address add 192.0.2.1/24 dev "$ap"
+ap_l3=$ap
+if (( rejoin )); then
+    . ./rejoin/cycles.sh
+    wifi_rejoin_setup
+fi
+"${ap_net[@]}" ip address add 192.0.2.1/24 dev "$ap_l3"
 
 security=$(sed -nE 's/.*[[:space:]]y700.wifi_security=([a-z0-9]+).*/\1/p' /proc/cmdline)
 case $security in open|wpa2|sae) ;; *) fail bad-security-mode;; esac
 uv run --offline --no-project --python /usr/bin/python3 python ./prepare-ap.py "$security" "$ap"
-"${ap_net[@]}" hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & pids+=("$!")
+if (( rejoin == 2 )); then wifi_rejoin_configs; fi
+"${ap_net[@]}" hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & ap_process=$!; pids+=("$ap_process")
 ap_ready() { hostapd_cli -p /run/wifi-fixture/hostapd -i "$ap" status 2>/dev/null | grep -Fxq 'state=ENABLED'; }
 for _ in {1..40}; do
     if ap_ready; then break; fi
     sleep 0.1
 done
 ap_ready || { echo 'WIFI_FIXTURE_ERROR ap-did-not-enable' >&2; exit 1; }
-LD_LIBRARY_PATH=/opt/wifi-test/lib "${ap_net[@]}" dnsmasq --no-daemon --port=0 --interface="$ap" --bind-interfaces \
+LD_LIBRARY_PATH=/opt/wifi-test/lib "${ap_net[@]}" dnsmasq --no-daemon --port=0 --interface="$ap_l3" --bind-interfaces \
     --dhcp-range=192.0.2.11,192.0.2.19,255.255.255.0,1h --dhcp-option=3 --dhcp-authoritative \
     >/dev/null 2>&1 & pids+=("$!")
 dhcp=$!
@@ -135,6 +146,8 @@ PY
         -E XDG_SESSION_TYPE=x11 -E XDG_SESSION_CLASS=user -E XDG_SEAT=seat0 -E XDG_VTNR=1 \
         /opt/wifi-test/seat-actor.sh "$security" &
     seat_job=$!
+    pids+=("$seat_job")
+    if (( rejoin )); then wifi_rejoin_cycles; fi
     tail --pid="$seat_job" -s .3 -n +1 -f /run/wifi-fixture/seat-receipt | grep --line-buffered -E '^WIFI_' || true
     wait "$seat_job" || status=$?
     (( status == 0 )) || fail pam-seat-session
@@ -153,5 +166,9 @@ if [[ $security == sae ]]; then
     grep -Eq '^flags=.*\[MFP\]' <<<"$details" || fail negotiated-pmf-missing
     echo 'WIFI_SAE_NEGOTIATED akm=SAE pmf=1'
 fi
-nmcli -w 8 device disconnect "$station" >/dev/null || fail station-cleanup
+if (( rejoin )); then
+    echo 'WIFI_REJOIN_PASS no_prompt=1 no_manual_activation=1'
+else
+    nmcli -w 8 device disconnect "$station" >/dev/null || fail station-cleanup
+fi
 echo 'WIFI_FIXTURE_PASS nm_connected=1 nl80211_associated=1 local_dhcp=1 local_ping=1'
