@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "scope": "Y700 desktop Onboard live hardware-keyboard detection preference",
+  "replaces": {
+    "package": "onboard",
+    "version": "1.4.1-10",
+    "architecture": "arm64"
+  },
+  "packages": [
+    {
+      "filename": "onboard_1.4.1-10+y7002_arm64.deb",
+      "package": "onboard",
+      "version": "1.4.1-10+y7002",
+      "architecture": "arm64",
+      "size": 345516,
+      "sha256": "d5df0065da2c4583ed2f7f412cbfd9693ea149a334b950c212609fa1287d9c64"
+    }
+  ]
+}
