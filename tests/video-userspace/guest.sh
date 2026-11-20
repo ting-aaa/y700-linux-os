@@ -25,9 +25,19 @@ Xorg "$DISPLAY" -config /opt/video-userspace/dummy.conf -auth "$XAUTHORITY" -nol
 trap 'kill "$xorg" 2>/dev/null || :' EXIT
 for _ in {1..80}; do if xrandr -q >/dev/null 2>&1; then break; fi; sleep .1; done
 xrandr -q >/dev/null
-cp expected.i420 padded.nv12 h264.mp4 hevc.mp4 vp9.webm player.html "$XDG_RUNTIME_DIR/"
+cp h264.mp4 hevc.mp4 vp9.webm player.html "$XDG_RUNTIME_DIR/"
+if [[ -f expected.i420 ]]; then cp expected.i420 padded.nv12 "$XDG_RUNTIME_DIR/"; fi
 cd "$XDG_RUNTIME_DIR"
 py=(/opt/video-userspace/uv run --offline --no-project --python /usr/bin/python3 python -B)
+if [[ -f /opt/video-userspace/player.tar.gz ]]; then
+    mkdir -p /dev/pts
+    mount -t devpts devpts /dev/pts
+    ln -s /proc/self/fd /dev/fd
+    tar -xzf /opt/video-userspace/player.tar.gz -C /tmp
+    bash /tmp/y700-video-player/install.sh --install
+    bash /tmp/y700-video-player/install.sh --check
+    exec timeout -k 3 150 runuser -u y700 -- dbus-run-session -- bash /opt/video-userspace/session.sh
+fi
 timeout -k 3 65 runuser -u y700 -- "${py[@]}" /opt/video-userspace/gstreamer.py
 runuser -u y700 -- unshare --user --map-root-user true
 timeout -k 3 135 runuser -u y700 -- dbus-run-session -- "${py[@]}" /opt/video-userspace/desktop.py

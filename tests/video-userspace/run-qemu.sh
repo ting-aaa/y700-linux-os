@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Test sealed Debian userspace in an ARM guest with no V4L2 devices or network adapter.
 set -euo pipefail
-if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT.ext4 KERNEL ARM64_BUSYBOX ARM64_UV ARM64_XORG_DUMMY.deb GENERATED_CLIPS [BOARD_VP9_DIRECTORY]' >&2
+if (( $# < 6 || $# > 8 )) || [[ $# == 8 && $7 != --player ]]; then
+    echo 'Usage: run-qemu.sh ROOT.ext4 KERNEL ARM64_BUSYBOX ARM64_UV ARM64_XORG_DUMMY.deb GENERATED_CLIPS [BOARD_VP9_DIRECTORY | --player BUNDLE.tar.gz]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -19,7 +19,16 @@ install -m755 "$4" "$work/init/test/uv"
 cp "$5" "$work/init/test/dummy.deb"
 cp "$here/../bluetooth-virtual/dummy.conf" "$work/init/test/"
 cp "$here/"{gstreamer.py,desktop.py,player.html,guest.sh} "$work/init/test/"
-cp "$6/"{expected.i420,padded.nv12,h264.mp4,hevc.mp4,vp9.webm} "$work/init/test/"
+cp "$6/"{h264.mp4,hevc.mp4,vp9.webm} "$work/init/test/"
+limit=240
+if (( $# == 8 )); then
+    cp "$8" "$work/init/test/player.tar.gz"
+    cp "$here/../video-player/"{check-x11.py,session.sh} "$work/init/test/"
+    cp "$here/../video-player/dummy.conf" "$work/init/test/dummy.conf"
+    limit=600
+else
+    cp "$6/"{expected.i420,padded.nv12} "$work/init/test/"
+fi
 if (( $# == 7 )); then
     cp "$7/clip.webm" "$work/init/test/board-vp9.webm"
     cp "$7/reference.sha256" "$work/init/test/board-vp9.sha256"
@@ -53,7 +62,7 @@ chmod 755 "$work/init/init"
 (cd "$work/init"; find . -print0 | cpio --null --quiet -o -H newc | gzip -1 >"$work/initrd")
 args=()
 if [[ -n ${QEMU_FIRMWARE_DIR:-} ]]; then args+=(-L "$QEMU_FIRMWARE_DIR"); fi
-timeout -k 5 240 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
+timeout -k 5 "$limit" "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     -machine virt,gic-version=3 -cpu max -smp 3 -m 1536 -nodefaults -no-user-config \
     -nic none -no-reboot -monitor none -display none -serial stdio \
     -kernel "$kernel" -initrd "$work/initrd" -append 'console=ttyAMA0 quiet loglevel=3 panic=4 y700.video_userspace=1' \

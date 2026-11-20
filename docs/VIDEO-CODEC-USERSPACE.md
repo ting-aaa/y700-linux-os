@@ -21,7 +21,7 @@ Iris exposes linear NV12 and P010 plus Qualcomm compressed `Q08C` and `Q10C`. GS
 ## Two frame-level controls
 
 * **Linear capture layout.** The fixture generates six NV12 frames, each with 192 × 112 visible pixels, 256-byte row stride, 128 allocated luma rows, UV offset 32,768 and 49,152 bytes per frame. It fills the padding with `0xa5`. The stock `rawvideoparse` and `videoconvert` elements reconstructed all 193,536 expected visible I420 bytes. This qualifies conversion of known linear buffers. Qualcomm compressed surfaces and 10-bit output need separate tests. [GStreamer rawvideoparse](https://gstreamer.freedesktop.org/documentation/rawparse/rawvideoparse.html)
-* **Same VP9 file as the board comparison.** The ordinary local-file `uridecodebin` pipeline decoded all 24 distinct 384 × 256 pictures. Every visible I420 SHA-256 matched the reference in order, including picture one. WebM SHA-256 is `6c2148e9797c719252885000e7b907e0db2dfbf537a696d6816d0d1c3fd7030e`. The reference hash list has SHA-256 `f6d6536e1aa99d2d9b9d7f44ec980d95cd85e4c8bb7f1fe66e15a989ec293a9c`. This provides a software control for the tablet's missing first VP9 picture.
+* **Same VP9 file as the board comparison.** The ordinary local-file `uridecodebin` pipeline decoded all 24 distinct 384 × 256 pictures. Every visible I420 SHA-256 matched the reference in order, including picture one. WebM SHA-256 is `6c2148e9797c719252885000e7b907e0db2dfbf537a696d6816d0d1c3fd7030e`. The reference hash list has SHA-256 `f6d6536e1aa99d2d9b9d7f44ec980d95cd85e4c8bb7f1fe66e15a989ec293a9c`. The stock hardware path omitted the first picture of this file. A separately tested decoder plugin delivered all 24 on the tablet. [Physical VP9 diagnosis and fix](VIDEO-VP9.md)
 
 ## Repeat the test
 
