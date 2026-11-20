@@ -27,6 +27,8 @@ if [[ ${FIXTURE_LINK_ROOT:-} == yes ]]; then
 else
     cp --sparse=always -- "$base/root.ext4.zst" "$1/root.ext4"
 fi
+cp -- "$base/identity.txt" "$1/identity.txt"
+cp -- "$base/RAW-SHA256SUMS" "$1/SHA256SUMS"
 EOF
 
 qcam=y700-camera-qcam_0.7.2-1~bpo13+1.y7002_arm64.deb
@@ -156,6 +158,20 @@ debugfs -R "dump $address $work/content" "$work/personal/root.ext4" 2>> "$work/d
 cmp -s -- "$work/content" "$expected"
 ! cmp -s -- "$work/generic/root.ext4" "$work/personal/root.ext4"
 reject 'Choose a new destination' --bluetooth-address "$seed" "$work/personal"
+
+cp -- "$bundle/SHA256SUMS" "$work/delta-manifest"
+touch "$bundle/prepare-bluetooth-identity.py" "$bundle/README.md"
+(cd "$bundle" && sha256sum base/SHA256SUMS base/unpack.sh unpack.sh prepare-bluetooth-identity.py README.md > SHA256SUMS)
+unpack --verify >/dev/null
+unpack "$work/full" > "$work/full.log"
+cmp "$work/full/root.ext4" "$work/generic/root.ext4"
+unpack --bluetooth-address "$seed" "$work/full-personal" > "$work/full-personal.log"
+(cd "$work/full-personal" && sha256sum --strict -c SHA256SUMS) >/dev/null
+debugfs -R "dump $address $work/full-content" "$work/full-personal/root.ext4" 2>> "$work/debugfs.log"
+cmp -- "$work/full-content" "$expected"
+printf 'Changed helper\n' >> "$bundle/prepare-bluetooth-identity.py"
+reject 'prepare-bluetooth-identity.py: FAILED' --verify
+cp -- "$work/delta-manifest" "$bundle/SHA256SUMS"
 
 chmod 644 "$seed"
 reject 'private, caller-owned regular file' --bluetooth-address "$seed" "$work/rejected"

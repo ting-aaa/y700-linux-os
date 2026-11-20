@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reconstruct the updated development image from the compressed base and QCOW2.
+# Extract a compressed full image or a historical compressed base plus update.
 set -euo pipefail
 umask 077
 usage() { echo "Usage: bash $0 --verify | [--bluetooth-address PRIVATE_FILE] NEW_DIRECTORY" >&2; exit 2; }
@@ -119,8 +119,13 @@ for version in dev8 dev9 dev10 "${full_layer_versions[@]}"; do
         fi
     done
 done
-[[ -n $patch ]] || { echo 'Unsupported update manifest' >&2; exit 1; }
-manifest_names "$bundle/RAW-SHA256SUMS" asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt
+if [[ -n $patch ]]; then
+    manifest_names "$bundle/RAW-SHA256SUMS" asphalt-prc-u-boot.img linux-boot.fat root.ext4 identity.txt
+else
+    manifest_names "$bundle/SHA256SUMS" base/SHA256SUMS base/unpack.sh unpack.sh prepare-bluetooth-identity.py README.md ||
+        fail 'Unsupported update manifest'
+    version=standalone
+fi
 manifest_names "$bundle/base/SHA256SUMS" asphalt-prc-u-boot.img.zst linux-boot.fat.zst root.ext4.zst identity.txt RAW-SHA256SUMS
 if [[ $1 != --verify ]]; then
     [[ -n $1 && $1 != -* && $1 != */ ]] || exit 2
@@ -129,16 +134,18 @@ if [[ $1 != --verify ]]; then
     [[ ! -e $target && ! -L $target ]] || { echo 'Choose a new destination' >&2; exit 1; }
     # Reserve the three logical image sizes plus the private overlay and metadata.
     available=$(df -B1 --output=avail "$parent" | tail -1)
-    required=$((41406464 + 1073741824 + 6442450944 + $(stat -Lc %s "$bundle/$patch") + 16777216))
+    patch_size=0
+    if [[ -n $patch ]]; then patch_size=$(stat -Lc %s "$bundle/$patch"); fi
+    required=$((41406464 + 1073741824 + 6442450944 + patch_size + 16777216))
     (( available >= required )) || { echo "Need $required free bytes at the destination" >&2; exit 1; }
 fi
 (cd "$bundle" && sha256sum --strict -c SHA256SUMS)
 if [[ $1 == --verify ]]; then
     bash "$bundle/base/unpack.sh" --verify
-    echo 'Compressed base and update payload verified. Extraction checks the complete resulting raw image.'
+    echo 'Bundle verified. Extraction also checks the resulting raw image.'
     exit
 fi
-command -v qemu-img >/dev/null
+if [[ -n $patch ]]; then command -v qemu-img >/dev/null; fi
 if $personalize; then
     command -v debugfs >/dev/null && command -v e2fsck >/dev/null || fail 'Bluetooth personalization requires e2fsprogs'
     read_private_address "$private_file"
@@ -147,7 +154,8 @@ stage=$(mktemp -d --tmpdir="$parent" ".y700-$version.XXXXXXXX")
 cleanup() {
     if [[ -d $stage ]]; then
         rm -f -- "$stage/image/"{asphalt-prc-u-boot.img,linux-boot.fat,root.ext4,identity.txt,SHA256SUMS,UNPERSONALIZED-SHA256SUMS} \
-            "$stage/image/$patch" "$stage/"{bluetooth-input,bluetooth-readback}
+            "$stage/"{bluetooth-input,bluetooth-readback}
+        if [[ -n $patch ]]; then rm -f -- "$stage/image/$patch"; fi
         if [[ -d $stage/image ]]; then rmdir -- "$stage/image"; fi
         rmdir -- "$stage"
     fi
@@ -160,12 +168,14 @@ bash "$bundle/base/unpack.sh" "$stage/image"
 cd "$stage/image"
 # Use a private overlay copy; only the freshly unpacked regular file is writable.
 [[ -f root.ext4 && ! -L root.ext4 && $(stat -c %h root.ext4) == 1 ]]
-cp --sparse=always -- "$bundle/$patch" "$patch"
-qemu-img check -f qcow2 "$patch"
-qemu-img commit -d -f qcow2 -b "$stage/image/root.ext4" "$patch"
-rm -- "$patch"
-cp -- "$bundle/identity.txt" identity.txt
-cp -- "$bundle/RAW-SHA256SUMS" SHA256SUMS
+if [[ -n $patch ]]; then
+    cp --sparse=always -- "$bundle/$patch" "$patch"
+    qemu-img check -f qcow2 "$patch"
+    qemu-img commit -d -f qcow2 -b "$stage/image/root.ext4" "$patch"
+    rm -- "$patch"
+    cp -- "$bundle/identity.txt" identity.txt
+    cp -- "$bundle/RAW-SHA256SUMS" SHA256SUMS
+fi
 sha256sum --strict -c SHA256SUMS
 if $personalize; then personalize_root; fi
 cd "$stage"
