@@ -82,4 +82,3 @@ for actor in keyboard panel-gain; do
     if ((result != 0)); then overall=1; fi
 done
 exit "$overall"
-
