@@ -7,3 +7,4 @@
 # Unified diff context starts with a space, including before tabs and on blank lines.
 packaging/camera-qcam/*.patch whitespace=-blank-at-eol,-space-before-tab
 packaging/power-manager-touch/*.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
+tests/camera-focus-ldo5.patch whitespace=-space-before-tab
