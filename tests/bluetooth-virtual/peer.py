@@ -1,6 +1,7 @@
 """HID over GATT test peripheral for the marked two-controller QEMU guest."""
 import socket
 import sys
+import time
 from pathlib import Path
 
 import dbus
@@ -11,17 +12,11 @@ from gi.repository import GLib
 import adv
 import classic
 import gatt
+import keyboard
 
 BLUEZ = "org.bluez"
 HID = "00001812-0000-1000-8000-00805f9b34fb"
 CONTROL = "/run/y700-virtual-hid.sock"
-MAP = bytes.fromhex(
-    "05 01 09 06 a1 01 85 01 05 07 09 6a 15 00 25 01 75 01 95 01 81 02 "
-    "75 07 95 01 81 03 c0 "
-    "05 01 09 02 a1 01 85 02 09 01 a1 00 05 09 19 01 29 03 15 00 25 01 "
-    "95 03 75 01 81 02 95 01 75 05 81 03 05 01 09 30 09 31 09 38 15 81 "
-    "25 7f 75 08 95 03 81 06 c0 c0"
-)
 
 
 def uuid(short):
@@ -74,9 +69,9 @@ class HidApplication(gatt.Application):
         service = gatt.Service(bus, 0, HID, True)
         self.add_service(service)
         Characteristic(bus, service, "2a4a", ["read"], b"\x11\x01\x00\x02")
-        Characteristic(bus, service, "2a4b", ["read"], MAP)
+        Characteristic(bus, service, "2a4b", ["read"], keyboard.REPORT_MAP)
         Characteristic(bus, service, "2a4c", ["write-without-response"], b"\x00")
-        self.key = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"], bytes(1), 1)
+        self.key = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"], keyboard.CLEAR, 1)
         self.mouse = Characteristic(bus, service, "2a4d", ["encrypt-read", "notify"], bytes(4), 2)
 
     def handle_control(self, listener, condition, advertise_again):
@@ -90,10 +85,14 @@ class HidApplication(gatt.Application):
                 client.sendall(b"resuming")
                 return True
             if command == b"emit" and ready:
-                self.key.send([1])
-                self.key.send([0])
+                self.key.send(keyboard.report(keyboard.F15))
+                self.key.send(keyboard.CLEAR)
                 self.mouse.send([1, 7, 253, 1])
                 self.mouse.send([0, 0, 0, 0])
+            if command.startswith(b"type:") and ready:
+                for report in keyboard.typing_reports(command[5:].decode("ascii")):
+                    self.key.send(report)
+                    time.sleep(.025)
             client.sendall(b"ready" if ready else b"waiting")
         return True
 
@@ -144,7 +143,7 @@ def main():
     if sys.argv[1:] == ["classic"]:
         obj = bus.get_object(BLUEZ, "/org/bluez/hci1")
         addr = dbus.Interface(obj, dbus.PROPERTIES_IFACE).Get(BLUEZ + ".Adapter1", "Address")
-        with classic.registered(str(addr), MAP):
+        with classic.registered(str(addr), keyboard.REPORT_MAP):
             print("PEER_READY", flush=True)
             GLib.MainLoop().run()
         return

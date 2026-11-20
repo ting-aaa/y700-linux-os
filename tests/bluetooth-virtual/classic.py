@@ -2,7 +2,9 @@
 import ctypes as C
 import socket
 import struct
+import time
 from contextlib import contextmanager
+import keyboard
 
 HID = "00001124-0000-1000-8000-00805f9b34fb"
 
@@ -79,10 +81,15 @@ def outgoing(peer, host):
             channel.connect((host, psm))
             print(f"HIDP_CONNECTED_PSM_{psm:02X}", flush=True)
 
-        def emit():
-            for data in (b"\xa1\x01\x01", b"\xa1\x01\x00",
-                         bytes.fromhex("a1 02 01 07 fd 01"), bytes.fromhex("a1 02 00 00 00 00")):
-                channels[1].sendall(data)
+        def emit(nonce=None):
+            if nonce is None:
+                for data in (b"\xa1\x01" + keyboard.report(keyboard.F15), b"\xa1\x01" + keyboard.CLEAR,
+                             bytes.fromhex("a1 02 01 07 fd 01"), bytes.fromhex("a1 02 00 00 00 00")):
+                    channels[1].sendall(data)
+            else:
+                for report in keyboard.typing_reports(nonce):
+                    channels[1].sendall(b"\xa1\x01" + report)
+                    time.sleep(.025)
             return True
 
         yield emit

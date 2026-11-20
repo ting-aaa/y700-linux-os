@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from contextlib import contextmanager
 import pwd
+import secrets
 import select
 import socket
 import struct
@@ -13,6 +14,7 @@ import time
 
 import dbus
 import classic as hidp
+import keyboard
 
 BLUEZ = "org.bluez"
 ADAPTER = BLUEZ + ".Adapter1"
@@ -34,7 +36,7 @@ def wait(description, check, seconds=20):
 
 def control(command):
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as sock:
-        sock.settimeout(2)
+        sock.settimeout(12 if command.startswith(b"type:") else 2)
         sock.connect("/run/y700-virtual-hid.sock")
         sock.sendall(command)
         return sock.recv(32) == b"ready"
@@ -58,21 +60,23 @@ def check_onboard_peer(address, phase):
     parents = {(Path("/sys/class/input") / event / "device").resolve()
                for event in inputs_for(address)}
     assert bool(parents) == (phase == "connected")
+    text_nodes = 0
     for parent in parents:
         output = subprocess.check_output(
             ["udevadm", "info", "--query=property", str(parent)], text=True)
         properties = dict(line.split("=", 1) for line in output.splitlines())
         assert properties["PHYS"].strip('"') and properties["ID_INPUT"] == "1"
-        assert properties.get("ID_INPUT_KEYBOARD") != "1"
-    # This VM has no other input hardware. Both profiles advertise only F15
-    # plus pointer reports; neither should suppress Onboard as a text keyboard.
-    assert not osk.UDev().get_keyboard_devices()
-    print(f"ONBOARD_UDEV phase={phase} peer_inputs_with_phys={len(parents)} text_keyboards=0",
-          flush=True)
+        text_nodes += properties.get("ID_INPUT_KEYBOARD") == "1"
+    # This VM has only the paired input hardware. The F15-only profile stays
+    # negative; exactly one full keyboard should appear with the typing profile.
+    expected = int(keyboard.TEXT_MODE and phase == "connected")
+    assert text_nodes == expected
+    assert len(osk.UDev().get_keyboard_devices()) == expected
+    print(f"ONBOARD_UDEV phase={phase} peer_inputs_with_phys={len(parents)} text_keyboards={expected}", flush=True)
 
 
 @contextmanager
-def desktop_observer(address):
+def desktop_observer(address, nonce):
     if "Y700_GTK_HID" not in os.environ:
         yield
         return
@@ -83,6 +87,8 @@ def desktop_observer(address):
         args = ["runuser", "-u", "y700", "--", "env", "UV_CACHE_DIR=" + directory + "/cache",
                 "./uv", "run", "--offline", "--no-project", "--python", "/usr/bin/python3",
                 "python", "-B", "desktop.py", str(address), str(ready)]
+        if nonce is not None:
+            args.append(nonce)
         with subprocess.Popen(args) as witness:
             def is_ready():
                 if witness.poll() is not None:
@@ -91,7 +97,7 @@ def desktop_observer(address):
             try:
                 wait("GTK_INPUT_ARMED", is_ready, 45)
                 yield
-                if witness.wait(timeout=12) != 0:
+                if witness.wait(timeout=20) != 0:
                     raise RuntimeError("Missing window input from the paired device")
             finally:
                 if witness.poll() is None:
@@ -123,9 +129,12 @@ def verify_evdev(address, emit):
             os.close(fd)
 
 
-def verify_inputs(address, emit):
-    with desktop_observer(address):
+def verify_inputs(address, emit, send_text=None):
+    nonce = secrets.token_hex(4) if keyboard.TEXT_MODE else None
+    with desktop_observer(address, nonce):
         verify_evdev(address, emit)
+        if nonce is not None:
+            assert send_text(nonce)
 
 
 def main():
@@ -162,7 +171,7 @@ def main():
             with hidp.outgoing(str(address), str(host)) as emit:
                 wait("CLASSIC_BT_EVDEV_CREATED", lambda: list(inputs_for(address)))
                 wait("CLASSIC_CONNECTED_WITH_BOND", lambda: state()["Connected"] and state()["Bonded"])
-                verify_inputs(address, emit)
+                verify_inputs(address, emit, emit)
                 check_onboard_peer(address, "connected")
             if attempt == 0:
                 if state()["Connected"]:
@@ -177,7 +186,7 @@ def main():
         wait("HOG_CONNECTED_AND_RESOLVED", lambda: state()["Connected"] and state()["ServicesResolved"])
         wait("REPORTS_SUBSCRIBED", lambda: control(b"ready"))
         wait("BT_EVDEV_CREATED " + address, lambda: list(inputs_for(address)))
-        verify_inputs(address, lambda: control(b"emit"))
+        verify_inputs(address, lambda: control(b"emit"), lambda nonce: control(b"type:" + nonce.encode("ascii")))
         check_onboard_peer(address, "connected")
         if attempt == 0:
             dev.Disconnect(timeout=15)

@@ -23,7 +23,20 @@ In both desktop runs, Xorg exposed the F15 report as a keyboard and the pointer 
 
 The reduced receipts are `out/bluetooth-virtual/onboard/le.log` and `classic.log` in the same directory. The original report map supplies F15 and pointer input for both transports.
 
-Onboard's native filter requires `ID_INPUT_KEYBOARD=1` and a `PHYS` property. Debian's udev input classifier checks the low key bitmap for all keycodes 1 through 31. This excludes the fixture's F15-only interface and the tablet's single power and volume keys. The fixture covers this false-positive case. A text-capable keyboard needs its own positive test. [Onboard udev enumeration](https://sources.debian.org/src/onboard/1.4.1-10/Onboard/osk/osk_udev.c/#L99) · [systemd 257.13 input classifier](https://github.com/systemd/systemd/blob/v257.13/src/udev/udev-builtin-input_id.c#L367-L375)
+Onboard's native filter requires `ID_INPUT_KEYBOARD=1` and a `PHYS` property. Debian's udev input classifier checks the low key bitmap for all keycodes 1 through 31. This excludes the fixture's F15-only interface and the tablet's single power and volume keys. [Onboard udev enumeration](https://sources.debian.org/src/onboard/1.4.1-10/Onboard/osk/osk_udev.c/#L99) · [systemd 257.13 input classifier](https://github.com/systemd/systemd/blob/v257.13/src/udev/udev-builtin-input_id.c#L367-L375)
+
+## Typing and editing on dev12.5
+
+On November 20 the sealed dev12.5 ARM64 root, SHA-256 `041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6`, passed five GTK text-entry checks with the Y700 7.3.4 kernel, BlueZ 5.82 and Onboard `1.4.1-10+y7002`. Two virtual controllers performed pairing inside each QEMU guest. The LE accessory used GATT notifications. The Classic accessory used the HIDP interrupt channel. Both advertised an eight-byte keyboard input report with modifier bits and six key slots alongside their mouse report. [Virtual accessory](../tests/bluetooth-virtual/keyboard.py)
+
+| Transport | Connections that delivered text and pointer input |
+| --- | --- |
+| LE HID over GATT | Initial pairing, explicit reconnect, automatic reconnect after the bonded accessory powered off and resumed advertising |
+| Classic HIDP | Initial bonded connection and accessory-initiated reconnect |
+
+Each connection received a fresh eight-hex-digit challenge. The accessory typed `Hid `, the challenge and a deliberately extra letter. It sent Backspace, typed `X!` with Shift, moved left twice, inserted a hyphen and sent Ctrl+End. The focused GTK entry running as UID 1000 independently recorded the intermediate edits, final string and final cursor position. All five challenges matched. Every press and release came from the Xorg/libinput keyboard slave whose evdev node matched the paired address and `BUS_BLUETOOTH`. The kernel and GTK also observed the original F15, mouse button, motion and wheel sequence. [GTK input observer](../tests/bluetooth-virtual/desktop.py)
+
+Onboard's installed native enumerator reported one typing keyboard while each full keyboard was connected and zero before pairing and after the observed disconnects. The F15-only profile remained available as a separate negative control. These PC runs exercise Xorg and GTK over the native BlueZ transports. Physical radio range, accessory compatibility, suspend and real tablet typing still need hardware measurements.
 
 ## LE bond across two cold boots
 
@@ -58,6 +71,15 @@ bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}" --cold-reboot-linked
 ```
 
 For both GTK variants, repeat those commands with `XORG_DUMMY_DEB` set to Debian's ARM64 `xserver-xorg-video-dummy` package, version `1:0.4.0-1+b2`, SHA-256 `5ed4d469b062060a051d7d0e5edaaf5f1d3c93d9abc3f7989e1beee018cc0c5d`. Each window prints its source IDs, event nodes and observed events. The runner requires `Y700_GTK_HID_INPUT_PASS` once per connection.
+
+For the dev12.5 typing checks, use the same kernel, emulator, BusyBox, uv, BlueZ and dummy-video inputs. Pass the extracted ext4 file as the first argument and select the raw format. Leave `Y700_BT_TYPING` unset to run the F15-only control. Both profiles open the product root read-only.
+
+```sh
+export XORG_DUMMY_DEB="$dummy_deb" Y700_BT_ROOT_FORMAT=raw
+inputs=("$root_ext4" "$kernel_build" "$busybox_arm64" "$uv_arm64" "$bluez_src" "$btvirt_arm64")
+Y700_BT_TYPING=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}"
+Y700_BT_TYPING=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}" --classic
+```
 
 The runner accepts `QEMU_SYSTEM_AARCH64` and `QEMU_FIRMWARE_DIR` for a non-system QEMU installation. It verifies the Y700 kernel, module symbols, VHCI source, BlueZ example sources and `btvirt` hashes. The product kernel omits the virtual HCI driver. The runner builds that upstream driver as an external test module against the exact kernel tree and loads it in the VM. The product root supplies the regular Bluetooth, crypto and input modules, daemon, system D-Bus and Python libraries. The guest runs Python through uv and powers off after each test.
 

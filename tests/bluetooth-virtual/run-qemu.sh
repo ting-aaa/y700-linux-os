@@ -2,7 +2,7 @@
 # Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT.qcow2 Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-reboot|--cold-reboot-linked]' >&2
+    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-reboot|--cold-reboot-linked]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -21,6 +21,15 @@ if (( $# == 7 )); then
         --cold-reboot-linked) marker=Y700_COLD_SEED_PASS; shutdown_case=y700.virtual_linked_shutdown=1 ;;
         *) exit 2 ;;
     esac
+fi
+root_format=${Y700_BT_ROOT_FORMAT:-qcow2}
+case $root_format in qcow2|raw) ;; *) echo 'Unsupported root format' >&2; exit 2 ;; esac
+if [[ ${Y700_BT_TYPING:-0} == 1 ]]; then
+    [[ -n ${XORG_DUMMY_DEB:-} && $marker != Y700_COLD_SEED_PASS ]] || {
+        echo 'Typing requires XORG_DUMMY_DEB and a single-boot LE or Classic run' >&2; exit 2;
+    }
+    extra_cmdline+=" y700.virtual_typing=1"
+    printf 'TYPING_ROOT format=%s sha256=' "$root_format"; sha256sum "$root"
 fi
 fixture=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/y700-virtual-hid.XXXXXXXX")
@@ -44,7 +53,7 @@ make -s -C "$kernel" M="$work/module" ARCH=arm64 LLVM="${LLVM:--21}" modules
 cp "$work/module/hci_vhci.ko" "$work/init/test/"
 cp "$bluez/test/example-gatt-server" "$work/init/test/gatt.py"
 cp "$bluez/test/example-advertisement" "$work/init/test/adv.py"
-cp "$fixture/"{central.py,peer.py,classic.py,cold-boot.py,guest.sh} "$work/init/test/"
+cp "$fixture/"{central.py,peer.py,classic.py,keyboard.py,cold-boot.py,guest.sh} "$work/init/test/"
 install -m755 "$busybox" "$work/init/bin/busybox"
 install -m755 "$uv" "$work/init/test/uv"
 install -m755 "$btvirt" "$work/init/test/btvirt"
@@ -91,7 +100,7 @@ boot() {
     -display none -monitor none -serial stdio -nic none -no-reboot \
     -kernel "$kernel/arch/arm64/boot/Image" -initrd "$work/initrd" \
     -append "console=ttyAMA0 loglevel=4 y700.virtual_hid=1 $extra_cmdline panic=4" \
-    -drive "if=none,id=root,format=qcow2,readonly=on,file=$root" -device virtio-blk-device,drive=root \
+    -drive "if=none,id=root,format=$root_format,readonly=on,file=$root" -device virtio-blk-device,drive=root \
     "${state_disk[@]}" \
     </dev/null 2>&1 | tr -d '\r' | tee "$work/run.log"
     grep -Fxq "$marker" "$work/run.log"
@@ -112,4 +121,7 @@ if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
     expected=3
     [[ $marker != Y700_VIRTUAL_CLASSIC_INPUT_PASS ]] || expected=2
     [[ $(grep -Fxc Y700_GTK_HID_INPUT_PASS "$work/run.log") == "$expected" ]]
+    if [[ ${Y700_BT_TYPING:-0} == 1 ]]; then
+        [[ $(grep -Fxc Y700_GTK_BT_TYPING_PASS "$work/run.log") == "$expected" ]]
+    fi
 fi
