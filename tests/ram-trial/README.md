@@ -1,0 +1,15 @@
+# Diskless dev12.5 RAM boot
+
+Run on a Linux PC with an ARM64 QEMU system emulator, an AArch64 cross compiler, uv, `dtc` tooling and room to run a 9 GiB guest. Provide the sealed RAM trial directory and the same virtual board DT used by the combined EFI fixture.
+
+```sh
+bash tests/ram-trial/run.sh "$sealed_ram_trial" "$virt_dtb" "$new_log_dir"
+```
+
+The host verifies the input manifest and the exact candidate kernel before and after the run. It copies the virtual DT and adjusts only its RAM size, keeping the original 1024×768 simple-framebuffer at `0xbe000000`. QEMU directly boots the sealed kernel and its unchanged production initrd without disks or a NIC. After the production RAM init switches to systemd, a temporary unit accepts the small observer and touchscreen program over private virtio serial. All QA changes live inside this disposable guest.
+
+The observer proves the overlay root uses the read-only ext4 inside the initrd's in-memory SquashFS carrier and confines writes to a tmpfs upper layer. It records the live initrd bounds, available RAM and the absence of disk-backed swap. The test uses Type-B contacts to reject a password mismatch, perform real first enrollment and log in through the rendered Arctica keyboard. It checks that the resulting ordinary LightDM PAM session owns the active local seat0 Xfce desktop and requests normal power-off. The synthetic password stays in the host process's memory and the guest's transient account state.
+
+For a PC-only baseline-to-candidate kernel handover, additionally set `RAM_TRIAL_KEXEC=1` and `RAM_TRIAL_BASELINE_KERNEL` to the sealed baseline kernel for the optional `tests/ram-handover/` helper. This mode checks both kernel boot identities, handoff receipts and the live device tree's kexec marker.
+
+Tool overrides are `QEMU_SYSTEM_AARCH64`, `QEMU_DATA`, `AARCH64_CC` and `UV_BIN`. The fixture uses the virtual board; a successful result covers the diskless ARM64 kernel and Debian desktop path in QEMU.
