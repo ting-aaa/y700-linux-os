@@ -8,14 +8,14 @@ fi
 fixture=$(cd -- "$(dirname -- "$0")" && pwd)
 if [[ ${1:-} != --session ]]; then
     case "${1:-desktop}" in
-        desktop|transport|timing-fresh|timing-existing) ;;
-        *) echo 'Usage: run.sh [desktop|transport|timing-fresh|timing-existing]' >&2; exit 2 ;;
+        desktop|transport|timing-fresh|timing-existing|first-login|first-login-shortcut|first-login-existing) ;;
+        *) echo 'Usage: run.sh [desktop|transport|timing-fresh|timing-existing|first-login[-shortcut|-existing]]' >&2; exit 2 ;;
     esac
     export QA_UV QA_PACTL QA_HELPER
     QA_UV=$(command -v uv)
     QA_HELPER=${Y700_PANEL_QA_HELPER:-/usr/libexec/y700-panel-audio}
     test -x "$QA_HELPER"
-    if [[ ${1:-desktop} == desktop || ${1:-desktop} == transport ]]; then
+    if [[ ${1:-desktop} != timing-* ]]; then
         QA_PACTL=$(command -v "${Y700_PANEL_QA_PACTL:-pactl}")
         test -r /etc/xdg/autostart/y700-session.desktop
     fi
@@ -81,6 +81,13 @@ for _ in {1..100}; do [[ ! -s display ]] || break; sleep 0.1; done
 export DISPLAY=":$(cat display)"
 xdpyinfo >/dev/null
 dbus-update-activation-environment DISPLAY XDG_RUNTIME_DIR
+if [[ $mode == first-login* ]]; then
+    export Y700_PANEL_ORIGINAL_CONFIG_DIRS=$XDG_CONFIG_DIRS
+    run_probe "$fixture/first-login.py" prepare "$mode"
+    BASESTARTUP=xfce4-session
+    . /etc/X11/Xsession.d/61y700_panel_default
+    run_probe "$fixture/first-login.py" verify-pre-start "$mode"
+fi
 if [[ $mode == transport ]]; then
     shortcut=(xfconf-query -c xfce4-keyboard-shortcuts)
     "${shortcut[@]}" -p /xfwm4/custom/override -n -t bool -s true
@@ -116,4 +123,8 @@ for _ in {1..100}; do "$QA_PACTL" list short sinks | grep -F 'RUNNING' -q && bre
 "$QA_PACTL" list short sinks | grep -F 'RUNNING'
 "$QA_PACTL" set-sink-volume "$sink" 40%
 "$QA_PACTL" set-sink-mute "$sink" 1
-run_probe "$fixture/desktop.py" "$mode"
+if [[ $mode == first-login* ]]; then
+    run_probe "$fixture/first-login.py" verify "$mode"
+else
+    run_probe "$fixture/desktop.py" "$mode"
+fi

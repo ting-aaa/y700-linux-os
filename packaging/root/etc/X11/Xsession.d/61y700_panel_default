@@ -1,0 +1,10 @@
+# Offer the new-user panel layout before the Xfce session manager starts.
+case ${BASESTARTUP:-} in
+    startxfce4|xfce4-session)
+        if y700_panel_default=$(/usr/libexec/y700-panel-default) && [ -n "$y700_panel_default" ]; then
+            XDG_CONFIG_DIRS=$y700_panel_default:${XDG_CONFIG_DIRS:-/etc/xdg}
+            export XDG_CONFIG_DIRS
+        fi
+        unset y700_panel_default
+        ;;
+esac

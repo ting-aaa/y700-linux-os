@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+"""Build Xfce's first-login panel template from this system's current default."""
+
+import os
+from pathlib import Path
+import shutil
+import stat
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+
+
+TEMPLATE = Path("xfce4/panel/default.xml")
+CHANNELS = Path("xfce4/xfconf/xfce-perchannel-xml")
+PANEL = CHANNELS / "xfce4-panel.xml"
+SHORTCUTS = CHANNELS / "xfce4-keyboard-shortcuts.xml"
+
+
+def property_named(parent, name):
+    return parent.find(f"./property[@name='{name}']")
+
+
+def add_audio(tree):
+    root = tree.getroot()
+    panels = property_named(root, "panels")
+    plugins = property_named(root, "plugins")
+    configver = property_named(root, "configver")
+    if (root.tag != "channel" or root.get("name") != "xfce4-panel"
+            or panels is None or plugins is None or configver is None
+            or panels.get("type") != "array"):
+        return False
+
+    names = {}
+    for item in plugins.findall("property"):
+        name = item.get("name", "")
+        if name.startswith("plugin-") and name[7:].isascii() and name[7:].isdecimal():
+            names[int(name[7:])] = item.get("value")
+    if "pulseaudio" in names.values():
+        return False
+
+    used = set(names)
+    tray = None
+    for panel_id in panels.findall("value"):
+        window = property_named(panels, f"panel-{int(panel_id.get('value', ''))}")
+        if window is None:
+            return False
+        members = property_named(window, "plugin-ids")
+        if members is None:
+            continue
+        if members.get("type") != "array":
+            return False
+        for position, member in enumerate(members):
+            if member.tag != "value":
+                continue
+            number = int(member.get("value", ""))
+            used.add(number)
+            if tray is None and names.get(number) == "systray":
+                tray = members, position
+    if tray is None:
+        return False
+    number = max(used, default=0) + 1
+    if number > 2147483647:
+        return False
+    members, position = tray
+    members.insert(position + 1, ET.Element("value", type="int", value=str(number)))
+    ET.SubElement(plugins, "property", name=f"plugin-{number}", type="string", value="pulseaudio")
+    return True
+
+
+def prepare():
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", ""))
+    config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "y700"
+    if not all(path.is_absolute() for path in (runtime, config, state)) or ":" in str(runtime):
+        return None
+    metadata = runtime.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+        return None
+    if any(os.path.lexists(path) for path in (
+        config / PANEL, config / SHORTCUTS, config / TEMPLATE.parent,
+        state / "panel-audio-v1", state / "desktop-defaults-v1",
+    )):
+        return None
+
+    dirs = [Path(entry) for entry in os.environ.get("XDG_CONFIG_DIRS", "").split(":") if entry.startswith("/")]
+    dirs = list(dict.fromkeys([*dirs, Path("/etc/xdg")]))
+    for directory in dirs:
+        if (directory / PANEL).is_file():
+            return None  # Xfconf already supplies a system layout.
+        shortcuts = directory / SHORTCUTS
+        if shortcuts.is_file() and any(
+            item.get("name", "").startswith("XF86Audio") and item.get("value")
+            for item in ET.parse(shortcuts).iter("property")
+        ):
+            return None  # Let the normal migration resolve custom shortcut ownership.
+    source = next((directory / TEMPLATE for directory in dirs if (directory / TEMPLATE).is_file()), None)
+    if source is None:
+        return None
+    tree = ET.parse(source, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True)))
+    if not add_audio(tree):
+        return None
+    target = Path(tempfile.mkdtemp(prefix="y700-panel-default-", dir=runtime))
+    try:
+        (target / TEMPLATE.parent).mkdir(parents=True)
+        tree.write(target / TEMPLATE, encoding="utf-8", xml_declaration=True)
+    except OSError:
+        shutil.rmtree(target)
+        raise
+    return target
+
+
+if __name__ == "__main__":
+    try:
+        directory = prepare()
+    except (OSError, ValueError, ET.ParseError) as error:
+        print(f"Y700 panel default: {error}", file=sys.stderr)
+    else:
+        if directory is not None:
+            print(directory)

@@ -84,7 +84,7 @@ def check(helper, existing):
 
         # A directly registered sibling must not satisfy this applet's wait.
         bus.register_object(WRAPPERS + "/3", wrapper_api, None)
-        stop = time.monotonic() + 0.45
+        stop = time.monotonic() + 2.25
         while time.monotonic() < stop:
             pump()
             assert not MARKER.exists()
