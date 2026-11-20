@@ -1,0 +1,12 @@
+[Unit]
+Description=Verify the Y700 regulatory database recovery at boot
+Wants=NetworkManager.service
+After=NetworkManager.service
+FailureAction=poweroff
+
+[Service]
+Type=oneshot
+ExecStart=/opt/regdb-test/verify.sh verify
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=45

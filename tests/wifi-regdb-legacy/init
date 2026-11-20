@@ -1,0 +1,23 @@
+#!/bin/busybox sh
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+trap 'echo REGDB_LEGACY_INIT_FAILED; poweroff -f' EXIT
+mkdir -p /proc /sys /dev /regdb-lower /regdb-ram /regdb-root
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+[ -e /dev/fd ] || ln -s /proc/self/fd /dev/fd
+grep -qw y700.regdb_legacy=1 /proc/cmdline
+tr '\000' '\n' </proc/device-tree/compatible | grep -Fxq linux,dummy-virt
+test "$(cat /sys/block/vda/ro)" = 1
+mount -t ext4 -o ro,noload /dev/vda /regdb-lower
+mount -t tmpfs tmpfs /regdb-ram
+mkdir /regdb-ram/upper /regdb-ram/work
+mount -t overlay overlay -o lowerdir=/regdb-lower,upperdir=/regdb-ram/upper,workdir=/regdb-ram/work /regdb-root
+for directory in dev proc sys; do mount --bind "/$directory" "/regdb-root/$directory"; done
+mount -t tmpfs tmpfs /regdb-root/run
+cp -a /regdb-test /regdb-root/opt/
+cp /regdb-test/verify.service /regdb-root/etc/systemd/system/y700-regdb-verify.service
+chroot /regdb-root /bin/bash /opt/regdb-test/verify.sh prepare
+exec switch_root /regdb-root /sbin/init
