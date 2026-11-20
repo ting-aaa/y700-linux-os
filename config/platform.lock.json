@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "scope": "Y700 board platform package with opt-in automatic brightness",
+  "source_date_epoch": 1795182000,
+  "packages": [
+    {
+      "filename": "y700-platform_0.1.0~dev12.8_all.deb",
+      "package": "y700-platform",
+      "version": "0.1.0~dev12.8",
+      "architecture": "all",
+      "size": 27712,
+      "sha256": "95b8e4419a40080e98b78dbfe63839476c20479714ffb7257cfb7bbafc927583"
+    }
+  ]
+}

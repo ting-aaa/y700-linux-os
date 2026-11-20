@@ -51,10 +51,13 @@ printf '#!/bin/sh\nexit 101\n' > "$root/usr/sbin/policy-rc.d"
 chmod 755 "$root/usr/sbin/policy-rc.d"
 test -d "$root/tmp" && test ! -L "$root/tmp"
 stage=$(mktemp -d "$root/tmp/y700-packages.XXXXXXXX")
-cp "$debs/"*.deb "$package" "$stage/"
+cp "$debs/"*.deb "$stage/"
+mkdir "$stage/platform"
+cp -- "$package" "$stage/platform/"
+"${uv_python[@]}" "$repo/scripts/repair-inputs.py" verify "$stage/platform" "$repo/config/platform.lock.json"
 # Install only this verified invocation's archives, never old cache leftovers.
 archives=()
-for archive in "$stage/"*.deb; do archives+=("${archive#"$root"}"); done
+for archive in "$stage/"*.deb "$stage/platform/"*.deb; do archives+=("${archive#"$root"}"); done
 if [[ -n $camera_debs ]]; then
     mkdir "$stage/camera"
     cp "$camera_debs/"*.deb "$stage/camera/"
@@ -91,6 +94,7 @@ while IFS= read -r -d '' file; do
     sed -i 's/name="use_compositing" type="bool" value="true"/name="use_compositing" type="bool" value="false"/g' "$file"
 done < <(find "$root/home" -path '*/xfce-perchannel-xml/xfwm4.xml' -type f -print0)
 install -d "$root/var/lib/y700/build"
+install -m644 "$repo/config/platform.lock.json" "$root/var/lib/y700/build/platform.lock.json"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$root/var/lib/y700/build/packages.tsv"
 cp "$repo/config/desktop-repair.lock.json" "$root/var/lib/y700/build/"
 if [[ -n $camera_debs ]]; then

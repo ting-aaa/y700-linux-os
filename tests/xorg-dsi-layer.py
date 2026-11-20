@@ -48,8 +48,17 @@ with TemporaryDirectory() as directory:
             shutil.copyfile(config / f'{layer}.lock.json', receipts / f'{layer}.lock.json')
     control = (repo / 'packaging/control').read_text().splitlines()
     db['y700-platform', 'all'] = next(line.split()[1] for line in control if line.startswith('Version: '))
+    platform_receipt = receipts / 'platform.lock.json'
+    shutil.copyfile(config / 'platform.lock.json', platform_receipt)
     write_status(root, db)
     before = verify(root)
+    platform_receipt.unlink()
+    verify(root, error='Platform receipt is missing')
+    forged_platform = load('platform')
+    forged_platform['packages'][0]['sha256'] = '0' * 64
+    platform_receipt.write_text(json.dumps(forged_platform))
+    verify(root, error='Platform receipt is missing or differs')
+    shutil.copyfile(config / 'platform.lock.json', platform_receipt)
     verify(root, '--check-upgrade', 'blueman')
     blueman_receipt = receipts / 'blueman.lock.json'
     old_blueman = config / 'sealed/blueman-y7001.lock.json'
@@ -63,12 +72,13 @@ with TemporaryDirectory() as directory:
     blueman_receipt.unlink()
     shutil.copyfile(old_blueman, blueman_receipt)
     verify(root, '--check-upgrade', 'blueman')
+    verify(root, '--sealed-blueman-y7001', '--platform-version', db['y700-platform', 'all'])
     verify(root, '--sealed-blueman-y7001')
     verify(root, error='receipt differs')
     write_status(root, db)
-    verify(root, '--sealed-blueman-y7001', error='Package mismatch')
+    verify(root, '--sealed-blueman-y7001', '--platform-version', db['y700-platform', 'all'], error='Package mismatch')
     shutil.copyfile(config / 'blueman.lock.json', blueman_receipt)
-    verify(root, '--sealed-blueman-y7001', error='receipt differs')
+    verify(root, '--sealed-blueman-y7001', '--platform-version', db['y700-platform', 'all'], error='receipt differs')
     verify(root, '--check-upgrade', 'onboard')
     upgrade = ('--check-upgrade', 'xorg-dsi')
     verify(root, *upgrade)

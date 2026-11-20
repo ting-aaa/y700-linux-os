@@ -4,6 +4,11 @@ set -euo pipefail
 qcam_args=()
 platform_args=()
 blueman_args=()
+version_args=()
+if [[ ${1:-} == --platform-version && $# -ge 2 ]]; then
+    version_args=(--platform-version "$2")
+    shift 2
+fi
 if [[ ${1:-} == --sealed-dev12-5 ]]; then
     platform_args=(--sealed-dev12-5)
     shift
@@ -17,12 +22,20 @@ if [[ ${1:-} == --sealed-blueman-y7001 ]]; then
     shift
 fi
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] [--sealed-blueman-y7001] LAYER DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh [--platform-version VERSION | --sealed-dev12-5] [--qcam-lock EXISTING_LOCK] [--sealed-blueman-y7001] LAYER DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-desktop|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in platform|firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-desktop|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+if [[ $layer == platform ]] && (( ${#version_args[@]} + ${#platform_args[@]} + ${#qcam_args[@]} + ${#blueman_args[@]} )); then
+    echo 'The platform upgrade requires its pinned predecessor and accepts no sealed-layer overrides.' >&2
+    exit 2
+fi
+if (( ${#version_args[@]} && ${#platform_args[@]} )); then
+    echo 'Choose one platform version.' >&2
+    exit 2
+fi
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -53,11 +66,29 @@ case $layer in
         ;;
 esac
 py=("${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python)
+if [[ $layer == platform ]]; then
+    previous=$("${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --platform-version '0.1.0~dev12.6')
+    grep -Fxq 'package_digest=685d01f30932a5dd7df5ccbf99c66f3908e29c5cdeda2b7abe91d727f9c09511' <<<"$previous" || {
+        echo 'Unexpected package inventory for the platform upgrade.' >&2; exit 1;
+    }
+fi
+if (( ${#version_args[@]} )); then
+    installed=$(dpkg-query --admindir="$root/var/lib/dpkg" -W -f='${db:Status-Status} ${Version}' y700-platform)
+    [[ $installed == "installed ${version_args[1]}" ]] || { echo 'Selected platform version differs from the installed platform.' >&2; exit 1; }
+fi
+if [[ $layer != blueman ]] && (( ${#blueman_args[@]} )); then
+    cmp "$repo/config/sealed/blueman-y7001.lock.json" "$record/blueman.lock.json"
+    installed=$(dpkg-query --admindir="$root/var/lib/dpkg" -W -f='${db:Status-Status} ${Version}' blueman)
+    [[ $installed == 'installed 2.4.4-1+y7001' ]] || { echo 'Sealed Blueman version differs from the installed package.' >&2; exit 1; }
+fi
 if (( ${#qcam_args[@]} )); then
     [[ $layer != camera-qcam ]] || { echo 'An existing qcam lock applies only when retaining the camera app.' >&2; exit 2; }
 fi
 if (( ${#qcam_args[@]} + ${#platform_args[@]} )); then
-    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${version_args[@]}" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"
+fi
+if [[ $layer == blueman || $layer == onboard || $layer == xorg-dsi ]]; then
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${blueman_args[@]}" --check-upgrade "$layer"
 fi
 stage=$(mktemp -d "$root/tmp/y700-board-layer.XXXXXXXX")
 policy=$root/usr/sbin/policy-rc.d
@@ -68,9 +99,6 @@ cleanup() {
 trap cleanup EXIT
 cp -- "$archives/"*.deb "$stage/"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$stage" "$lock"
-if [[ $layer == blueman || $layer == onboard || $layer == xorg-dsi ]]; then
-    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${blueman_args[@]}" --check-upgrade "$layer"
-fi
 debs=()
 for path in "$stage/"*.deb; do debs+=("${path#"$root"}"); done
 printf '#!/bin/sh\nexit 101\n' > "$stage/no-service-starts"
@@ -81,6 +109,16 @@ chroot "$root" env SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive dpkg -i "${d
 chroot "$root" apt-get check
 test -z "$(chroot "$root" dpkg --audit)"
 case $layer in
+    platform)
+        # Independently check the installed feature payload, including conffiles.
+        mkdir "$stage/compare"
+        dpkg-deb -x "$stage/"*.deb "$stage/compare"
+        for file in usr/libexec/y700-tablet-brightness usr/libexec/y700-ambient-backlight \
+                etc/xdg/autostart/y700-ambient-backlight.desktop usr/share/glib-2.0/schemas/org.y700.tablet.gschema.xml; do
+            cmp "$stage/compare/$file" "$root/$file"
+        done
+        [[ $(chroot "$root" env GSETTINGS_BACKEND=memory gsettings get org.y700.tablet automatic-brightness) == false ]]
+        ;;
     power-desktop)
         test -x "$root/usr/libexec/upowerd"
         test -x "$root/usr/bin/xfce4-power-manager"
@@ -173,4 +211,4 @@ install -m644 "$lock" "$stage/$layer.lock.json"
 mv -T -- "$stage/$layer.lock.json" "$record/$layer.lock.json"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$stage/packages.tsv"
 mv -T -- "$stage/packages.tsv" "$record/packages.tsv"
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${version_args[@]}" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"

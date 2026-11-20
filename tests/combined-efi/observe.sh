@@ -63,6 +63,11 @@ if [[ $1 == setup ]]; then
             [[ $(dpkg-query -W -f='${Version} ${Architecture}' blueman) == '2.4.4-1+y7002 arm64' ]]
             [[ -z $(dpkg -V blueman) ]]
             echo 'COMBINED_BLUEMAN version=2.4.4-1+y7002 architecture=arm64 receipt=verified files=verified'
+            if [[ -f /boot/platform-tested.lock ]]; then
+                platform='0.1.0~dev12.8'
+                expected=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
+                cmp /boot/platform-tested.lock /var/lib/y700/build/platform.lock.json
+            fi
         fi
     fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
@@ -177,6 +182,13 @@ if grep -qw y700.combined_power=1 /proc/cmdline; then
     [[ $(readlink -f "/proc/$manager/exe") == /usr/bin/xfce4-power-manager ]]
     systemctl is-active --quiet upower.service
     echo 'COMBINED_POWER packaged=1 ordinary_manager=1 system_upower=active'
+fi
+if [[ -f /boot/platform-tested.lock ]]; then
+    [[ $(asuser gsettings get org.y700.tablet automatic-brightness) == false ]]
+    ambient_pid() { pgrep -u "$uid" -f '^(/usr/bin/python3 )?/usr/libexec/y700-ambient-backlight$'; }
+    wait_for 60 ambient-autostart ambient_pid >/dev/null
+    test -x /usr/libexec/y700-ambient-backlight
+    echo 'COMBINED_ADAPTIVE ordinary_daemon=1 automatic_brightness=false'
 fi
 if [[ -f /boot/lock-mode ]]; then
     if [[ $(cat /boot/lock-mode) == installed ]]; then

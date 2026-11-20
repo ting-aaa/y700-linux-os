@@ -43,7 +43,7 @@ sudo env UV_BIN="$(command -v uv)" bash scripts/build-power-root.sh --blueman-up
   /path/to/generic-dev12.7/root.ext4 out/blueman-passkey-lifetime /var/tmp/new-blueman-root
 ```
 
-对旧镜像运行 `scripts/verify-image-packages.py` 时，dev12.6 和原 dev12.7 选择 `--sealed-blueman-y7001`；dev12.5 使用原来的 `--sealed-dev12-5 --qcam-lock tests/onboard-image/camera-qcam.lock.json`。更新镜像使用默认 Blueman 锁。三份旧镜像和更新镜像各自的完整清单均已在只读挂载下复核。
+核对本页的 dev12.7 Blueman y7002 镜像时，运行 `scripts/verify-image-packages.py ROOT --platform-version '0.1.0~dev12.6'`。dev12.6 和原 dev12.7 选择 `--sealed-blueman-y7001`，dev12.5 使用 `--sealed-dev12-5 --qcam-lock tests/onboard-image/camera-qcam.lock.json`。三份旧镜像和更新镜像各自的完整清单均已在只读挂载下复核。
 
 ## 已验证的交付路径
 

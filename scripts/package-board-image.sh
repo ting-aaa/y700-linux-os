@@ -9,6 +9,7 @@ if [[ $# != 7 ]]; then
 fi
 version=$1
 shift
+guide=DEV${version#dev}-IMAGE.md
 case $version in
     dev12.5)
         package_count=1112
@@ -22,11 +23,15 @@ case $version in
         package_count=1124
         package_sha=bbb696086ce1bb4a425dbf63876f12548e7e6a6048ed89415e64cb6a793eba6a
         ;;
+    dev12.8)
+        package_count=1124
+        package_sha=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
+        guide=ADAPTIVE-BRIGHTNESS-IMAGE.md
+        ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
 epoch=${SOURCE_DATE_EPOCH:-1795132800}
 [[ $epoch =~ ^[0-9]+$ ]]
-guide=DEV${version#dev}-IMAGE.md
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
 root=$(realpath -e -- "$1")
 esp=$(realpath -e -- "$3")
@@ -47,6 +52,10 @@ base=$bundle/base
 mkdir -- "$bundle" "$base" "$work/db" "$work/result"
 cd "$work/db"
 debugfs -R 'dump /var/lib/dpkg/status status' "$root" >/dev/null 2>&1
+if [[ $version == dev12.8 ]]; then
+    debugfs -R 'dump /var/lib/y700/build/platform.lock.json platform.lock.json' "$root" >/dev/null 2>&1
+    cmp "$repo/config/platform.lock.json" platform.lock.json
+fi
 dpkg-query --admindir=. -W '-f=${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
     sed -n 's/^installed\t//p' | sort > packages.tsv
 [[ $(wc -l < packages.tsv) == "$package_count" ]]

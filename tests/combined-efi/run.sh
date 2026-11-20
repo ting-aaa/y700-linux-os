@@ -82,6 +82,11 @@ mcopy -i test-esp.fat "$here/observe.sh" ::/combined-observe.sh
 mcopy -i test-esp.fat combined-touch ::/combined-touch
 if (( blueman )); then
     mcopy -i test-esp.fat "$here/../../config/blueman.lock.json" ::/blueman-tested.lock
+    debugfs -R 'dump /var/lib/y700/build/platform.lock.json platform-receipt' "$root" >/dev/null 2>&1
+    if [[ -f platform-receipt ]]; then
+        cmp platform-receipt "$here/../../config/platform.lock.json"
+        mcopy -i test-esp.fat platform-receipt ::/platform-tested.lock
+    fi
 fi
 if [[ $screen_lock != off ]]; then
     printf '%s\n' "$screen_lock" > lock-mode

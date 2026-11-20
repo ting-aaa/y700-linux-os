@@ -25,8 +25,10 @@ parser.add_argument('root', type=Path)
 parser.add_argument('--qcam-lock', type=Path, help='Use this qcam build input lock for a sealed image')
 parser.add_argument('--sealed-blueman-y7001', action='store_true',
                     help='Require the historical Blueman lock when verifying a sealed build')
-parser.add_argument('--sealed-dev12-5', action='store_true',
-                    help='Require the original dev12.5 platform version in a sealed-image workflow')
+platform = parser.add_mutually_exclusive_group()
+platform.add_argument('--sealed-dev12-5', action='store_true',
+                      help='Require the original dev12.5 platform and historical Blueman')
+platform.add_argument('--platform-version', help='Require the specified platform version for a sealed build')
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
 mode.add_argument('--check-upgrade', choices=('blueman', 'onboard', 'xorg-dsi'),
@@ -66,9 +68,26 @@ if args.check_upgrade:
             raise SystemExit(f'Unexpected installed {package}:{arch} version for {args.check_upgrade}')
     raise SystemExit(0)
 control = (repo / 'packaging/control').read_text().splitlines()
-version = '0.1.0~dev12.5' if args.sealed_dev12_5 else next(
-    line.split()[1] for line in control if line.startswith('Version: '))
+version = args.platform_version or next(line.split()[1] for line in control if line.startswith('Version: '))
+if args.sealed_dev12_5:
+    version = '0.1.0~dev12.5'
+elif (args.sealed_blueman_y7001 and not args.platform_version
+      and ('y700-platform', '0.1.0~dev12.6', 'all') in actual):
+    # Keep the documented legacy invocation for the two dev12.6-platform roots.
+    # Selecting a Blueman archive on a newer root preserves that root's platform.
+    version = '0.1.0~dev12.6'
 wanted.add(('y700-platform', version, 'all'))
+platform_receipt = args.root / 'var/lib/y700/build/platform.lock.json'
+if platform_receipt.is_symlink() or (platform_receipt.exists() and not platform_receipt.is_file()):
+    raise SystemExit('Platform receipt must be a regular file')
+if version in ('0.1.0~dev12.5', '0.1.0~dev12.6'):
+    if platform_receipt.exists():
+        raise SystemExit('Unexpected platform receipt for the sealed platform version')
+else:
+    platform_lock = json.loads((repo / 'config/platform.lock.json').read_text())
+    if (not platform_receipt.exists() or json.loads(platform_receipt.read_text()) != platform_lock
+            or [package_tuple(p) for p in platform_lock['packages']] != [('y700-platform', version, 'all')]):
+        raise SystemExit('Platform receipt is missing or differs from the build input lock')
 for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'touch-lock', 'power-desktop', 'ssc', 'blueman', 'onboard', 'chinese-ime', 'xorg-dsi',
               'camera-qcam', 'camera-pipewire', 'camera-portal'):
     name = f'{layer}.lock.json'
