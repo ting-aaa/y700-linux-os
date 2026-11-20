@@ -32,8 +32,45 @@ static int checked_command(const char *script)
     return waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-int main(void)
+/* File boundaries share one virtio port. Keep every read within its file. */
+static int receive_payload(void)
 {
+    const char *paths[] = {"/kernel.efi", "/initrd"};
+    char buffer[65536];
+    FILE *sizes = fopen("/payload.sizes", "r");
+    if (!sizes || dprintf(3, "RAM_QA_PAYLOAD_READY\n") < 0)
+        return EXIT_FAILURE;
+    for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        long long remaining;
+        if (fscanf(sizes, "%lld", &remaining) != 1 || remaining <= 0 || remaining >= 2147483648LL)
+            return EXIT_FAILURE;
+        int file = open(paths[i], O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (file < 0)
+            fatal("create RAM payload");
+        while (remaining) {
+            size_t want = remaining < (long long)sizeof(buffer) ? (size_t)remaining : sizeof(buffer);
+            ssize_t n = read(3, buffer, want);
+            if (n <= 0)
+                fatal("receive sealed payload");
+            for (ssize_t offset = 0; offset < n; ) {
+                ssize_t written = write(file, buffer + offset, (size_t)(n - offset));
+                if (written <= 0)
+                    fatal("write RAM payload");
+                offset += written;
+            }
+            remaining -= n;
+        }
+        if (close(file) < 0)
+            fatal("close RAM payload");
+        fprintf(stderr, "RAM_QA_PAYLOAD_FILE_RECEIVED %s\n", paths[i]);
+    }
+    return dprintf(3, "RAM_QA_PAYLOAD_RECEIVED\n") > 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 2 && strcmp(argv[1], "receive") == 0 && getppid() == 1)
+        return receive_payload();
     if (getpid() != 1)
         return EXIT_FAILURE;
     if (mount("devtmpfs", "/dev", "devtmpfs", 0, NULL) ||
@@ -55,6 +92,20 @@ int main(void)
         fatal("open virtual console");
     close(serial);
 
+    char cpu_count[32];
+    snprintf(cpu_count, sizeof(cpu_count), "%ld", sysconf(_SC_NPROCESSORS_ONLN));
+    if (setenv("CPU_COUNT", cpu_count, 1) ||
+        !checked_command("test -d /sys/firmware/efi; /bin/busybox dmesg -s 1048576 > /first-kernel.log; "
+                         "exec /bin/busybox awk -v cpus=\"$CPU_COUNT\" -v preflight=1 "
+                         "-f /check-irq-placement.awk /first-kernel.log /proc/iomem")) {
+        fputs("RAM_QA_KEXEC_STOPPED_BEFORE_LOAD\n", stderr);
+        reboot(LINUX_REBOOT_CMD_POWER_OFF);
+        return EXIT_FAILURE;
+    }
+
+    if (access("/payload.sizes", F_OK) == 0 &&
+        !checked_command("exec /bin/busybox sh /receive-payload.sh"))
+        return EXIT_FAILURE;
     if (!checked_command("exec /bin/busybox sha256sum -c /payload.sha256"))
         return EXIT_FAILURE;
     fputs("RAM_QA_KEXEC_INPUTS_VERIFIED\n", stderr);
@@ -78,10 +129,7 @@ int main(void)
     close(kernel);
     free(args);
     fputs("RAM_QA_KEXEC_FILE_LOADED\n", stderr);
-    char cpu_count[32];
-    snprintf(cpu_count, sizeof(cpu_count), "%ld", sysconf(_SC_NPROCESSORS_ONLN));
-    if (setenv("CPU_COUNT", cpu_count, 1) ||
-        !checked_command("/bin/busybox dmesg -s 1048576 > /first-kernel.log; "
+    if (!checked_command("/bin/busybox dmesg -s 1048576 > /first-kernel.log; "
                          "exec /bin/busybox awk -v cpus=\"$CPU_COUNT\" "
                          "-f /check-irq-placement.awk /first-kernel.log")) {
         fputs("RAM_QA_KEXEC_STOPPED_BEFORE_HANDOVER\n", stderr);

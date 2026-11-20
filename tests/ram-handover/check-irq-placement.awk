@@ -15,6 +15,19 @@ function hex(s,   n, i, digit) {
     table["property"] = hex($NF)
     properties++
 }
+/efi: EFI v[0-9].*by (Das U-Boot|Ubuntu distribution of EDK II)/ { firmware++ }
+/efi: .*MEMRESERVE=0x[0-9a-f]+/ { memreserve++ }
+/ITS \[mem/ { its++ }
+/^[[:space:]]*[0-9a-f]+-[0-9a-f]+ : reserved$/ {
+    split($1, span, "-")
+    first = hex(span[1])
+    last = hex(span[2])
+    if (first > 0 && last >= first) {
+        reserved_count++
+        reserved_first[reserved_count] = first
+        reserved_last[reserved_count] = last
+    }
+}
 /GICv3: CPU[0-9]+: using (allocated|reserved) LPI pending table @0x/ {
     cpu = $0
     sub(/^.*GICv3: CPU/, "", cpu)
@@ -36,13 +49,28 @@ function hex(s,   n, i, digit) {
     size[id] = hex($NF)
 }
 END {
-    if (cpus < 1 || properties != 1 || length(pending) != cpus || loads != 1 ||
-        declared !~ /^[0-9]+$/ || declared < 3 || declared > 16 || length(start) != declared) bad = 1
+    if (cpus < 1 || properties != 1 || length(pending) != cpus) bad = 1
     for (t in table) {
         key = sprintf("%.0f", table[t])
         if (table[t] <= 0 || table[t] % 65536 || key in addresses) bad = 1
         addresses[key] = 1
     }
+    if (preflight) {
+        for (t in table) {
+            mapped = 0
+            for (i = 1; i <= reserved_count; i++)
+                if (reserved_first[i] <= table[t] && reserved_last[i] >= table[t] + 65535) mapped = 1
+            if (!mapped) bad = 1
+        }
+        if (bad || firmware != 1 || memreserve != 1 || !its) {
+            print "RAM_QA_EFI_RESERVATIONS_REJECT missing firmware or reserved IRQ table"
+            exit 1
+        }
+        print "RAM_QA_EFI_RESERVATIONS_OK mapped_tables=" length(table)
+        exit
+    }
+    if (loads != 1 || declared !~ /^[0-9]+$/ || declared < 3 ||
+        declared > 16 || length(start) != declared) bad = 1
     if (bad) {
         print "RAM_QA_KEXEC_LAYOUT_REJECT incomplete table or segment inventory"
         exit 1

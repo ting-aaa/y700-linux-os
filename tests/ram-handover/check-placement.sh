@@ -22,4 +22,19 @@ for mutation in 's/mem=0x20000/mem=0x20001/' 's/mem=0x40000/mem=0x4ffff/' \
     if check < "$work/case" > "$work/result"; then exit 1; fi
     grep -q '^RAM_QA_KEXEC_LAYOUT_REJECT ' "$work/result"
 done
+cat > "$work/iomem" <<'MAP'
+efi: EFI v2.11 by Das U-Boot
+efi: MEMRESERVE=0x1000
+ITS [mem 0x08080000-0x0809ffff]
+  00030000-0003ffff : reserved
+  00050000-0005ffff : reserved
+  00070000-0007ffff : reserved
+MAP
+preflight() { awk -v cpus=2 -v preflight=1 -f "$here/check-irq-placement.awk" "$work/log" "$1"; }
+preflight "$work/iomem" | grep -Fx 'RAM_QA_EFI_RESERVATIONS_OK mapped_tables=3'
+for omitted in 'EFI v' 'MEMRESERVE=' 'ITS ' '0005ffff'; do
+    sed "/$omitted/d" "$work/iomem" > "$work/incomplete"
+    if preflight "$work/incomplete" > "$work/result"; then exit 1; fi
+    grep -q '^RAM_QA_EFI_RESERVATIONS_REJECT ' "$work/result"
+done
 echo RAM_TRIAL_PLACEMENT_GUARD_PASS
