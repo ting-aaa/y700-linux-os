@@ -13,6 +13,8 @@ test "$(stat -c %a "$temp/root/usr/lib/systemd/system/y700-usb-maintenance.servi
 test -x "$temp/root/usr/bin/y700-display"
 test -x "$temp/root/usr/libexec/y700-session"
 test -x "$temp/root/usr/libexec/y700-panel-audio"
+test -x "$temp/root/usr/libexec/y700-panel-default"
+dash -n "$temp/root/etc/X11/Xsession.d/61y700_panel_default"
 test -x "$temp/root/usr/libexec/y700-speaker-calibration"
 grep -Fxq 'ExecStart=/usr/libexec/y700-speaker-calibration prepare-live' "$temp/root/usr/lib/systemd/system/y700-speaker-calibration.service"
 test -x "$temp/root/usr/libexec/y700-tablet-scale"
