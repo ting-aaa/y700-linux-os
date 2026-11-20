@@ -76,6 +76,12 @@ rsync -aHAX --numeric-ids --one-file-system --exclude='/run/*' --exclude='/tmp/*
     --exclude='/var/lib/y700/ssh' --exclude='/var/lib/bluetooth/*' \
     --exclude='/var/lib/y700-ssc/*' --exclude='/etc/y700/bluetooth-address' --exclude='/.y700-*' "$base/" stage/
 chmod 755 stage
+# The board kernel trusts the upstream regulatory signing keys. Set the master
+# and its signature slave on the image copy while preserving the integrated base.
+chroot "$out/stage" update-alternatives --set regulatory.db /lib/firmware/regulatory.db-upstream
+for file in regulatory.db regulatory.db.p7s; do
+    test "$(chroot "$out/stage" readlink -f "/lib/firmware/$file")" = "/usr/lib/firmware/$file-upstream"
+done
 for secret in stage/etc/y700/maintenance* stage/etc/y700/bluetooth-address stage/root/.ssh stage/etc/NetworkManager/system-connections/*; do
     test ! -e "$secret"
 done
@@ -106,6 +112,7 @@ test "$(debugfs -R 'cat /etc/y700/image-id' root.ext4 2>/dev/null)" = "$imageid"
 mkdir -p initrd/{bin,dev,proc,sys,run,newroot,lib/firmware} esp/EFI/{BOOT,debian,android-devices} esp/loader/entries
 install -m755 "$board/ramdisk/bin/busybox" initrd/bin/
 cp -a "$board/board-firmware/." initrd/lib/firmware/
+bash "$repo/scripts/stage-initrd-regdb.sh" "$base" initrd/lib/firmware
 sed -e "s/@UUIDHEX@/${uuid//-/}/g" -e "s/@IMAGEID@/$imageid/g" "$repo/src/boot/init" > initrd/init
 grep -Fq "${uuid//-/}" initrd/init
 grep -Fq "$imageid" initrd/init
