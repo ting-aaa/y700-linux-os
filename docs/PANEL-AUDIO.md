@@ -14,6 +14,10 @@ For an attended change, `xfce4-panel --add-items=1` opens the chooser for panel 
 
 An unattended update to an existing profile should first check all panels for an existing PulseAudio instance, preserving its position and settings. For a new instance, allocate an ID unused by any panel or plugin subtree, set `/plugins/plugin-ID` to the string `pulseaudio`, then insert the ID into the intended panel's existing integer `plugin-ids` array. Preserve unrelated items and their order. Applying these changes before the panel starts lets it create the wrapper on normal startup. A running panel reads the array again on restart. An array readback alone cannot establish that the wrapper started. After a one-time addition, remember the result per user so later removal is respected. [Provider construction](https://github.com/xfce-mirror/xfce4-panel/blob/xfce4-panel-4.20.4/panel/panel-application.c#L447-L471) · [Restart](https://github.com/xfce-mirror/xfce4-panel/blob/xfce4-panel-4.20.4/panel/main.c#L385-L412)
 
+The installed generator also ran on the tablet in private test directories. After removing the two additions for plugin 19, the generated XML matched the installed Debian template element for element. An existing per-user keyboard configuration bypassed template generation. The tablet stayed in its current session during this check.
+
+The sealed dev12.4 image completed first-time password setup and an ordinary LightDM login under ARM64 EFI emulation. The first Xfce panel loaded the generated template, registered the speaker control and retained the same D-Bus owner through setup. A second invocation retained the single control. [Image and first-login receipt](BOARD-IMAGE.md#dev124-native-xfce-volume-button-at-first-login)
+
 ## Physical input and X11
 
 | Button | Live evdev node and capability | Live X11 mapping |
