@@ -26,6 +26,8 @@ class RotationWindow(Gtk.ApplicationWindow):
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_resizable(False)
         self.watch = 0
+        self.saver_watch = 0
+        self.saver_present = False
         self.poll = 0
         self.sensor = None
         self.request = None
@@ -57,12 +59,20 @@ class RotationWindow(Gtk.ApplicationWindow):
     def preference_changed(self, *_):
         if self.settings and self.settings.get_boolean(KEY):
             if not self.watch:
+                self.saver_watch = Gio.bus_watch_name(
+                    Gio.BusType.SESSION, "org.xfce.ScreenSaver", Gio.BusNameWatcherFlags.NONE,
+                    self.saver_changed, self.saver_changed,
+                )
                 self.watch = Gio.bus_watch_name(
                     Gio.BusType.SYSTEM, SENSOR_PROXY, Gio.BusNameWatcherFlags.NONE,
                     self.sensor_appeared, self.sensor_gone,
                 )
         else:
             self.stop_watch()
+        self.update_status()
+
+    def saver_changed(self, bus, name, owner=None):
+        self.saver_present = bool(owner)
         self.update_status()
 
     def sensor_appeared(self, bus, _name, owner):
@@ -110,6 +120,10 @@ class RotationWindow(Gtk.ApplicationWindow):
         self.sensor_available = False
 
     def stop_watch(self):
+        if self.saver_watch:
+            Gio.bus_unwatch_name(self.saver_watch)
+            self.saver_watch = 0
+        self.saver_present = False
         if self.watch:
             Gio.bus_unwatch_name(self.watch)
             self.watch = 0
@@ -125,13 +139,16 @@ class RotationWindow(Gtk.ApplicationWindow):
             message = label("Rotation settings are unavailable.", "旋转设置暂时不可用。")
         elif not self.settings.get_boolean(KEY):
             message = label("Current orientation is locked.", "已锁定当前屏幕方向。")
-        elif self.sensor_available:
-            message = label("Automatic rotation enabled.", "已启用自动旋转。")
-        else:
+        elif not self.sensor_available:
             message = label(
                 "Automatic rotation enabled. Waiting for an orientation sensor.",
                 "已启用自动旋转，正在等待方向传感器。",
             )
+        elif not self.saver_present:
+            message = label("Rotation paused. Waiting for Xfce Screensaver.",
+                            "自动旋转已暂停，正在等待 Xfce 屏幕保护程序。")
+        else:
+            message = label("Automatic rotation enabled.", "已启用自动旋转。")
         self.status.set_text(message)
 
 

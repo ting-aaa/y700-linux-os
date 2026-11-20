@@ -95,7 +95,7 @@ sed -e 's/^onboard\t1\.4\.1-10\t/onboard\t1.4.1-10+y7002\t/' \
     cmp - "$work/after.tsv"
 comm -3 "$work/before.tsv" "$work/after.tsv" > "$work/result/package-changes.tsv"
 [[ $(wc -l < "$work/result/package-changes.tsv") == 8 ]]
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --qcam-lock "$qcam_lock" | tee "$work/result/inventory.txt"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --sealed-dev12-5 --qcam-lock "$qcam_lock" | tee "$work/result/inventory.txt"
 generic
 umount -R -- "$root"
 tree_digest() {

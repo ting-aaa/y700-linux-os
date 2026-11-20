@@ -139,10 +139,17 @@ if [[ -n ${5:-} ]]; then
     wait_for_state true
     mock_call SetAvailable true
     available='Automatic rotation enabled.'
+    missing_saver='Rotation paused. Waiting for Xfce Screensaver.'
+    wait_for_state true "$missing_saver"
+    mock_call SetSaverPresent true
     wait_for_state true "$available"
     mock_call SetAvailable false
     wait_for_state true
     mock_call SetAvailable true
+    wait_for_state true "$available"
+    mock_call SetSaverPresent false
+    wait_for_state true "$missing_saver"
+    mock_call SetSaverPresent true
     wait_for_state true "$available"
 
     mock_call Hold
@@ -156,5 +163,5 @@ if [[ -n ${5:-} ]]; then
         printf 'The settings window called a sensor claim method\n' >&2
         exit 1
     fi
-    printf 'PASS: silent availability changes, no reads while locked, owner loss, late reply and no sensor claims.\n'
+    printf 'PASS: sensor availability, saver arrival and loss, late reply and no sensor claims.\n'
 fi

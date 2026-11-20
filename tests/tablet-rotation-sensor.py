@@ -20,6 +20,7 @@ API = """
   </interface>
   <interface name="org.y700.Test.Sensor">
     <method name="SetAvailable"><arg type="b" direction="in"/></method>
+    <method name="SetSaverPresent"><arg type="b" direction="in"/></method>
     <method name="Hold"/><method name="DropOwner"/><method name="SendHeldReply"/>
   </interface>
 </node>
@@ -64,6 +65,11 @@ class Sensor:
             return
         if method == "SetAvailable":
             self.available, = args.unpack()
+        if method == "SetSaverPresent":
+            if args.unpack()[0]:
+                self.name_call("RequestName", GLib.Variant("(su)", ("org.xfce.ScreenSaver", 4)))
+            else:
+                self.name_call("ReleaseName", GLib.Variant("(s)", ("org.xfce.ScreenSaver",)))
         if method == "Hold":
             self.hold = True
         if method == "DropOwner":

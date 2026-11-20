@@ -23,6 +23,8 @@ def replacements(lock):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('root', type=Path)
 parser.add_argument('--qcam-lock', type=Path, help='Use this qcam build input lock for a sealed image')
+parser.add_argument('--sealed-dev12-5', action='store_true',
+                    help='Require the original dev12.5 platform version in a sealed-image workflow')
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
 mode.add_argument('--check-upgrade', choices=('blueman', 'onboard', 'xorg-dsi'),
@@ -52,7 +54,8 @@ if args.check_upgrade:
             raise SystemExit(f'Unexpected installed {package}:{arch} version for {args.check_upgrade}')
     raise SystemExit(0)
 control = (repo / 'packaging/control').read_text().splitlines()
-version = next(line.split()[1] for line in control if line.startswith('Version: '))
+version = '0.1.0~dev12.5' if args.sealed_dev12_5 else next(
+    line.split()[1] for line in control if line.startswith('Version: '))
 wanted.add(('y700-platform', version, 'all'))
 for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'touch-lock', 'ssc', 'blueman', 'onboard', 'chinese-ime', 'xorg-dsi',
               'camera-qcam', 'camera-pipewire', 'camera-portal'):

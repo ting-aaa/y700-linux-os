@@ -2,12 +2,17 @@
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
 qcam_args=()
+platform_args=()
+if [[ ${1:-} == --sealed-dev12-5 ]]; then
+    platform_args=(--sealed-dev12-5)
+    shift
+fi
 if [[ ${1:-} == --qcam-lock && $# -ge 2 ]]; then
     qcam_args=(--qcam-lock "$(realpath -e -- "$2")")
     shift 2
 fi
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -42,7 +47,9 @@ esac
 py=("${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python)
 if (( ${#qcam_args[@]} )); then
     [[ $layer != camera-qcam ]] || { echo 'An existing qcam lock applies only when retaining the camera app.' >&2; exit 2; }
-    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${qcam_args[@]}"
+fi
+if (( ${#qcam_args[@]} + ${#platform_args[@]} )); then
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}"
 fi
 stage=$(mktemp -d "$root/tmp/y700-board-layer.XXXXXXXX")
 policy=$root/usr/sbin/policy-rc.d
@@ -151,4 +158,4 @@ install -m644 "$lock" "$stage/$layer.lock.json"
 mv -T -- "$stage/$layer.lock.json" "$record/$layer.lock.json"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$stage/packages.tsv"
 mv -T -- "$stage/packages.tsv" "$record/packages.tsv"
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${qcam_args[@]}"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}"

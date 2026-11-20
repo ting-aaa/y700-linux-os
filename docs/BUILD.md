@@ -40,7 +40,15 @@ sudo env UV_BIN="$(command -v uv)" bash scripts/add-board-layer.sh \
   touch-lock "$disposable_arm64_root" "$lock_archives"
 ```
 
-For a disposable build root that still carries the sealed dev12.5 camera application, add `--qcam-lock tests/onboard-image/camera-qcam.lock.json` before `touch-lock` in the last command. The installer verifies that exact camera receipt and the full starting package inventory before adding the lock packages.
+For a copy of the sealed dev12.5 root, pass `--sealed-dev12-5 --qcam-lock tests/onboard-image/camera-qcam.lock.json` before `touch-lock`. The first option selects the original platform version. The second selects the sealed camera application. After upgrading either package, omit its corresponding option. The verifier checks the installed package inventory against the selected versions.
+
+The dev12.6 platform package requires positive confirmation from the session locker before automatic rotation can move the display. Include the touch-lock layer for Xfce desktops that use automatic rotation. To reproduce the package tested on the tablet, run the following from the repository root on Linux.
+
+```sh
+SOURCE_DATE_EPOCH=1795170250 bash scripts/build-platform.sh out/platform-dev12.6
+cd out/platform-dev12.6
+echo '651fcc5de550d9ac645b53e853693bdc751dd07bfaee1a8c75f4f84d466b04bf  y700-platform_0.1.0~dev12.6_all.deb' | sha256sum -c -
+```
 
 ## First implementation milestone
 

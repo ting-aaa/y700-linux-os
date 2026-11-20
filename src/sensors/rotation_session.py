@@ -10,6 +10,8 @@ from gi.repository import Gio, GLib
 
 SENSOR = 'net.hadess.SensorProxy'
 LOGIN = 'org.freedesktop.login1'
+SAVER = 'org.xfce.ScreenSaver'
+SAVER_PATH = '/org/xfce/ScreenSaver'
 PASSIVE = Gio.DBusProxyFlags.DO_NOT_AUTO_START
 CALL = Gio.DBusCallFlags.NO_AUTO_START
 
@@ -27,6 +29,11 @@ class Session:
         self.settings.connect('changed::auto-rotate', self.refresh)
         self.login = None
         self.manager = None
+        self.saver_bus = None
+        self.saver_owner = None
+        self.saver_subscription = 0
+        self.saver_retry = 0
+        self.saver_clear = False
         self.sensor_owner = None
         self.connection = None
         self.sensor = None
@@ -63,6 +70,55 @@ class Session:
 
     def login_gone(self, *_):
         self.login = self.manager = None
+        self.refresh()
+
+    def saver_appeared(self, bus, name, owner):
+        self.saver_bus = bus
+        self.saver_owner = owner
+        self.saver_subscription = bus.signal_subscribe(
+            owner, SAVER, 'ActiveChanged', SAVER_PATH, None, Gio.DBusSignalFlags.NONE,
+            self.saver_changed)
+        self.read_saver()
+        self.refresh()
+
+    def saver_gone(self, *_):
+        if self.saver_subscription:
+            self.saver_bus.signal_unsubscribe(self.saver_subscription)
+            self.saver_subscription = 0
+        if self.saver_retry:
+            GLib.source_remove(self.saver_retry)
+            self.saver_retry = 0
+        self.saver_bus = self.saver_owner = None
+        self.saver_clear = False
+        self.refresh()
+
+    def read_saver(self):
+        # Address the current owner of the well-known name. A former daemon
+        # can survive a handover and still answer calls to its unique name.
+        try:
+            reply = self.saver_bus.call_sync(
+                SAVER, SAVER_PATH, SAVER, 'GetActive', None, GLib.VariantType.new('(b)'),
+                CALL, 2000, None)
+            self.saver_clear = not reply.unpack()[0]
+        except GLib.Error:
+            self.saver_clear = False
+            if not self.saver_retry:
+                self.saver_retry = GLib.timeout_add_seconds(2, self.retry_saver)
+
+    def retry_saver(self):
+        self.saver_retry = 0
+        self.read_saver()
+        self.refresh()
+        return GLib.SOURCE_REMOVE
+
+    def saver_changed(self, bus, sender, path, interface, name, parameters):
+        if sender != self.saver_owner:
+            return
+        if parameters.get_type_string() == '(b)' and parameters.unpack()[0]:
+            self.saver_clear = False
+        else:
+            # An unlock signal may already be queued when the saver relocks.
+            self.read_saver()
         self.refresh()
 
     def sensor_appeared(self, bus, name, owner):
@@ -145,6 +201,7 @@ class Session:
 
     def active(self):
         return (self.settings.get_boolean('auto-rotate')
+                and self.saver_clear
                 and cached(self.login, 'Active') is True
                 and cached(self.login, 'LockedHint') is False)
 
@@ -222,6 +279,12 @@ class Session:
             if self.policy.candidate and self.policy.candidate != self.policy.applied:
                 self.schedule(self.policy.settle - (now - self.policy.since))
             return GLib.SOURCE_REMOVE
+        # Lock activation can precede delivery of ActiveChanged to this main
+        # loop, including while the synchronous sensor query above was running.
+        self.read_saver()
+        if not self.saver_clear:
+            self.disconnect()
+            return GLib.SOURCE_REMOVE
         try:
             success = subprocess.run(['y700-display', '--rotate', direction], check=False).returncode == 0
         except OSError as exc:
@@ -238,6 +301,7 @@ def run_session(policy):
     session = Session(policy, loop)
     flags = Gio.BusNameWatcherFlags.NONE
     watches = [
+        Gio.bus_watch_name(Gio.BusType.SESSION, SAVER, flags, session.saver_appeared, session.saver_gone),
         Gio.bus_watch_name(Gio.BusType.SYSTEM, LOGIN, flags, session.login_appeared, session.login_gone),
         Gio.bus_watch_name(Gio.BusType.SYSTEM, SENSOR, flags, session.sensor_appeared, session.sensor_gone),
     ]
