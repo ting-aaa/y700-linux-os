@@ -96,6 +96,8 @@ case $layer in
         test -x "$root/usr/libexec/y700-ssc/sdsprpcd"
         test -x "$root/usr/libexec/y700-ssc/import-calibration"
         test -s "$root/usr/lib/firmware/qcom/sm8475/lenovo/tb320fc/slpi.mdt"
+        grep -Fxq 'ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp", ENV{SYSTEMD_WANTS}+="y700-ssc.service"' \
+            "$root/usr/lib/udev/rules.d/90-y700-ssc.rules"
         test ! -L "$root/etc/systemd/system/multi-user.target.wants/y700-ssc.service"
         ;;
     camera-qcam)

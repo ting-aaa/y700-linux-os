@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+case "$1" in configure) ;; *) exit 0 ;; esac
+[ -z "${DPKG_ROOT:-}" ] && [ "${SYSTEMD_OFFLINE:-0}" != 1 ] &&
+    [ -d /run/systemd/system ] || exit 0
+if systemd-detect-virt --chroot --quiet; then exit 0; fi
+
+systemctl daemon-reload
+if [ -S /run/udev/control ]; then udevadm control --reload; fi
+# SYSTEMD_WANTS is acted on at device activation. An upgrade can encounter
+# a device which became active before this version installed its rule.
+[ -c /dev/fastrpc-sdsp ] && [ -r /sys/class/misc/fastrpc-sdsp/dev ] || exit 0
+[ "$(systemctl show -p LoadState --value y700-ssc.service)" = loaded ] || exit 0
+# deb-systemd-invoke start skips units that are exclusively hardware driven.
+# Use Debian's policy hook for this targeted start. Only an explicit permit
+# or the absence of a policy permits activation from the package transaction.
+if [ -x /usr/sbin/policy-rc.d ]; then
+    result=0
+    /usr/sbin/policy-rc.d y700-ssc.service start || result=$?
+    case "$result" in 0|104) ;; *) exit 0 ;; esac
+fi
+systemctl --no-block start y700-ssc.service

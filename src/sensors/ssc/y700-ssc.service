@@ -1,7 +1,7 @@
 [Unit]
 Description=Y700 SLPI sensor-domain FastRPC listener
 ConditionPathExists=/dev/fastrpc-sdsp
-Requires=dev-fastrpc\x2dsdsp.device
+BindsTo=dev-fastrpc\x2dsdsp.device
 After=dev-fastrpc\x2dsdsp.device
 Before=iio-sensor-proxy.service
 Upholds=iio-sensor-proxy.service

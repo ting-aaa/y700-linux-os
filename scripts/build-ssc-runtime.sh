@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package the native SDSP listener and opt-in SSC service for Debian ARM64.
+# Package the native SDSP listener for hardware-triggered startup on Debian ARM64.
 set -euo pipefail
 export LC_ALL=C
 umask 022
@@ -48,6 +48,7 @@ unit=$repo/src/sensors/ssc
 install -Dm644 "$unit/y700-ssc.service" "$stage/usr/lib/systemd/system/y700-ssc.service"
 install -Dm644 "$unit/proxy.conf" "$stage/usr/lib/systemd/system/iio-sensor-proxy.service.d/90-y700-ssc.conf"
 install -Dm644 "$unit/90-y700-ssc.rules" "$stage/usr/lib/udev/rules.d/90-y700-ssc.rules"
+install -m755 "$unit/postinst" "$stage/DEBIAN/postinst"
 install -m755 "$unit/seed" "$unit/wait-accelerometer" "$programs/"
 install -m755 "$repo/scripts/import-ssc-calibration.py" "$programs/import-calibration"
 license=$stage/usr/share/doc/y700-ssc-runtime/copyright
@@ -57,21 +58,21 @@ printf '%s\n' "$expected_digest" > "$stage/usr/share/doc/y700-ssc-runtime/fastrp
 
 cat > "$stage/DEBIAN/control" <<'EOF'
 Package: y700-ssc-runtime
-Version: 0.1.1
+Version: 0.1.2
 Architecture: arm64
 Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
 Section: admin
 Priority: optional
 Depends: bash, coreutils, grep, util-linux, python3 (>= 3.11), e2fsprogs, libc6 (>= 2.38), libbsd0, libsystemd0, libyaml-0-2, systemd, udev, libssc-bin (= 0.4.4-2.1~bpo13+1.y7001), iio-sensor-proxy (= 3.9-1~bpo13+1.y7001), y700-ssc-cn350-firmware (= 17.0.350-1)
-Description: Opt-in native Qualcomm SSC listener for TB320FC_PRC
+Description: Device-activated native Qualcomm SSC listener for TB320FC_PRC
  Mounts legacy DSP paths in the listener's namespace and preserves registry state.
- Installation does not enable or start the listener.
+ Starts the listener when the sensor-domain FastRPC device appears.
 EOF
 
 export SOURCE_DATE_EPOCH=1795046400
 find "$stage" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
 mkdir -p "$output"
-filename=y700-ssc-runtime_0.1.1_arm64.deb
+filename=y700-ssc-runtime_0.1.2_arm64.deb
 archive=$(mktemp "$output/.$filename.XXXXXXXX")
 dpkg-deb --root-owner-group --build "$stage" "$archive"
 chmod 644 "$archive"
