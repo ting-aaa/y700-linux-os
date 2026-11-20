@@ -34,6 +34,9 @@ with (vm / 'serial.log').open('xb', buffering=0) as log:
                             stderr=subprocess.STDOUT)
     phase = 'reset'
     recent = b''
+    loader = efi_runtime = powered_down = False
+    selected = not split
+    passed = None
     try:
         deadline = time.monotonic() + 360
         while time.monotonic() < deadline:
@@ -55,17 +58,26 @@ with (vm / 'serial.log').open('xb', buffering=0) as log:
                                  b'then bootefi ${kernel_addr_r}; fi; fi; done\r')
                 proc.stdin.flush()
                 phase = 'guest'
-            if phase == 'guest' and (match := expected.search(recent)):
-                print(match.group().decode(), flush=True)
-                break
+            if phase == 'guest':
+                loader |= b'Booting /\\EFI\\BOOT\\BOOTAA64.EFI' in recent
+                selected |= b'Y700_VM_EFI_ENTRY selected=y700-test.conf loader_esp=internal' in recent
+                efi_runtime |= b'efi: EFI v' in recent and b'by Das U-Boot' in recent
+                powered_down |= b'reboot: Power down' in recent
+                if passed is None and (match := expected.search(recent)):
+                    passed = match.group().decode()
+                    print(passed, flush=True)
         else:
             raise TimeoutError(f'EFI boot timed out in {phase}, see serial.log')
-        if not expected.search(recent):
+        if passed is None:
             raise RuntimeError(f'Guest exited in {phase} without the required serial evidence')
+        if not (loader and selected and efi_runtime and powered_down) or proc.wait(timeout=10) != 0:
+            raise RuntimeError('Guest did not load the expected EFI menu payload and power off cleanly')
+        print('Y700_VM_EFI_SELECTION uboot_efi=1 poweroff=1 qemu_exit=0', flush=True)
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()

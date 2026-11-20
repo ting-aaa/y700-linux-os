@@ -10,6 +10,7 @@ card=
 overlay=
 if [[ -n ${5:-} ]]; then card=$(realpath -e "$5"); fi
 if [[ -n ${6:-} ]]; then overlay=$(realpath -e "$6"); fi
+if [[ -n $overlay ]]; then test -n "$card"; fi
 mkdir -m700 -- "$vm"
 cd "$images"
 sha256sum -c SHA256SUMS
@@ -35,53 +36,88 @@ HASHES
 cd "$vm"
 sector=4096
 label=linux-boot
-media=
 esp=test-esp.fat
+split=0
+qa_options='console=ttyAMA0 loglevel=7 systemd.show_status=yes'
 if [[ -n "$card" ]]; then
     (cd "$card" && sha256sum -c SHA256SUMS)
-    cp --sparse=always "$card/y700-test-card.img" disk.gpt
-    esp=disk.gpt@@1048576
     sector=512
     label=y700-test-esp
-    media='y700.media=sd'
+    if [[ -n $overlay ]]; then
+        # Use the complete exported card as the read-only backing disk.
+        ln -s -- "$card/y700-test-card.img" disk.gpt
+        split=1
+    else
+        cp --sparse=always "$card/y700-test-card.img" disk.gpt
+        esp=disk.gpt@@1048576
+    fi
 else
     cp --sparse=always "$images/linux-boot.fat" "$esp"
 fi
-mcopy -i "$esp" ::/loader/entries/debian.conf debian.conf
-if [[ $fbdev == 0 ]]; then
-    grep -Eq '^options .* drm_kms_helper\.fbdev_emulation=0( |$)' debian.conf
-fi
-# Keep the candidate kernel, initrd and root. Supply the virtual board DT,
-# PL011 console, and a one-shot userspace verifier executed by systemd PID 1.
-sed -i -E 's|(^options rdinit=/init root=PARTLABEL=[^ ]+).*|\1 rw console=ttyAMA0 loglevel=5 systemd.show_status=yes systemd.unit=kernel-command-line.target systemd.run=/boot/probe.sh systemd.run_success_action=poweroff systemd.run_failure_action=poweroff|' debian.conf
-sed -i "/^options /s/$/ $media/" debian.conf
-if [[ $fbdev == 0 ]]; then sed -i '/^options /s/$/ drm_kms_helper.fbdev_emulation=0/' debian.conf; fi
-mcopy -o -i "$esp" debian.conf ::/loader/entries/debian.conf
-mcopy -o -i "$esp" "$board/efi/vm/board.dtb" ::/EFI/debian/board.dtb
-split=0
-if [[ -n "$overlay" ]]; then
-    test "$sector" = 512
+if (( split )); then
     (cd "$overlay" && sha256sum -c SHA256SUMS)
-    split=1
     # Stand in for the existing internal ESP. Its FAT ID must differ from the
-    # card referenced by fstab. Only this disk can launch an EFI loader.
+    # card referenced by fstab. U-Boot explicitly reads this volume's loader.
     truncate -s 1G internal.fat
     mkfs.fat -S 4096 -s 1 -F 32 -i 10ACCE55 internal.fat
     mcopy -s -i internal.fat "$overlay/EFI" "$overlay/loader" ::/
     mmd -i internal.fat ::/EFI/BOOT
-    mcopy -i internal.fat "$images/esp/EFI/BOOT/BOOTAA64.EFI" ::/EFI/BOOT/
-    grep -Fq 'devicetree /EFI/y700-test/board.dtb' "$overlay/loader/entries/y700-test.conf"
-    grep -Fq 'linux /EFI/y700-test/kernel.efi' "$overlay/loader/entries/y700-test.conf"
-    grep -Fq 'initrd /EFI/y700-test/initrd' "$overlay/loader/entries/y700-test.conf"
-    sed '/^options /d' "$overlay/loader/entries/y700-test.conf" > trial.conf
-    grep '^options ' debian.conf >> trial.conf
-    mcopy -o -i internal.fat trial.conf ::/loader/entries/y700-test.conf
-    mcopy -o -i internal.fat "$board/efi/vm/board.dtb" ::/EFI/y700-test/board.dtb
-    mdel -i "$esp" ::/EFI/BOOT/BOOTAA64.EFI
-    truncate -s 1027M internal.gpt
-    printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\n' | sfdisk --sector-size 4096 internal.gpt
-    dd if=internal.fat of=internal.gpt bs=1M seek=1 conv=sparse,notrunc status=none
+    mcopy -i "$images/linux-boot.fat" ::/EFI/BOOT/BOOTAA64.EFI exported-loader.efi
+    mcopy -i internal.fat exported-loader.efi ::/EFI/BOOT/BOOTAA64.EFI
+    mtype -i internal.fat ::/EFI/BOOT/BOOTAA64.EFI | cmp - exported-loader.efi
+    entry=$overlay/loader/entries/y700-test.conf
+    grep -Fxq 'devicetree /EFI/y700-test/board.dtb' "$entry"
+    grep -Fxq 'linux /EFI/y700-test/kernel.efi' "$entry"
+    grep -Fxq 'initrd /EFI/y700-test/initrd' "$entry"
+    for payload in kernel.efi board.dtb; do
+        mtype -i "$card/y700-test-card.img@@1048576" "::/EFI/debian/$payload" | cmp - "$overlay/EFI/y700-test/$payload"
+    done
+    for payload in kernel.efi initrd; do
+        mtype -i internal.fat "::/EFI/y700-test/$payload" | cmp - "$overlay/EFI/y700-test/$payload"
+    done
+    sha256sum exported-loader.efi "$overlay/EFI/y700-test/"{kernel.efi,initrd} "$entry" | tee trial-core.sha256
+    printf 'default y700-test.conf\ntimeout 0\n' > selected-loader.conf
+    mcopy -o -i internal.fat selected-loader.conf ::/loader/loader.conf
+    cat > probe.service <<'UNIT'
+[Unit]
+Description=Verify the split EFI boot in QEMU
+RequiresMountsFor=/boot
+SuccessAction=poweroff
+FailureAction=poweroff
+
+[Service]
+Type=oneshot
+TimeoutStartSec=130
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyAMA0
+ExecStart=/bin/sh -c 'mkdir /run/y700-image-vm && mount -o ro /dev/disk/by-partlabel/linux-boot /run/y700-image-vm && exec /bin/sh /run/y700-image-vm/probe.sh'
+UNIT
+    qa_options="$qa_options systemd.unit=y700-image-vm.service systemd.set_credential_binary=systemd.extra-unit.y700-image-vm.service:$(base64 -w0 probe.service)"
+    cp -- "$entry" pending.conf
+    esp=internal.fat
+    entry_name=y700-test.conf
+    payload_dir=y700-test
+else
+    mcopy -i "$esp" ::/loader/entries/debian.conf pending.conf
+    qa_options="$qa_options systemd.unit=kernel-command-line.target systemd.run=/boot/probe.sh systemd.run_success_action=poweroff systemd.run_failure_action=poweroff"
+    entry_name=debian.conf
+    payload_dir=debian
 fi
+tr -d '\r' < pending.conf > exported.conf
+test "$(grep -c '^options ' exported.conf)" = 1
+sed -n 's/^options //p' exported.conf > exported-options
+if [[ $fbdev == 0 ]]; then grep -Eq '(^| )drm_kms_helper\.fbdev_emulation=0( |$)' exported-options; fi
+if [[ "$sector" = 512 ]]; then
+    grep -Eq '(^| )root=PARTLABEL=y700-test-root( |$)' exported-options
+    grep -Eq '(^| )y700\.media=sd( |$)' exported-options
+fi
+# Preserve all shipped options, including a trial-specific rdinit. Only the
+# disposable ESP receives the virtual board DT and observer parameters.
+sed "/^options /s|$| $qa_options|" exported.conf > trial.conf
+mcopy -o -i "$esp" trial.conf "::/loader/entries/$entry_name"
+mcopy -o -i "$esp" "$board/efi/vm/board.dtb" "::/EFI/$payload_dir/board.dtb"
+mcopy -i "$esp" exported-options ::/exported-options
 {
     echo '#!/bin/sh'
     echo 'exec >/dev/ttyAMA0 2>&1'
@@ -92,6 +128,7 @@ fi
     printf 'fbdev=%s\n' "$fbdev"
     echo "split=$split"
     echo "esp_label=$label"
+    echo "logical_sector=$sector"
     cat <<'PROBE'
 test -d /sys/firmware/efi
 test "$(cat /proc/1/comm)" = systemd
@@ -113,21 +150,48 @@ test "$(findmnt -nro FSTYPE /)" = ext4
 test "$(findmnt -nro UUID /)" = "$root_uuid"
 test "$(cat /etc/y700/image-id)" = "$image_id"
 test "$(findmnt -nro FSTYPE /boot)" = vfat
+parent=$(lsblk -no PKNAME "$rootdev")
+test "$(cat "/sys/class/block/$parent/queue/logical_block_size")" = "$logical_sector"
+test -s /boot/EFI/BOOT/BOOTAA64.EFI
 if [ "$split" = 1 ]; then
-    test ! -e /boot/EFI/BOOT/BOOTAA64.EFI
-    test "$(lsblk -no PKNAME "$rootdev")" != "$(lsblk -no PKNAME /dev/disk/by-partlabel/linux-boot)"
+    test "$rootdev" = "$(readlink -f /dev/disk/by-partlabel/y700-test-root)"
+    internal=$(lsblk -no PKNAME /dev/disk/by-partlabel/linux-boot)
+    test "$parent" != "$internal"
+    test "$(cat "/sys/class/block/$internal/queue/logical_block_size")" = 4096
+    test "$(findmnt -nro OPTIONS /run/y700-image-vm | cut -d, -f1)" = ro
+    efivars=/sys/firmware/efi/efivars
+    if ! mountpoint -q "$efivars"; then mount -t efivarfs -o ro efivarfs "$efivars"; fi
+    efi_value() { dd if="$efivars/$1-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f" bs=1 skip=4 status=none | tr -d '\000'; }
+    entry=$(efi_value LoaderEntrySelected)
+    test "$entry" = y700-test.conf
+    loaderpart=$(efi_value LoaderDevicePartUUID)
+    test "$(printf '%s' "$loaderpart" | tr A-F a-f)" = "$(blkid -s PARTUUID -o value /dev/disk/by-partlabel/linux-boot)"
+    echo 'Y700_VM_EFI_ENTRY selected=y700-test.conf loader_esp=internal'
+    options=/run/y700-image-vm/exported-options
+    echo 'Y700_VM_SPLIT_LAYOUT root_and_boot_card=1 card_sector=512 internal_sector=4096 internal_observer_ro=1'
 else
-    test -s /boot/EFI/BOOT/BOOTAA64.EFI
+    options=/boot/exported-options
 fi
+IFS= read -r shipped < "$options"
+case " $(cat /proc/cmdline) " in *" $shipped "*) ;; *) exit 1 ;; esac
+echo 'Y700_VM_EXPORTED_OPTIONS preserved=1'
+initial_program=$(printf '%s\n' "$shipped" | tr ' ' '\n' | sed -n 's/^rdinit=//p')
+test -n "$initial_program"
+dmesg | grep -F "Run $initial_program as init process"
 test -z "$(dpkg --audit)"
 records=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' | sed -n 's/^installed\t//p' | LC_ALL=C sort)
 test "$(printf '%s\n' "$records" | wc -l)" = "$package_count"
 test "$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)" = "$package_digest"
+printf 'Y700_VM_INVENTORY count=%s digest=%s\n' "$package_count" "$package_digest"
 printf 'Y700_BOOT_PASS image=%s root=%s esp=%s kernel=%s pid1=%s packages=%s split=%s\n' "$image_id" "$rootdev" "$bootdev" "$(uname -r)" "$(cat /proc/1/comm)" "$package_count" "$split"
 PROBE
 } > probe.sh
 mcopy -i "$esp" probe.sh ::/probe.sh
-if [[ "$sector" = 4096 ]]; then
+if (( split )); then
+    truncate -s 1027M internal.gpt
+    printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\n' | sfdisk --sector-size 4096 internal.gpt
+    dd if=internal.fat of=internal.gpt bs=1M seek=1 conv=sparse,notrunc status=none
+elif [[ "$sector" = 4096 ]]; then
     truncate -s 7171M disk.gpt
     printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\nstart=262400, size=1572864, type=linux, name=linux\n' | sfdisk --sector-size 4096 disk.gpt
     dd if=test-esp.fat of=disk.gpt bs=1M seek=1 conv=sparse,notrunc status=none
@@ -136,3 +200,7 @@ fi
 cmp -n 6442450944 "$images/root.ext4" disk.gpt 0 1074790400
 "${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python "$repo/tests/boot-efi-guest.py" \
     "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$vm" "$(sed -n 's/^image_id=//p' "$images/identity.txt")" "$label" "$sector" "$split" "$package_count"
+if (( split )); then
+    (cd "$card" && sha256sum -c SHA256SUMS)
+    (cd "$overlay" && sha256sum -c SHA256SUMS)
+fi
