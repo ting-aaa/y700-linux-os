@@ -10,6 +10,11 @@ The host verifies the input manifest and the exact candidate kernel before and a
 
 The observer proves the overlay root uses the read-only ext4 inside the initrd's in-memory SquashFS carrier and confines writes to a tmpfs upper layer. It records the live initrd bounds, available RAM and the absence of disk-backed swap. The test uses Type-B contacts to reject a password mismatch, perform real first enrollment and log in through the rendered Arctica keyboard. It checks that the resulting ordinary LightDM PAM session owns the active local seat0 Xfce desktop and requests normal power-off. The synthetic password stays in the host process's memory and the guest's transient account state.
 
-For a PC-only baseline-to-candidate kernel handover, additionally set `RAM_TRIAL_KEXEC=1` and `RAM_TRIAL_BASELINE_KERNEL` to the sealed baseline kernel for the optional `tests/ram-handover/` helper. This mode checks both kernel boot identities, handoff receipts and the live device tree's kexec marker.
+To test the handover from the tablet's baseline kernel on the PC, use the EFI-first fixture. It requires the AArch64 EDK II firmware from Ubuntu's `qemu-efi-aarch64` package version `2025.11-3ubuntu7.3` (the file hash is pinned by the wrapper). The emulated Cortex-A72 exposes GICv3 and ITS. The guest boots without a disk. Before switching, the fixture checks that all three kernel load segments avoid the interrupt controller's live tables. The run also checks the identity of each kernel, the device tree's kexec marker and the ordinary desktop session.
+
+```sh
+RAM_TRIAL_BASELINE_KERNEL="$baseline_kernel" bash tests/ram-handover/efi-first.sh \
+    "$aavmf_code" "$sealed_ram_trial" "$virt_dtb" "$new_log_dir"
+```
 
 Tool overrides are `QEMU_SYSTEM_AARCH64`, `QEMU_DATA`, `AARCH64_CC` and `UV_BIN`. The fixture uses the virtual board; a successful result covers the diskless ARM64 kernel and Debian desktop path in QEMU.
