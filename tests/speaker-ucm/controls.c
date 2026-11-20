@@ -15,7 +15,9 @@ static int card;
 static void control(const char *prefix, const char *name, int type, int max,
                     const char *choices, size_t length, int count, int digital)
 {
-    struct snd_ctl_elem_info info = { .type = type, .count = 1 };
+    struct snd_ctl_elem_info info = {
+        .type = type, .count = type == SNDRV_CTL_ELEM_TYPE_BYTES ? 4 : 1,
+    };
     info.id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
     if (snprintf((char *)info.id.name, sizeof(info.id.name), "%s%s", prefix, name)
             >= (int)sizeof(info.id.name))
@@ -27,7 +29,7 @@ static void control(const char *prefix, const char *name, int type, int max,
         info.value.enumerated.items = count;
         info.value.enumerated.names_ptr = (uintptr_t)choices;
         info.value.enumerated.names_length = length;
-    } else {
+    } else if (type != SNDRV_CTL_ELEM_TYPE_BYTES) {
         info.value.integer.max = max;
     }
     if (ioctl(card, SNDRV_CTL_IOCTL_ELEM_ADD, &info) < 0)
@@ -46,12 +48,16 @@ static void control(const char *prefix, const char *name, int type, int max,
 
 int main(void)
 {
+    static const char *calibration[] = {
+        "DSP1 Protection cd CAL_R", "DSP1 Protection cd CAL_STATUS",
+        "DSP1 Protection cd CAL_CHECKSUM", "DSP1 Protection cd CAL_AMBIENT",
+    };
     struct snd_ctl_card_info identity;
     card = open("/dev/snd/controlC0", O_RDWR);
     if (card < 0 || ioctl(card, SNDRV_CTL_IOCTL_CARD_INFO, &identity) < 0)
         err(1, "Read card identity");
-    if (strcmp((char *)identity.driver, "Dummy") || strcmp((char *)identity.id, "Y700Dummy"))
-        errx(1, "Requires the private Y700Dummy virtual card");
+    if (strcmp((char *)identity.driver, "Dummy") || strcmp((char *)identity.id, "LenovoY700"))
+        errx(1, "Requires the private snd-dummy card");
     BOOL("", "PRIMARY_MI2S_RX Audio Mixer MultiMedia1");
     for (int i = 1; i <= 2; i++) {
         const char *p = i == 1 ? "SPK1 " : "SPK2 ";
@@ -62,6 +68,8 @@ int main(void)
         control(p, "Analog PCM Volume", SNDRV_CTL_ELEM_TYPE_INTEGER, 3, NULL, 0, 0, 0);
         control(p, "Digital PCM Volume", SNDRV_CTL_ELEM_TYPE_INTEGER, 457, NULL, 0, 0, 1);
         ENUM(p, "DACPCM Source", "Zero\0ASP_RX1\0ASP_RX2\0DSP_TX1\0DSP_TX2", 5);
+        for (size_t j = 0; j < sizeof(calibration) / sizeof(calibration[0]); j++)
+            control(p, calibration[j], SNDRV_CTL_ELEM_TYPE_BYTES, 0, NULL, 0, 0, 0);
         for (int j = 1; j <= 8; j++) {
             char name[24];
             snprintf(name, sizeof(name), "DSP_RX%d Source", j);

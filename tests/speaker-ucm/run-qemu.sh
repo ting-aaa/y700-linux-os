@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Requires the prepared Y700 ARM64 kernel build tree plus its image and root.
 set -euo pipefail
-if (( $# != 3 )); then
-    echo 'Usage: run-qemu.sh KERNEL_BUILD ROOT.qcow2 ARM64_BUSYBOX' >&2
+if (( $# != 4 )); then
+    echo 'Usage: run-qemu.sh KERNEL_BUILD ROOT.qcow2 ARM64_BUSYBOX ARM64_UV' >&2
     exit 2
 fi
 kernel=$(realpath -e "$1")
 disk=$(realpath -e "$2")
 busybox=$(realpath -e "$3")
+uv=$(realpath -e "$4")
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/var/tmp}/y700-sound-ucm.XXXXXXXX")
@@ -20,14 +21,30 @@ make -s -C "$kernel" M="$PWD" ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu-
 install -m644 snd-dummy.ko "$work/init/test/"
 cd "$work/init"
 install -m755 "$busybox" bin/busybox
-install -m755 "$here/guest.sh" test/
+install -m755 "$uv" test/uv
+install -m755 "$here/"{guest.sh,stage-observer.sh} test/
 "${AARCH64_CC:-aarch64-linux-gnu-gcc}" -Wall -Wextra -Werror -O2 -static "$here/controls.c" -o test/controls
 install -m644 "$repo/packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf" test/new.conf
+install -m644 "$repo/scripts/speaker-calibration.py" test/speaker-calibration.py
 upstream="$repo/reference/y700-linux/asphalt-upstream"
 git -c safe.directory="$upstream" -C "$upstream" show 8dcb481fc2ce91794fd294630e06f15a52ec7513:pkgs/asphalt/HiFi.conf > test/old.conf
-# Apart from the gain and its explanation, keep every factory routing action and its order.
-sed -e '/^[[:space:]]*# UCM cset uses raw ALSA units\./d' \
-    -e "/name='SPK[12] Digital PCM Volume'/s/ 249\"$/ -40dB\"/" test/new.conf | cmp - test/old.conf
+awk '
+    /SPK1 Digital PCM Volume/ { print "        # UCM cset uses raw ALSA units. CS35L45 step 249 is -40.00 dB." }
+    /SPK[12] Digital PCM Volume/ { sub(/ -40dB"$/, " 249\"") }
+    { print }
+' test/old.conf > test/previous.conf
+# Keep every previous routing action and its order. The only new actions
+# explicitly stop both preloads and run the helper before normal DSP boot.
+awk '
+    BEGIN { quote = sprintf("%c", 39) }
+    /SPK1 DSP1 Firmware. Protection/ {
+        print "        cset \"name=" quote "SPK1 DSP1 Preload Switch" quote " 0\""
+        print "        cset \"name=" quote "SPK2 DSP1 Preload Switch" quote " 0\""
+    }
+    /SPK1 DSP1 Preload Switch. 1/ { print "        shell \"/usr/libexec/y700-speaker-calibration stage\"" }
+    { print }
+' test/previous.conf | cmp - test/new.conf
+sha256sum "$disk" "$kernel/arch/arm64/boot/Image" test/{old.conf,previous.conf,new.conf,speaker-calibration.py}
 cat > init <<'INIT'
 #!/bin/busybox sh
 set -eu
@@ -52,7 +69,7 @@ chmod 755 init
 find . -print0 | cpio --null -o --quiet -H newc | gzip -1 > "$work/initrd"
 args=()
 if [[ -n ${QEMU_FIRMWARE_DIR:-} ]]; then args+=(-L "$QEMU_FIRMWARE_DIR"); fi
-timeout -k 4 100 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" -machine virt,gic-version=3 \
+timeout -k 4 150 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" -machine virt,gic-version=3 \
     -cpu max -m 480 -smp 2 -nodefaults -no-user-config -display none -serial stdio -monitor none -nic none -no-reboot \
     -kernel "$kernel/arch/arm64/boot/Image" -initrd "$work/initrd" \
     -append 'console=ttyAMA0 loglevel=3 panic=4 y700.speaker_fixture=1' \
@@ -60,3 +77,7 @@ timeout -k 4 100 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" -mac
     </dev/null 2>&1 | tr -d '\r' | tee "$work/log"
 grep -Fxq Y700_SPEAKER_UCM_PASS "$work/log"
 grep -Fxq SPEAKER_FIXTURE_EXIT=0 "$work/log"
+grep -Fxq 'SPEAKER_STAGE_RETURN case=generic rc=0 amp=off preload=off gain=249' "$work/log"
+grep -Fxq 'SPEAKER_STAGE_RETURN case=calibrated rc=0 amp=off preload=off gain=361' "$work/log"
+grep -Eq '^SPEAKER_INVALID_UCM_RESULT libasound=-[1-9][0-9]* active=0$' "$work/log"
+grep -Fxq 'SPEAKER_INVALID_ABORT amp=off preload=off previous_samples=unchanged' "$work/log"
