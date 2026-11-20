@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "scope": "Y700 desktop Bluetooth keyboard passkey progress",
+  "replaces": {
+    "package": "blueman",
+    "version": "2.4.4-1",
+    "architecture": "arm64"
+  },
+  "packages": [
+    {
+      "filename": "blueman_2.4.4-1+y7001_arm64.deb",
+      "package": "blueman",
+      "version": "2.4.4-1+y7001",
+      "architecture": "arm64",
+      "size": 1049844,
+      "sha256": "bcb0ba040878da8c82ca3a7ac83e3d6cffb1477660d9e6651dbb9271bdf8737c"
+    }
+  ]
+}

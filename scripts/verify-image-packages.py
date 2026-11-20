@@ -23,6 +23,8 @@ def replacements(lock):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('root', type=Path)
 parser.add_argument('--qcam-lock', type=Path, help='Use this qcam build input lock for a sealed image')
+parser.add_argument('--sealed-blueman-y7001', action='store_true',
+                    help='Require the historical Blueman lock when verifying a sealed build')
 parser.add_argument('--sealed-dev12-5', action='store_true',
                     help='Require the original dev12.5 platform version in a sealed-image workflow')
 mode = parser.add_mutually_exclusive_group()
@@ -32,6 +34,8 @@ mode.add_argument('--check-upgrade', choices=('blueman', 'onboard', 'xorg-dsi'),
 args = parser.parse_args()
 
 repo = Path(__file__).resolve().parents[1]
+old_blueman = repo / 'config/sealed/blueman-y7001.lock.json'
+blueman_lock = old_blueman if args.sealed_dev12_5 or args.sealed_blueman_y7001 else repo / 'config/blueman.lock.json'
 wanted = set()
 for name in ('debian-base.lock.json', 'desktop-repair-auth.lock.json'):
     packages = json.loads((repo / 'config' / name).read_text())['packages']
@@ -41,7 +45,8 @@ output = subprocess.check_output(['dpkg-query', f'--admindir={args.root}/var/lib
 status = {tuple(fields[:3]): fields[3] for fields in (row.split('\t') for row in output.splitlines())}
 actual = {package for package, state in status.items() if state == 'installed'}
 if args.check_upgrade:
-    lock = json.loads((repo / 'config' / f'{args.check_upgrade}.lock.json').read_text())
+    path = blueman_lock if args.check_upgrade == 'blueman' else repo / 'config' / f'{args.check_upgrade}.lock.json'
+    lock = json.loads(path.read_text())
     candidates = {(p['package'], p['architecture']): package_tuple(p) for p in lock['packages']}
     for parent in replacements(lock):
         package, _, arch = parent
@@ -49,6 +54,13 @@ if args.check_upgrade:
             raise SystemExit(f'{args.check_upgrade} parent differs from the locked Debian base: {parent}')
         # dpkg can be interrupted after unpacking the candidate and before configuration.
         candidate_state = status.get(candidates[package, arch])
+        if args.check_upgrade == 'blueman' and blueman_lock != old_blueman:
+            previous = json.loads(old_blueman.read_text())
+            if package_tuple(previous['packages'][0]) in actual:
+                receipt = args.root / 'var/lib/y700/build/blueman.lock.json'
+                if receipt.is_symlink() or not receipt.is_file() or json.loads(receipt.read_text()) != previous:
+                    raise SystemExit('Previous Blueman package requires its sealed y7001 receipt')
+                continue
         if parent not in actual and candidate_state not in (
                 'installed', 'half-installed', 'unpacked', 'half-configured', 'triggers-awaited', 'triggers-pending'):
             raise SystemExit(f'Unexpected installed {package}:{arch} version for {args.check_upgrade}')
@@ -64,10 +76,14 @@ for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'touch-lock', 
     if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
         raise SystemExit(f'{name} receipt must be a regular file')
     if not receipt.exists():
+        if layer == 'blueman' and args.sealed_blueman_y7001:
+            raise SystemExit('Requested sealed Blueman layer receipt is missing')
         if layer == 'camera-qcam' and args.qcam_lock:
             raise SystemExit('Requested qcam layer receipt is missing')
         continue
     lock_path = args.qcam_lock if layer == 'camera-qcam' and args.qcam_lock else repo / 'config' / name
+    if layer == 'blueman':
+        lock_path = blueman_lock
     expected = json.loads(lock_path.read_text())
     if json.loads(receipt.read_text()) != expected:
         raise SystemExit(f'{name} receipt differs from the build input lock')

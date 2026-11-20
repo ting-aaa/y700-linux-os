@@ -3,6 +3,7 @@
 set -euo pipefail
 qcam_args=()
 platform_args=()
+blueman_args=()
 if [[ ${1:-} == --sealed-dev12-5 ]]; then
     platform_args=(--sealed-dev12-5)
     shift
@@ -11,8 +12,12 @@ if [[ ${1:-} == --qcam-lock && $# -ge 2 ]]; then
     qcam_args=(--qcam-lock "$(realpath -e -- "$2")")
     shift 2
 fi
+if [[ ${1:-} == --sealed-blueman-y7001 ]]; then
+    blueman_args=(--sealed-blueman-y7001)
+    shift
+fi
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-desktop|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] [--sealed-blueman-y7001] LAYER DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -21,6 +26,9 @@ case $layer in firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-deskt
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
+if [[ $layer == blueman ]] && (( ${#platform_args[@]} + ${#blueman_args[@]} )); then
+    lock=$repo/config/sealed/blueman-y7001.lock.json
+fi
 test "$(id -u)" = 0
 test "$root" != /
 test -f "$root/.y700-disposable-build-root"
@@ -49,7 +57,7 @@ if (( ${#qcam_args[@]} )); then
     [[ $layer != camera-qcam ]] || { echo 'An existing qcam lock applies only when retaining the camera app.' >&2; exit 2; }
 fi
 if (( ${#qcam_args[@]} + ${#platform_args[@]} )); then
-    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}"
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"
 fi
 stage=$(mktemp -d "$root/tmp/y700-board-layer.XXXXXXXX")
 policy=$root/usr/sbin/policy-rc.d
@@ -61,7 +69,7 @@ trap cleanup EXIT
 cp -- "$archives/"*.deb "$stage/"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$stage" "$lock"
 if [[ $layer == blueman || $layer == onboard || $layer == xorg-dsi ]]; then
-    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --check-upgrade "$layer"
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${blueman_args[@]}" --check-upgrade "$layer"
 fi
 debs=()
 for path in "$stage/"*.deb; do debs+=("${path#"$root"}"); done
@@ -165,4 +173,4 @@ install -m644 "$lock" "$stage/$layer.lock.json"
 mv -T -- "$stage/$layer.lock.json" "$record/$layer.lock.json"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$stage/packages.tsv"
 mv -T -- "$stage/packages.tsv" "$record/packages.tsv"
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${platform_args[@]}" "${qcam_args[@]}" "${blueman_args[@]}"

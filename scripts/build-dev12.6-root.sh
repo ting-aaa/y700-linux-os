@@ -78,9 +78,9 @@ ln -- "$stage/policy" "$root/usr/sbin/policy-rc.d"
 "${guest[@]}" dpkg --force-confold -i "${stage#"$root"}/platform.deb"
 rm -- "$root/usr/sbin/policy-rc.d" "$stage/policy" "$stage/platform.deb"
 rmdir -- "$stage"
-"${check[@]}" --qcam-lock "$before_lock"
-bash "$repo/scripts/add-board-layer.sh" camera-qcam "$root" "$work/camera"
-bash "$repo/scripts/add-board-layer.sh" touch-lock "$root" "$locker"
+"${check[@]}" --sealed-blueman-y7001 --qcam-lock "$before_lock"
+bash "$repo/scripts/add-board-layer.sh" --sealed-blueman-y7001 camera-qcam "$root" "$work/camera"
+bash "$repo/scripts/add-board-layer.sh" --sealed-blueman-y7001 touch-lock "$root" "$locker"
 rm -- "$root/.y700-disposable-build-root"
 chmod 644 "$root/var/lib/y700/build/packages.tsv"
 for lock in camera-qcam touch-lock; do cmp "$repo/config/$lock.lock.json" "$root/var/lib/y700/build/$lock.lock.json"; done
@@ -88,7 +88,7 @@ for lock in camera-qcam touch-lock; do cmp "$repo/config/$lock.lock.json" "$root
 [[ -z $("${guest[@]}" dpkg --audit) ]]
 [[ -z $("${guest[@]}" dpkg -V y700-platform y700-camera-qcam libxss1 xfce4-screensaver y700-touch-lock) ]]
 generic
-"${check[@]}" | tee "$bundle/inventory.txt"
+"${check[@]}" --sealed-blueman-y7001 | tee "$bundle/inventory.txt"
 inventory > "$bundle/packages.tsv"
 printf '%s  %s\n' ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21 "$work/before.tsv" \
     a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98 "$bundle/packages.tsv" | sha256sum --strict -c -

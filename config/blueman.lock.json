@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "scope": "Y700 desktop Bluetooth keyboard passkey progress",
+  "scope": "Y700 desktop Bluetooth pairing entry and passkey notification lifetime",
   "replaces": {
     "package": "blueman",
     "version": "2.4.4-1",
@@ -8,12 +8,12 @@
   },
   "packages": [
     {
-      "filename": "blueman_2.4.4-1+y7001_arm64.deb",
+      "filename": "blueman_2.4.4-1+y7002_arm64.deb",
       "package": "blueman",
-      "version": "2.4.4-1+y7001",
+      "version": "2.4.4-1+y7002",
       "architecture": "arm64",
-      "size": 1049844,
-      "sha256": "bcb0ba040878da8c82ca3a7ac83e3d6cffb1477660d9e6651dbb9271bdf8737c"
+      "size": 1050192,
+      "sha256": "4fbb2eb45426a10620e75943f359715adec921fdc71e5d976f807f3295756367"
     }
   ]
 }

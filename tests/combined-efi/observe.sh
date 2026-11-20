@@ -57,6 +57,13 @@ if [[ $1 == setup ]]; then
         camera='0.7.2-1~bpo13+1.y7004'
         [[ $(dpkg-query -W -f='${Version}' xfce4-power-manager) == '4.20.0-1+y7001' ]]
         [[ -z $(dpkg -V xfce4-power-manager xfce4-power-manager-data upower y700-power-desktop) ]]
+        if [[ -f /boot/blueman-tested.lock ]]; then
+            expected=685d01f30932a5dd7df5ccbf99c66f3908e29c5cdeda2b7abe91d727f9c09511
+            cmp /boot/blueman-tested.lock /var/lib/y700/build/blueman.lock.json
+            [[ $(dpkg-query -W -f='${Version} ${Architecture}' blueman) == '2.4.4-1+y7002 arm64' ]]
+            [[ -z $(dpkg -V blueman) ]]
+            echo 'COMBINED_BLUEMAN version=2.4.4-1+y7002 architecture=arm64 receipt=verified files=verified'
+        fi
     fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)

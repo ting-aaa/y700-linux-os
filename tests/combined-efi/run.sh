@@ -15,6 +15,8 @@ regdb=${VERIFY_REGDB:-1}
 [[ $regdb == 0 || $regdb == 1 ]]
 power=${POWER_DESKTOP:-0}
 [[ $power == 0 || $power == 1 ]]
+blueman=${BLUEMAN_UPDATE:-0}
+[[ $blueman == 0 || ( $blueman == 1 && $power == 1 ) ]]
 cold=${COLD_BOOT:-0}
 [[ $cold == 0 || $cold == 1 ]]
 screen_lock=${SCREEN_LOCK:-off}
@@ -78,6 +80,9 @@ mcopy -o -i test-esp.fat entry ::/loader/entries/debian.conf
 mcopy -o -i test-esp.fat "$dtb" ::/EFI/debian/board.dtb
 mcopy -i test-esp.fat "$here/observe.sh" ::/combined-observe.sh
 mcopy -i test-esp.fat combined-touch ::/combined-touch
+if (( blueman )); then
+    mcopy -i test-esp.fat "$here/../../config/blueman.lock.json" ::/blueman-tested.lock
+fi
 if [[ $screen_lock != off ]]; then
     printf '%s\n' "$screen_lock" > lock-mode
     mcopy -i test-esp.fat lock-mode "$here/../screen-lock/observe-lock.sh" ::/
