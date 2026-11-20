@@ -1,0 +1,48 @@
+#!/bin/busybox sh
+export PATH=/bin:/usr/bin:/usr/sbin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev
+exec </dev/console >/dev/console 2>&1
+fail() { echo "MEDIA_FAIL $*"; poweroff -f; exit 1; }
+mount -t proc proc /proc && mount -t sysfs sysfs /sys || fail api
+mount -t tmpfs tmpfs /run || fail run
+mkdir -p /run/udev
+insmod /qa-usb-storage.ko || fail usb-storage
+wait_for() {
+    n=0
+    until "$@"; do
+        n=$((n + 1))
+        [ "$n" -lt 200 ] || fail "timeout $*"
+        sleep 0.2
+    done
+}
+wait_for test -b /dev/vda1
+[ "$(blockdev --getro /dev/vda)" = 0 ] || fail 'cold fixture started read-only'
+echo 'MEDIA_COLD initial_ro=0'
+. /qa-cold.sh
+for name in vda vda1; do
+    [ "$(blockdev --getro /dev/$name)" = 1 ] || fail "cold $name"
+done
+echo "MEDIA_UDEV version=$(udevadm --version)"
+udevadm verify /etc/udev/rules.d/99-y700-ram-media.rules || fail rules
+/usr/lib/systemd/systemd-udevd --daemon || fail daemon
+udevadm trigger --action=add --subsystem-match=block || fail trigger
+check() {
+    name=$1
+    wait_for test -b "/dev/$name"
+    wait_for grep -qx 1 "/sys/class/block/$name/ro"
+    udevadm settle --timeout=20 || fail settle
+    udevadm info -q property -n "/dev/$name" | grep -Fxq UDISKS_IGNORE=1 || fail "ignore $name"
+    [ "$(blockdev --getro "/dev/$name")" = 1 ] || fail "BLKROGET $name"
+    /qa-open "/dev/$name" || protection_failed=1
+    echo "MEDIA_RO device=$name sysfs=1 blkroget=1 udisks_ignore=1"
+}
+protection_failed=0
+for name in vda vda1; do check "$name"; done
+sha256sum /dev/vda
+echo MEDIA_REQUEST_HOT
+for name in sda sda1; do check "$name"; done
+sha256sum /dev/sda
+[ "$protection_failed" = 0 ] || fail 'canary write protection'
+echo MEDIA_PASS
+poweroff -f
