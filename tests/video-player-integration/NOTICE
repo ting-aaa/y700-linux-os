@@ -1,0 +1,12 @@
+The private video4linux2 plugin is built from Debian gst-plugins-good1.0
+1.26.2-1+deb13u2. Copyright belongs to the GStreamer contributors listed in
+the source and Debian copyright file. The Y700 modifications to video4linux2
+are distributed under LGPL-2.1-or-later. They address the first VP9 picture
+and negotiation of partially specified BT.601 input on the Iris decoder.
+
+COPYING and debian-copyright accompany the installed plugin. The offline
+archive's source directory includes the original upstream and Debian source
+archives, the two local patches, both headers and the build scripts. Run
+build-color.sh with those archives as its first argument to rebuild the plugin.
+The included Debian Parole player archive preserves the package copyright
+files and unmodified Debian binaries.

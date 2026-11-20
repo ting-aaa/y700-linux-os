@@ -1,0 +1,16 @@
+#!/bin/sh
+# Only this Parole process and its children use the board's GStreamer plugin.
+plugin=/usr/local/lib/y700-parole/gstreamer-1.0
+if [ -r "$plugin/libgstvideo4linux2.so" ]; then
+    case ${XDG_CACHE_HOME:-} in
+        /*) cache=$XDG_CACHE_HOME ;;
+        *) cache=${HOME:?}/.cache ;;
+    esac
+    if (umask 077 && mkdir -p "$cache/y700-parole"); then
+        path=${GST_PLUGIN_PATH_1_0-${GST_PLUGIN_PATH:-}}
+        GST_PLUGIN_PATH_1_0=$plugin${path:+:$path}
+        GST_REGISTRY_1_0=$cache/y700-parole/registry.aarch64-iris-r2.bin
+        export GST_PLUGIN_PATH_1_0 GST_REGISTRY_1_0
+    fi
+fi
+exec /usr/bin/parole "$@"
