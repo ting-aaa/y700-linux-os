@@ -2,7 +2,7 @@
 # Exercise the sealed desktop on the running board's CPU using only RAM.
 set -euo pipefail
 if (( $# != 3 )); then
-    echo 'Usage: run.sh PINNED_USB_SSH DEV12.6_RAM_BUNDLE DEVICE_XVFB_USR' >&2
+    echo 'Usage: run.sh PINNED_USB_SSH SEALED_RAM_BUNDLE DEVICE_XVFB_USR' >&2
     exit 2
 fi
 ssh=$(realpath -e "$1")
@@ -10,8 +10,9 @@ bundle=$(realpath -e "$2")
 helper=$3
 [[ $helper =~ ^/var/tmp/[A-Za-z0-9._/-]+/usr$ && $helper != */../* ]]
 here=$(cd "$(dirname "$0")" && pwd)
-initrd_sha=ee4aceddc0302ff966c7d71f771e66302a50e83a3344e3f835e9a9cb40745946
-(cd "$bundle" && printf '%s  initrd\n' "$initrd_sha" | sha256sum --strict -c)
+source "$here/profiles.sh"
+initrd_sha=$(sha256sum "$bundle/initrd" | cut -d' ' -f1)
+ram_profile "$initrd_sha"
 stage=$(bash "$ssh" bash -s <<'CHECK'
 set -eu
 test "$(uname -m)" = aarch64
@@ -31,7 +32,9 @@ cleanup() {
         { echo 'Could not verify RAM staging cleanup' >&2; exit 1; }
 }
 trap cleanup EXIT
-tar -C "$here" -cf - device.sh namespace.sh desktop.sh |
+actors=(-C "$here" device.sh namespace.sh desktop.sh thunar.sh profiles.sh)
+if [[ $release == dev12.8 ]]; then actors+=(brightness.py -C "$here/../brightness" probe.py); fi
+tar -cf - "${actors[@]}" |
     bash "$ssh" "umask 077; tar -xf - -C '$stage'"
 start=$SECONDS
 timeout 180 bash "$ssh" "umask 077; cat > '$stage/initrd'" <"$bundle/initrd"

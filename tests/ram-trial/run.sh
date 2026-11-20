@@ -45,17 +45,26 @@ fdtput -t x "$work/ram.dtb" /memory@40000000 reg 0 40000000 2 40000000
 
 seed=$work/qa
 mkdir "$seed"
+extras=()
 case ${RAM_TRIAL_VERSION:-dev12.5} in
     dev12.5) echo baseline > "$seed/lock-mode" ;;
     dev12.6) echo installed > "$seed/lock-mode" ;;
-    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5 or dev12.6)' >&2; exit 2 ;;
+    dev12.8)
+        echo installed > "$seed/lock-mode"
+        cp "$here/../../config/blueman.lock.json" "$seed/blueman-tested.lock"
+        cp "$here/../../config/platform.lock.json" "$seed/platform-tested.lock"
+        cp "$here/check-volatile-desktop.sh" "$seed/"
+        extras=(blueman-tested.lock platform-tested.lock check-volatile-desktop.sh)
+        args+=" y700.combined_power=1"
+        ;;
+    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6 or dev12.8)' >&2; exit 2 ;;
 esac
 combined=$here/../combined-efi
 awk -f "$here/adapt-observer.awk" "$combined/observe.sh" > "$seed/combined-observe.sh"
 bash -n "$seed/combined-observe.sh"
 cp "$here/check-root.sh" "$here/../file-trial-positive/check-login-stage.sh" "$seed/"
 "${AARCH64_CC:-aarch64-linux-gnu-gcc}" -O2 -Wall -Wextra -Werror -static "$combined/touch.c" -o "$seed/combined-touch"
-tar -C "$seed" -cf "$work/qa.tar" combined-observe.sh combined-touch check-root.sh check-login-stage.sh lock-mode
+tar -C "$seed" -cf "$work/qa.tar" combined-observe.sh combined-touch check-root.sh check-login-stage.sh lock-mode "${extras[@]}"
 seed_size=$(stat -Lc %s "$work/qa.tar")
 [[ $seed_size -le 1048576 ]]
 cat > "$work/probe.service" <<UNIT

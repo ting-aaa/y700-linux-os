@@ -3,11 +3,13 @@ set -euo pipefail
 cd "$1"
 [[ $(stat -c '%u:%a' .) == 0:700 && $(findmnt -nro FSTYPE -T .) == tmpfs ]]
 printf '%s  initrd\n' "$3" | sha256sum --strict -c
-[[ $(stat -c %s initrd) == 1261843044 ]]
-# The verified dev12.6 archive stores the contiguous SquashFS member here.
+source ./profiles.sh
+ram_profile "$3"
+[[ $(stat -c %s initrd) == "$initrd_bytes" ]]
+# Both sealed archives use the same board initrd and aligned newc member offset.
 # GNU dd is in coreutils on the board, including installations without cpio.
-dd if=initrd of=carrier bs=1M iflag=skip_bytes,count_bytes skip=11641252 count=1250201600 status=none
-printf '%s  carrier\n' 775a6da7210c47a73ca240c2114ba3349c6d9e3134df4aab3c17dd9a9131f3be | sha256sum --strict -c
+dd if=initrd of=carrier bs=1M iflag=skip_bytes,count_bytes skip=11641252 count="$carrier_bytes" status=none
+printf '%s  carrier\n' "$carrier_sha" | sha256sum --strict -c
 rm -- initrd
 for ns in mnt net pid ipc; do readlink "/proc/self/ns/$ns" >"host-$ns"; done
 snapshot() {
@@ -16,7 +18,8 @@ snapshot() {
     seat=$(loginctl show-seat seat0 -p ActiveSession --value)
     [[ -n $seat ]]
     loginctl show-session "$seat" -p Id -p Active -p LockedHint
-    systemctl show lightdm ssh NetworkManager bluetooth -p Id -p InvocationID
+    systemctl show lightdm ssh NetworkManager bluetooth upower -p Id -p InvocationID
+    if [[ -f /sys/class/backlight/ktz8866-backlight/brightness ]]; then cat /sys/class/backlight/ktz8866-backlight/brightness; fi
     findmnt -nro SOURCE,FSTYPE,OPTIONS /
     findmnt -nro SOURCE,FSTYPE,OPTIONS --mountpoint /boot || :
     cat /proc/swaps
@@ -27,7 +30,7 @@ snapshot() {
 snapshot >before
 rc=0
 timeout --kill-after=5s 200s unshare --mount --propagation private --pid --fork --kill-child --ipc --net \
-    bash "$1/namespace.sh" "$1" "$2" || rc=$?
+    bash "$1/namespace.sh" "$1" "$2" "$3" || rc=$?
 snapshot >after
 cmp before after
 [[ -z $(losetup -j "$1/carrier") ]]

@@ -34,12 +34,15 @@
     print "printf 'RAM_TRIAL_XFCE_READY same_pam_session=1 elapsed=%ss\\n' \"$((SECONDS - pam_time))\""
 }
 /^asuser\(\) / {
+    print "if [[ -f /run/y700-ram-qa/platform-tested.lock ]]; then bash /run/y700-ram-qa/check-volatile-desktop.sh; fi"
     print "echo RAM_TRIAL_PASS"
     print "systemctl --no-block poweroff"
     desktop_count++
     exit
 }
 {
+    gsub("/boot/blueman-tested.lock", "/run/y700-ram-qa/blueman-tested.lock")
+    gsub("/boot/platform-tested.lock", "/run/y700-ram-qa/platform-tested.lock")
     gsub("/boot/lock-mode", "/run/y700-ram-qa/lock-mode")
     gsub("/boot/combined-", "/run/y700-ram-qa/combined-")
     print

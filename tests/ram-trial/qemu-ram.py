@@ -148,7 +148,7 @@ def touch_only(work, logs, guest):
             stage.sendall(b"LOGIN_SUBMITTED\n")
             wait_for_marker(report, guest, "FILE_TRIAL_TOUCH_SUBMITTED acknowledged=1", 30)
             wait_for_marker(report, guest, "COMBINED_PAM_XFCE account=y700 ordinary=1 active=1 local=1 seat=seat0 type=x11", 455)
-            wait_for_marker(report, guest, "RAM_TRIAL_PASS", 30)
+            wait_for_marker(report, guest, "RAM_TRIAL_PASS", 120 if os.getenv("RAM_TRIAL_VERSION") == "dev12.8" else 30)
 
 
 def verify(logs, expected_bytes):
@@ -157,6 +157,7 @@ def verify(logs, expected_bytes):
     inventories = {
         "dev12.5": (1112, "ae129edd690fcd72820e3c286c6010474a70cefea622d53f4fe88b53f94afb21"),
         "dev12.6": (1115, "a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98"),
+        "dev12.8": (1124, "a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84"),
     }
     count, digest = inventories[release]
     packages = [line for line in lines if line.startswith("RAM_TRIAL_PACKAGES ")]
@@ -167,8 +168,10 @@ def verify(logs, expected_bytes):
         raise RuntimeError("The live DT reports a different kernel boot origin")
     if not any(re.fullmatch(r"RAM_TRIAL_SWAP zram=\d+ disk_backed=0", line) for line in lines):
         raise RuntimeError("Missing the RAM-only swap witness")
-    if release == "dev12.6" and "RAM_TRIAL_SWAP zram=0 disk_backed=0" not in lines:
-        raise RuntimeError("Expected the dev12.6 trial to run without active swap")
+    if release != "dev12.5" and "RAM_TRIAL_SWAP zram=0 disk_backed=0" not in lines:
+        raise RuntimeError(f"Expected the {release} trial to run without active swap")
+    if release == "dev12.8" and "RAM_TRIAL_DESKTOP fresh=1 canary=upper-only ambient_client=ordinary auto_brightness=false" not in lines:
+        raise RuntimeError("Missing the dev12.8 volatile desktop witness")
     if "RAM_TRIAL_TOPOLOGY root=overlay carrier=squashfs_ro lower=ext4_ro upper=tmpfs external_disks=0 boot_mount=0 write_confined=1" not in lines:
         raise RuntimeError("Missing the diskless RAM root topology witness")
     bounds = [match.groups() for line in lines if (match := re.fullmatch(
