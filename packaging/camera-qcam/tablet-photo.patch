@@ -1,0 +1,235 @@
+diff --git a/src/apps/qcam/main_window.cpp b/src/apps/qcam/main_window.cpp
+index 59c2aa6..c19d4fe 100644
+--- a/src/apps/qcam/main_window.cpp
++++ b/src/apps/qcam/main_window.cpp
+@@ -18,9 +18,11 @@
+ #include <QFileDialog>
+ #include <QImage>
+ #include <QImageWriter>
++#include <QLocale>
+ #include <QMessageBox>
+ #include <QMutexLocker>
+ #include <QStandardPaths>
++#include <QStatusBar>
+ #include <QStringList>
+ #include <QTimer>
+ #include <QToolBar>
+@@ -31,6 +33,7 @@
+ #include "../common/image.h"
+ 
+ #include "cam_select_dialog.h"
++#include "photo_store.h"
+ #ifndef QT_NO_OPENGL
+ #include "viewfinder_gl.h"
+ #endif
+@@ -148,6 +151,7 @@ MainWindow::MainWindow(CameraManager *cm, const OptionsParser::Options &options)
+ 
+ MainWindow::~MainWindow()
+ {
++	photoWorkers_.waitForDone();
+ 	if (camera_) {
+ 		stopCapture();
+ 		camera_->release();
+@@ -177,6 +181,17 @@ int MainWindow::createToolbars()
+ 	/* Disable right click context menu. */
+ 	toolbar_->setContextMenuPolicy(Qt::PreventContextMenu);
+ 
++	/* Keep the shutter reachable even when the toolbar overflows in portrait. */
++	const bool chinese = QLocale().language() == QLocale::Chinese;
++	shutter_ = new QPushButton(QIcon::fromTheme("camera-photo", QIcon(":aperture.svg")),
++				   chinese ? QStringLiteral("拍照") : QStringLiteral("Take photo"));
++	shutter_->setObjectName("photoShutter");
++	shutter_->setMinimumSize(112, 48);
++	shutter_->setEnabled(false);
++	connect(shutter_, &QPushButton::clicked, this, &MainWindow::takePhoto);
++	statusBar()->setSizeGripEnabled(false);
++	statusBar()->addPermanentWidget(shutter_);
++
+ 	/* Quit action. */
+ 	action = toolbar_->addAction(QIcon::fromTheme("application-exit",
+ 						      QIcon(":x-circle.svg")),
+@@ -400,7 +415,14 @@ int MainWindow::startCapture()
+ 		}
+ 	}
+ 
+-	/* Allow user to override configuration. */
++	/* Fill the saved image with the largest advertised processed frame by default. */
++	if (!options_.isSet(OptStream)) {
++		const Size maximum = vfConfig.formats().range(vfConfig.pixelFormat).max;
++		if (!maximum.isNull())
++			vfConfig.size = maximum;
++	}
++
++	/* Preserve explicit viewfinder and raw stream configurations. */
+ 	if (StreamKeyValueParser::updateConfiguration(config_.get(),
+ 						      options_[OptStream])) {
+ 		qWarning() << "Failed to update configuration";
+@@ -548,6 +570,7 @@ void MainWindow::stopCapture()
+ 		return;
+ 
+ 	viewfinder_->stop();
++	shutter_->setEnabled(false);
+ 	if (saveRaw_)
+ 		saveRaw_->setEnabled(false);
+ 	captureRaw_ = false;
+@@ -625,6 +648,31 @@ void MainWindow::removeCamera(std::shared_ptr<Camera> camera)
+  * Image Save
+  */
+ 
++void MainWindow::takePhoto()
++{
++	if (savingPhoto_ || !shutter_->isEnabled())
++		return;
++
++	/* The raster viewfinder copies the full camera frame before its buffer is reused. */
++	const QImage image = viewfinder_->getCurrentImage();
++	const QString directory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
++	const bool chinese = QLocale().language() == QLocale::Chinese;
++	savingPhoto_ = true;
++	shutter_->setEnabled(false);
++	statusBar()->showMessage(chinese ? QStringLiteral("正在保存…") : QStringLiteral("Saving…"));
++	photoWorkers_.start([this, image, directory, chinese]() {
++		QString path, error;
++		bool saved = qcam_photo::save(image, directory, &path, &error);
++		const QString message = saved
++			? (chinese ? QStringLiteral("已保存 %1") : QStringLiteral("Saved %1")).arg(path)
++			: (chinese ? QStringLiteral("保存失败：%1") : QStringLiteral("Could not save: %1")).arg(error);
++		QMetaObject::invokeMethod(this, [this, message, saved]() {
++			savingPhoto_ = false;
++			statusBar()->showMessage(message, saved ? 8000 : 0);
++		}, Qt::QueuedConnection);
++	});
++}
++
+ void MainWindow::saveImageAs()
+ {
+ 	QImage image = viewfinder_->getCurrentImage();
+@@ -740,6 +788,7 @@ void MainWindow::processViewfinder(FrameBuffer *buffer)
+ 
+ 	/* Render the frame on the viewfinder. */
+ 	viewfinder_->render(buffer, mappedBuffers_[buffer].get());
++	shutter_->setEnabled(!savingPhoto_ && metadata.status == FrameMetadata::FrameSuccess);
+ }
+ 
+ void MainWindow::renderComplete(FrameBuffer *buffer)
+diff --git a/src/apps/qcam/main_window.h b/src/apps/qcam/main_window.h
+index 20d369a..fc0a4e6 100644
+--- a/src/apps/qcam/main_window.h
++++ b/src/apps/qcam/main_window.h
+@@ -25,6 +25,7 @@
+ #include <QObject>
+ #include <QPushButton>
+ #include <QQueue>
++#include <QThreadPool>
+ #include <QTimer>
+ 
+ #include "../common/stream_options.h"
+@@ -64,6 +65,7 @@ private Q_SLOTS:
+ 	void toggleCapture(bool start);
+ 
+ 	void saveImageAs();
++	void takePhoto();
+ 	void captureRaw();
+ 	void processRaw(libcamera::FrameBuffer *buffer,
+ 			const libcamera::ControlList &metadata);
+@@ -92,6 +94,9 @@ private:
+ 	QToolBar *toolbar_;
+ 	QAction *startStopAction_;
+ 	QPushButton *cameraSelectButton_;
++	QPushButton *shutter_;
++	QThreadPool photoWorkers_;
++	bool savingPhoto_ = false;
+ 	QAction *saveRaw_;
+ 	ViewFinder *viewfinder_;
+ 
+diff --git a/src/apps/qcam/meson.build b/src/apps/qcam/meson.build
+index ef42093..93f8b70 100644
+--- a/src/apps/qcam/meson.build
++++ b/src/apps/qcam/meson.build
+@@ -20,6 +20,7 @@ qcam_sources = files([
+     'main.cpp',
+     'main_window.cpp',
+     'message_handler.cpp',
++    'photo_store.cpp',
+     'viewfinder_gl.cpp',
+     'viewfinder_qt.cpp',
+ ])
+diff --git a/src/apps/qcam/photo_store.cpp b/src/apps/qcam/photo_store.cpp
+new file mode 100644
+index 0000000..9c3dbbc
+--- /dev/null
++++ b/src/apps/qcam/photo_store.cpp
+@@ -0,0 +1,56 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++
++#include "photo_store.h"
++
++#include <QDateTime>
++#include <QDir>
++#include <QFileInfo>
++#include <QImage>
++#include <QImageWriter>
++#include <QTemporaryFile>
++
++bool qcam_photo::save(const QImage &image, const QString &directory, QString *path,
++		      QString *error)
++{
++	path->clear();
++	error->clear();
++	if (image.isNull()) {
++		*error = QStringLiteral("No camera frame");
++		return false;
++	}
++
++	QDir pictures(directory);
++	if (directory.isEmpty() || !pictures.isAbsolute() || !pictures.mkpath(".")) {
++		*error = QStringLiteral("Pictures folder unavailable (%1)").arg(directory);
++		return false;
++	}
++
++	const QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz");
++	QTemporaryFile file(pictures.filePath(".Y700-" + timestamp + "-XXXXXX"));
++	if (!file.open()) {
++		*error = file.errorString();
++		return false;
++	}
++
++	QImageWriter writer(&file, "jpeg");
++	writer.setQuality(95);
++	if (!writer.write(image)) {
++		*error = writer.errorString();
++		return false;
++	}
++	if (!file.flush() || file.error() != QFileDevice::NoError) {
++		*error = file.errorString();
++		return false;
++	}
++
++	/* Publish only the finished JPEG. rename() fails if the name exists. */
++	const QString name = QFileInfo(file.fileName()).fileName().mid(1) + ".jpg";
++	const QString destination = pictures.filePath(name);
++	if (!file.rename(destination)) {
++		*error = file.errorString();
++		return false;
++	}
++	file.setAutoRemove(false);
++	*path = destination;
++	return true;
++}
+diff --git a/src/apps/qcam/photo_store.h b/src/apps/qcam/photo_store.h
+new file mode 100644
+index 0000000..542c92a
+--- /dev/null
++++ b/src/apps/qcam/photo_store.h
+@@ -0,0 +1,11 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#pragma once
++
++class QImage;
++class QString;
++
++namespace qcam_photo {
++
++bool save(const QImage &image, const QString &directory, QString *path, QString *error);
++
++} /* namespace qcam_photo */

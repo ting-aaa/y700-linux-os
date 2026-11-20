@@ -4,3 +4,5 @@
 *.nix text eol=lf
 *.service text eol=lf
 *.desktop text eol=lf
+# Unified diff context starts with a space, including before tabs and on blank lines.
+packaging/camera-qcam/*.patch whitespace=-blank-at-eol,-space-before-tab

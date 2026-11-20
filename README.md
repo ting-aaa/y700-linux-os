@@ -33,7 +33,7 @@
 - **保留本机传感器校准**　SSC 0.1.1 首次初始化时，从这台平板的内部 UFS 只读导入出厂校准。本机实测合并得到 375 组配置，重复初始化保留了已有状态。通用镜像随附板级默认值，每台平板在本地完成导入。已装 dev12.4 的设备可以单独升级传感器组件到 0.1.3；测试平板已完成这一更新。[校准来源与验证](docs/SSC-CALIBRATION.md) · [离线升级与回滚](docs/SSC-SERVICE.md)
 - **选择 Wi-Fi**　点面板上的网络图标，展开「Available networks」（可用网络）。实机普通用户的菜单里显示了当前网络和另外 6 个可用网络。「Network Connections」（网络连接）列出 2 个已保存配置。WPA3 密码输错时，可以打开「设置 → 高级网络配置」，编辑已保存连接的 Wi-Fi 安全密码并保存。独立 ARM64 测试中原连接随后取得了 DHCP 地址。[选网验证](docs/WIFI-CHOOSER.md)
 - **添加蓝牙键鼠**　将外设置于配对模式，再打开 Blueman 管理器选择设备。键盘要求输入配对码时，在键盘上键入平板显示的六位数字。Blueman y7001 已修复输完最后一位时界面报错的问题。实机已识别无线键鼠报告，隔离桌面验证了码值显示及确认按钮。低功耗和经典蓝牙的键鼠输入与重连通过了原生 ARM64 虚拟设备测试，实际配件仍待上手验证。[实机无线](docs/BLUETOOTH-HID-RADIO.md) · [配对界面](docs/BLUEMAN-PAIRING.md) · [输入与重连](docs/BLUETOOTH-VIRTUAL.md)
-- **打开相机**　安装可选的「Y700 相机」后，从 Xfce 的图形菜单打开。安装 PipeWire 相机插件后，应用还可以单独选择后置主摄、前摄和微距。实机登录界面的普通 PipeWire 会话从每个镜头都收到了 12 帧 640×480 RGBA 图像。内屏预览画质、触控授权和实际拍照仍待验收。[相机应用](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
+- **拍照**　从 Xfce 的图形菜单打开「Y700 相机」，选择镜头，出现预览后点底部的「拍照」。`y7003` 会把 JPEG 保存到当前用户的「图片」文件夹，屏幕底部会显示保存路径。通过 PipeWire 访问相机的应用也可以分别选择后置主摄、前摄和微距。[相机应用与验证记录](docs/QCAM.md) · [PipeWire 相机与应用授权](docs/CAMERA-PIPEWIRE.md)
 
 国行 KMS 开发镜像采用 Debian 13 ARM64，包含首次设密屏幕键盘、三摄 PipeWire 接口、中英文输入、SSC 本机校准、Blueman，以及已分别完成 30 分钟 OpenGL 和 Vulkan 实机测试的 Adreno 候选内核。解包时可用同一台平板的原厂 Android 属性预配蓝牙地址。测试机已安装 dev12.4 平板组件，顶栏有音量控制。两颗功放分别加载本机出厂校准后，用户确认桌面音量 40% 时 YouTube 持续出声、音量合适。完整组合镜像的实机启动仍待验证。[镜像组成与校验值](docs/BOARD-IMAGE.md) · [扬声器验证](docs/SPEAKERS.md) · [蓝牙地址准备](docs/PERIPHERALS.md#prepare-a-fresh-installation)
 
