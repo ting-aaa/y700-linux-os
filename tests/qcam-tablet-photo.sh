@@ -7,7 +7,18 @@ if [[ ${1:-} != --private-session ]]; then
     test "$(stat -f -c %T /dev/shm)" = tmpfs
     umask 077
     run=$(mktemp -d /dev/shm/qcam-photo.XXXXXXXX)
-    trap 'rm -rf -- "$run"' EXIT
+    cleanup_run() {
+        # The portal can take a moment to unmount after its private D-Bus exits.
+        for _ in {1..100}; do
+            mountpoint -q "$run/runtime/doc" || break
+            sleep .1
+        done
+        if mountpoint -q "$run/runtime/doc"; then
+            fusermount3 -u "$run/runtime/doc" || return 1
+        fi
+        rm -rf --one-file-system -- "$run"
+    }
+    trap cleanup_run EXIT
     export HOME=$run/home XDG_CONFIG_HOME=$run/config XDG_RUNTIME_DIR=$run/runtime
     export XDG_CACHE_HOME=$run/cache XDG_DATA_HOME=$run/data XDG_STATE_HOME=$run/state
     mkdir -m 700 "$HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR" "$HOME/照片"

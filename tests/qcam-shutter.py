@@ -84,5 +84,7 @@ if __name__ == "__main__":
     directory = Path(pictures)
     assert root.parent.parent == Path("/dev/shm") and root.parent.name.startswith("qcam-photo.")
     assert directory.resolve() == root / "照片" and not any(directory.iterdir())
+    print(f"{model} waiting for preview and shutter", flush=True)
     target = click_shutter(int(pid), Path(log))
+    print(f"{model} clicked once", flush=True)
     verify_photo(directory, Path(log), model, target)

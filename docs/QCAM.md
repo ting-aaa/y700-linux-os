@@ -50,6 +50,16 @@ In a full-system ARM64 QEMU boot, the exact `y7003` qcam ELF used a test-only li
 
 The [tablet still-photo fixture](../tests/qcam-tablet-photo.sh) uses an isolated X11 display and a private tmpfs Pictures folder. It takes one photo per lens, checks that each JPEG fully decodes at the configured stream dimensions, removes it and waits for the next preview frame. Run it with the owner's permission to activate all three cameras. It needs `Xvfb`, `xdotool`, `uv`, AT-SPI and GdkPixbuf.
 
+On November 20 the owner authorized one exposure per lens. The ordinary desktop account ran the installed `y7003` app with its normal CPU camera pipeline and default stream selection on the physical tablet. Each X11 pointer click on the 112×48 shutter saved one JPEG. Each file decoded fully on the tablet, matched the negotiated stream size and was deleted. All three previews continued after saving.
+
+| Physical lens | Decoded JPEG |
+| --- | --- |
+| HI1339 rear main | 4200×3120 |
+| S5K4H7 front | 3256×2448 |
+| SC202CS rear macro | 1592×1200 |
+
+The internal screen stayed powered down, and no image was viewed or transferred. After the final photo was removed, a private document-portal mount briefly delayed deletion of the scratch directory. A separate check confirmed it had unmounted, removed the remaining directory and verified that the camera app had exited. The fixture now waits for that mount, and two camera-free runs with the real portal left no scratch directories. Finger operation on the panel, visual quality, autofocus and switching lenses within a single session still need an attended test.
+
 The optional layer installed offline in a disposable overlay of the 1050-package image. The full 1068-package inventory matched the input locks, and the installer rejected a modified archive before installing any packages. In a separate camera-free ARM64 Xvfb session the `y700` user opened the installed desktop entry. The chooser appeared and closed in response to Cancel. The process mapped the private libcamera and Qt's Xcb platform plugin without loading an Xcb GL integration plugin. Package removal preserved the existing `cam --list` entry point. Run the fixture with `xvfb` and `xdotool` installed in the disposable environment. [X11 fixture](../tests/camera-qcam-x11.sh)
 
 The ARM64 X11 scale fixture runs real Xfsettingsd and substitutes the Y700 connector name in the virtual RandR report. With the prior launcher, the chooser measured 246×124 pixels at both 100% and 200%, although Thunar grew from 640×480 to 1280×960. The revised launcher produced 492×248 pixels at 200% in portrait and landscape. Custom Xft DPI and explicit Qt scaling took precedence. The fixture also checks a second active output, another desktop and missing Xft DPI. Reproduce with `bash tests/camera-qcam-x11.sh --scale` in a disposable Xfce environment. [X11 scale fixture](../tests/camera-qcam-x11.sh)
