@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from gi.repository import Gio, GLib
@@ -12,6 +13,8 @@ SENSOR = "net.hadess.SensorProxy"
 LOGIN = "org.freedesktop.login1"
 LOGIN_PATH = "/org/freedesktop/login1"
 SESSION_PATH = LOGIN_PATH + "/session/c42"
+SAVER = "org.xfce.ScreenSaver"
+SAVER_PATH = "/org/xfce/ScreenSaver"
 SETTLE = 0.6
 
 # Subsets of iio-sensor-proxy 3.9 src/net.hadess.SensorProxy.xml and login1.
@@ -28,10 +31,14 @@ SESSION_API = """
     <property name="Active" type="b" access="read"/>
     <property name="LockedHint" type="b" access="read"/>
 """
+SAVER_API = """
+    <method name="GetActive"><arg type="b" direction="out"/></method>
+    <signal name="ActiveChanged"><arg type="b"/></signal>
+"""
 
 
 class Provider:
-    def __init__(self, name):
+    def __init__(self, name, address_var="DBUS_SYSTEM_BUS_ADDRESS"):
         self.name = name
         self.calls = []
         self.reads = []
@@ -40,7 +47,7 @@ class Provider:
         self.deny_release = False
         self.pending_claim = None
         flags = Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION
-        self.bus = Gio.DBusConnection.new_for_address_sync(os.environ["DBUS_SYSTEM_BUS_ADDRESS"], flags, None, None)
+        self.bus = Gio.DBusConnection.new_for_address_sync(os.environ[address_var], flags, None, None)
         if name == SENSOR:
             self.bus.signal_subscribe("org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged",
                                       "/org/freedesktop/DBus", None, Gio.DBusSignalFlags.NONE, self.owner_changed)
@@ -50,10 +57,10 @@ class Provider:
         if not owner:
             self.claimants.discard(name)
 
-    def publish(self):
+    def publish(self, flags=4):
         reply = self.bus.call_sync(
             "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "RequestName",
-            GLib.Variant("(su)", (self.name, 4)), None, Gio.DBusCallFlags.NONE, 3000, None,
+            GLib.Variant("(su)", (self.name, flags)), None, Gio.DBusCallFlags.NONE, 3000, None,
         )
         assert reply.unpack() == (1,), (self.name, reply)
 
@@ -119,6 +126,29 @@ class Provider:
         return sum(name == method for name, _ in self.calls)
 
 
+class Locker(Provider):
+    def __init__(self, active, *, fail=False):
+        super().__init__(SAVER, "DBUS_SESSION_BUS_ADDRESS")
+        self.active = active
+        self.fail = fail
+        self.object(SAVER_PATH, SAVER, SAVER_API)
+
+    def method(self, _bus, sender, _path, _iface, name, _args, invocation):
+        self.calls.append((name, sender))
+        if self.fail:
+            invocation.return_dbus_error(SAVER + ".Unavailable", "Test lock state is unavailable")
+        else:
+            invocation.return_value(GLib.Variant("(b)", (self.active,)))
+
+    def change(self, active):
+        self.active = active
+        self.signal(active)
+
+    def signal(self, active):
+        self.bus.emit_signal(None, SAVER_PATH, SAVER, "ActiveChanged", GLib.Variant("(b)", (active,)))
+        self.bus.flush_sync(None)
+
+
 def sensor_with(pose):
     sensor = Provider(SENSOR)
     update = sensor.object("/net/hadess/SensorProxy", SENSOR, SENSOR_API,
@@ -169,19 +199,8 @@ class Checks:
         self.verify()
 
 
-def run(client_path, work):
-    assert os.environ["DBUS_SYSTEM_BUS_ADDRESS"] != os.environ["DBUS_SESSION_BUS_ADDRESS"]
-    login = Provider(LOGIN)
-    login.object(LOGIN_PATH, LOGIN + ".Manager", MANAGER_API)
-    session = login.object(SESSION_PATH, LOGIN + ".Session", SESSION_API, Active=True, LockedHint=False)
-    login.publish()
-    sensor, pose = sensor_with("left-up")
-    settings = Gio.Settings.new("org.y700.tablet")
-
-    def enable(enabled):
-        assert settings.set_boolean("auto-rotate", enabled)
-        Gio.Settings.sync()
-
+def start_client(client_path, work):
+    work.mkdir(exist_ok=True)
     log = work / "calls"
     log.touch()
     helper = work / "y700-display"
@@ -197,7 +216,51 @@ exit "$result"
     helper.chmod(0o755)
     env = dict(os.environ, PATH=f"{work}:{os.environ['PATH']}", PYTHONDONTWRITEBYTECODE="1")
     client = subprocess.Popen([sys.executable, client_path, "--session", "--settle", str(SETTLE)], env=env)
-    check = Checks(client, log)
+    return Checks(client, log)
+
+
+def stop_client(client):
+    client.terminate()
+    deadline = time.monotonic() + 4
+    context = GLib.MainContext.default()
+    while client.poll() is None and time.monotonic() < deadline:
+        context.iteration(False)
+        time.sleep(0.01)
+    if client.poll() is None:
+        client.kill()
+    client.wait()
+
+
+@contextmanager
+def running(client_path, work):
+    check = start_client(client_path, work)
+    try:
+        yield check
+    finally:
+        stop_client(check.client)
+
+
+def login_session():
+    login = Provider(LOGIN)
+    login.object(LOGIN_PATH, LOGIN + ".Manager", MANAGER_API)
+    session = login.object(SESSION_PATH, LOGIN + ".Session", SESSION_API, Active=True, LockedHint=False)
+    login.publish()
+    return login, session
+
+
+def run(client_path, work):
+    assert os.environ["DBUS_SYSTEM_BUS_ADDRESS"] != os.environ["DBUS_SESSION_BUS_ADDRESS"]
+    login, session = login_session()
+    locker = Locker(False)
+    locker.publish()
+    sensor, pose = sensor_with("left-up")
+    settings = Gio.Settings.new("org.y700.tablet")
+
+    def enable(enabled):
+        assert settings.set_boolean("auto-rotate", enabled)
+        Gio.Settings.sync()
+
+    check = start_client(client_path, work)
     try:
         check.until(lambda: login.count("GetSession") > 0, "real client login lookup")
         assert not settings.get_boolean("auto-rotate")
@@ -324,18 +387,178 @@ exit "$result"
         check.unchanged()
         print("PASS  explicit HasAccelerometer loss releases the sensor and cancels the pending pose")
     finally:
-        client.terminate()
-        deadline = time.monotonic() + 4
-        context = GLib.MainContext.default()
-        while client.poll() is None and time.monotonic() < deadline:
-            context.iteration(False)
-            time.sleep(0.01)
-        if client.poll() is None:
-            client.kill()
-        client.wait()
+        stop_client(check.client)
         sensor.bus.close_sync(None)
         login.bus.close_sync(None)
+        locker.bus.close_sync(None)
+
+
+def bus_info(bus, method, args=None):
+    return bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                         method, args, None, Gio.DBusCallFlags.NO_AUTO_START, 3000, None).unpack()[0]
+
+
+def client_connected(bus, pid):
+    for name in bus_info(bus, "ListNames"):
+        if name.startswith(":"):
+            try:
+                if bus_info(bus, "GetConnectionUnixProcessID", GLib.Variant("(s)", (name,))) == pid:
+                    return True
+            except GLib.Error:  # A transient connection closed between the two calls.
+                continue
+    return False
+
+
+def lock_matrix(client_path, work):
+    assert os.environ["DBUS_SYSTEM_BUS_ADDRESS"] != os.environ["DBUS_SESSION_BUS_ADDRESS"]
+    session_bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    assert SAVER in bus_info(session_bus, "ListActivatableNames")
+    name = GLib.Variant("(s)", (SAVER,))
+    assert not bus_info(session_bus, "NameHasOwner", name)
+    login, session = login_session()
+    sensor, pose = sensor_with("normal")
+    settings = Gio.Settings.new("org.y700.tablet")
+    assert settings.set_boolean("auto-rotate", True)
+    Gio.Settings.sync()
+    lockers = []
+
+    def publish(active, *, replace=False, fail=False):
+        saver = Locker(active, fail=fail)
+        # RequestName ALLOW_REPLACEMENT | DO_NOT_QUEUE, optionally REPLACE_EXISTING.
+        saver.publish(flags=7 if replace else 5)
+        assert bus_info(session_bus, "GetNameOwner", name) == saver.bus.get_unique_name()
+        lockers.append(saver)
+        return saver
+
+    try:
+        with running(client_path, work / "absent-start") as check:
+            check.until(lambda: login.count("GetSession") > 0, "client login while locker absent")
+            check.unchanged()
+            assert sensor.count("ClaimAccelerometer") == 0
+            assert not bus_info(session_bus, "NameHasOwner", name)
+            assert not (work / "activated").exists()
+        print("PASS  absent but activatable Xfce locker at startup blocks all claims without activating it")
+
+        saver = publish(True)
+        with running(client_path, work / "locked-start") as check:
+            def inhibited(claims, label):
+                check.until(lambda: not sensor.claimants, label + " releases sensor")
+                check.unchanged()
+                assert sensor.count("ClaimAccelerometer") == claims, label + " claimed while inhibited"
+
+            check.until(lambda: saver.count("GetActive") > 0, "initial Xfce state lookup")
+            inhibited(0, "already active saver before client startup")
+            saver.change(False)
+            check.applied("normal")
+            print("PASS  initially locked Xfce saver needed no signal to block rotation; unlock acquired a fresh pose")
+
+            for first in ("xfce", "logind"):
+                claims = sensor.count("ClaimAccelerometer")
+                pose(AccelerometerOrientation="left-up")
+                check.wait(.12)
+                if first == "xfce":
+                    saver.change(True)
+                    session(LockedHint=True)
+                    saver.change(False)
+                else:
+                    session(LockedHint=True)
+                    saver.change(True)
+                    session(LockedHint=False)
+                inhibited(claims, first + " unlocked while other provider remains locked")
+                pose(AccelerometerOrientation="right-up")
+                if first == "xfce":
+                    session(LockedHint=False)
+                else:
+                    saver.change(False)
+                check.applied("right")
+                assert sensor.count("ClaimAccelerometer") == claims + 1
+            print("PASS  both lock/unlock orders cancel pending moves and keep the sensor released until both unlock")
+
+            claims = sensor.count("ClaimAccelerometer")
+            queries = saver.count("GetActive")
+            pose(AccelerometerOrientation="left-up")
+            check.wait(.12)
+            saver.active = True  # Actual state changed before its broadcast reached the client.
+            check.until(lambda: saver.count("GetActive") > queries, "fresh Xfce read before applying a pose")
+            inhibited(claims, "silent lock during settle")
+            saver.signal(False)  # A queued unlock from this owner no longer matches GetActive.
+            inhibited(claims, "stale same-owner unlock while the saver is active")
+            saver.change(False)
+            check.applied("left")
+            print("PASS  silent lock during settle and stale same-owner unlock prevent display movement")
+
+            claims = sensor.count("ClaimAccelerometer")
+            pose(AccelerometerOrientation="bottom-up")
+            check.wait(.12)
+            old = saver
+            saver = publish(True, replace=True)
+            check.until(lambda: saver.count("GetActive") > 0, "snapshot on genuine Xfce owner replacement")
+            inhibited(claims, "replacement starts locked")
+            reads = saver.count("GetActive")
+            old.change(False)
+            inhibited(claims, "stale unlock signal from former unique owner")
+            assert saver.count("GetActive") == reads, "stale owner unexpectedly queried current locker"
+            assert bus_info(session_bus, "GetNameOwner", name) == saver.bus.get_unique_name()
+            saver.change(False)
+            check.applied("inverted")
+            released = sensor.count("ReleaseAccelerometer")
+            old.change(True)
+            check.unchanged()
+            assert sensor.claimants and sensor.count("ReleaseAccelerometer") == released
+            old.bus.close_sync(None)
+            print("PASS  atomic Xfce name replacement honours new owner's state and ignores both stale broadcasts")
+
+            claims = sensor.count("ClaimAccelerometer")
+            pose(AccelerometerOrientation="normal")
+            check.wait(.12)
+            saver.bus.close_sync(None)
+            inhibited(claims, "Xfce connection closed")
+            assert not bus_info(session_bus, "NameHasOwner", name)
+            assert not (work / "activated").exists()
+            saver = publish(False, fail=True)
+            check.until(lambda: saver.count("GetActive") >= 2, "repeated state lookup on same failing owner", timeout=15)
+            inhibited(claims, "GetActive error on new owner")
+            saver.fail = False  # Same owner, no ActiveChanged signal.
+            check.applied("normal", timeout=15)
+            assert sensor.count("ClaimAccelerometer") == claims + 1
+            print("PASS  owner loss and repeat GetActive errors stay inhibited, same-owner retry restores sensor")
+
+            claims = sensor.count("ClaimAccelerometer")
+            saver.fail = True
+            pose(AccelerometerOrientation="right-up")
+            inhibited(claims, "GetActive error during settle")
+            saver.fail = False
+            check.applied("right", timeout=15)
+            print("PASS  a failed lock check before display prevents movement until a successful same-owner retry")
+        assert not (work / "activated").exists()
+        sensor.bus.close_sync(None)
+        login.bus.close_sync(None)
+        saver.bus.close_sync(None)
+        system_bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        assert {SENSOR, LOGIN}.issubset(bus_info(system_bus, "ListActivatableNames"))
+        with running(client_path, work / "no-providers") as check:
+            check.until(lambda: all(client_connected(bus, check.client.pid) for bus in (system_bus, session_bus)),
+                        "new rotation client connected to both buses with no providers")
+            check.unchanged()
+            for bus, names in ((system_bus, (SENSOR, LOGIN)), (session_bus, (SAVER,))):
+                for service in names:
+                    assert not bus_info(bus, "NameHasOwner", GLib.Variant("(s)", (service,)))
+            assert not (work / "activated").exists()
+        print("PASS  absent activatable sensor, logind and screensaver remain unstarted on both private buses")
+    finally:
+        for saver in lockers:
+            if not saver.bus.is_closed():
+                saver.bus.close_sync(None)
+        if not login.bus.is_closed():
+            login.bus.close_sync(None)
+        if not sensor.bus.is_closed():
+            sensor.bus.close_sync(None)
 
 
 if __name__ == "__main__":
-    run(sys.argv[1], Path(sys.argv[2]))
+    client, directory = sys.argv[1], Path(sys.argv[2])
+    mode = sys.argv[3] if len(sys.argv) > 3 else "sensor"
+    if mode in ("all", "sensor"):
+        run(client, directory / "sensor")
+    if mode in ("all", "lock"):
+        lock_matrix(client, directory)
