@@ -17,6 +17,12 @@ power=${POWER_DESKTOP:-0}
 [[ $power == 0 || $power == 1 ]]
 blueman=${BLUEMAN_UPDATE:-0}
 [[ $blueman == 0 || ( $blueman == 1 && $power == 1 ) ]]
+media=${MEDIA_DESKTOP:-0}
+[[ $media == 0 || ( $media == 1 && $blueman == 1 ) ]]
+if (( media )); then
+    clip=$(realpath -e "${MEDIA_CLIP:?Provide the 24-second synthetic H.264 colour-pair MP4}")
+    media_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the media witness}")
+fi
 cold=${COLD_BOOT:-0}
 [[ $cold == 0 || $cold == 1 ]]
 screen_lock=${SCREEN_LOCK:-off}
@@ -87,6 +93,14 @@ if (( blueman )); then
         cmp platform-receipt "$here/../../config/platform.lock.json"
         mcopy -i test-esp.fat platform-receipt ::/platform-tested.lock
     fi
+fi
+if (( media )); then
+    sha256sum -- "$clip" > "$out/clip.sha256"
+    mcopy -i test-esp.fat "$here/../../config/video-player.lock.json" ::/media-tested.lock
+    mcopy -i test-esp.fat "$clip" ::/media-clip.mp4
+    mcopy -i test-esp.fat "$here/media-session.py" ::/media-session.py
+    mcopy -i test-esp.fat "$here/../video-player/check-x11.py" ::/media-pixels.py
+    mcopy -i test-esp.fat "$media_uv" ::/media-uv
 fi
 if [[ $screen_lock != off ]]; then
     printf '%s\n' "$screen_lock" > lock-mode
@@ -178,6 +192,12 @@ fi
 if (( power )); then
     for report in "$out"/*/report.log; do
         grep -Fxq 'COMBINED_POWER packaged=1 ordinary_manager=1 system_upower=active' "$report"
+    done
+fi
+if (( media )); then
+    for report in "$out"/*/report.log; do
+        grep -Fq 'COMBINED_MEDIA_GIO ordinary=1 mp4=parole webm=parole desktop=local' "$report"
+        grep -Fq 'COMBINED_MEDIA_PLAYBACK h264=visible pairs=01,12,20 private_registry=1' "$report"
     done
 fi
 sha256sum --strict -c "$manifest" | tee "$out/after.log"

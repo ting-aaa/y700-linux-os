@@ -70,6 +70,12 @@ if [[ $1 == setup ]]; then
             fi
         fi
     fi
+    if [[ -f /boot/media-tested.lock ]]; then
+        [[ $platform == '0.1.0~dev12.8' ]]
+        cmp /boot/media-tested.lock /var/lib/y700/build/video-player.lock.json
+        count=1240
+        expected=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
+    fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)
     [[ ${digest%% *} == "$expected" ]]
@@ -202,6 +208,16 @@ if [[ -f /boot/lock-mode ]]; then
         echo 'COMBINED_SAVER_AUTOSTART rotation=running auto_rotate=false'
     fi
     bash /boot/observe-lock.sh "$(cat /boot/lock-mode)" "$sid" "$pid"
+fi
+if [[ -f /boot/media-tested.lock ]]; then
+    media=/run/y700-media-witness
+    install -d -m755 "$media"
+    install -m755 /boot/media-uv "$media/uv"
+    install -m644 /boot/media-{session.py,pixels.py,clip.mp4} "$media/"
+    mapfile -d '' -t desktop_environment < "/proc/$pid/environ"
+    setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
+        UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 160 "$media/uv" run --offline --no-project \
+        --python /usr/bin/python3 python -B "$media/media-session.py" "$media/media-clip.mp4"
 fi
 echo COMBINED_PASS
 systemctl --no-block poweroff
