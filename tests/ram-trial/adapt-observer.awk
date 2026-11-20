@@ -35,6 +35,10 @@
 }
 /^asuser\(\) / {
     print "if [[ -f /run/y700-ram-qa/platform-tested.lock ]]; then bash /run/y700-ram-qa/check-volatile-desktop.sh; fi"
+    print "if [[ -f /run/y700-ram-qa/check-sleep.sh ]]; then"
+    print "    exec >/dev/ttyAMA0 2>&1"
+    print "    bash /run/y700-ram-qa/check-sleep.sh"
+    print "fi"
     print "echo RAM_TRIAL_PASS"
     print "systemctl --no-block poweroff"
     desktop_count++

@@ -7,6 +7,11 @@ if [[ $# != 3 ]]; then
     exit 2
 fi
 here=$(cd -- "$(dirname -- "$0")" && pwd -P)
+sleep_trial=${RAM_TRIAL_SLEEP:-0}
+if [[ $sleep_trial != 0 && ( $sleep_trial != 1 || ${RAM_TRIAL_VERSION:-dev12.5} != dev12.8 ) ]]; then
+    echo 'RAM_TRIAL_SLEEP=1 requires RAM_TRIAL_VERSION=dev12.8' >&2
+    exit 2
+fi
 trial=$(realpath -e "$1")
 dtb=$(realpath -e "$2")
 logs=$(realpath -m "$3")
@@ -46,6 +51,7 @@ fdtput -t x "$work/ram.dtb" /memory@40000000 reg 0 40000000 2 40000000
 seed=$work/qa
 mkdir "$seed"
 extras=()
+seed_limit=1048576
 case ${RAM_TRIAL_VERSION:-dev12.5} in
     dev12.5) echo baseline > "$seed/lock-mode" ;;
     dev12.6) echo installed > "$seed/lock-mode" ;;
@@ -55,6 +61,12 @@ case ${RAM_TRIAL_VERSION:-dev12.5} in
         cp "$here/../../config/platform.lock.json" "$seed/platform-tested.lock"
         cp "$here/check-volatile-desktop.sh" "$seed/"
         extras=(blueman-tested.lock platform-tested.lock check-volatile-desktop.sh)
+        if [[ $sleep_trial == 1 ]]; then
+            fdtput -t s "$work/ram.dtb" /aliases rtc1 /pl031@9010000
+            bash "$here/../sleep-guest/prepare.sh" "$seed" "$work"
+            extras+=(check-sleep.sh rtc-pl031.ko awake-clocks)
+            seed_limit=2097152
+        fi
         args+=" y700.combined_power=1"
         ;;
     *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6 or dev12.8)' >&2; exit 2 ;;
@@ -66,7 +78,7 @@ cp "$here/check-root.sh" "$here/../file-trial-positive/check-login-stage.sh" "$s
 "${AARCH64_CC:-aarch64-linux-gnu-gcc}" -O2 -Wall -Wextra -Werror -static "$combined/touch.c" -o "$seed/combined-touch"
 tar -C "$seed" -cf "$work/qa.tar" combined-observe.sh combined-touch check-root.sh check-login-stage.sh lock-mode "${extras[@]}"
 seed_size=$(stat -Lc %s "$work/qa.tar")
-[[ $seed_size -le 1048576 ]]
+[[ $seed_size -le $seed_limit ]]
 cat > "$work/probe.service" <<UNIT
 [Unit]
 Description=Prove the diskless Y700 RAM trial
@@ -109,6 +121,9 @@ timeout -k 25 2100 "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/
     -kernel "$kernel" -dtb "$work/ram.dtb" -initrd "$initrd" -append "$args" | tee "$logs/host-verdict.log"
 check_inputs | tee "$logs/after.log"
 cmp "$logs/before.log" "$logs/after.log"
+if [[ $sleep_trial == 1 ]]; then
+    grep -Eq '^SLEEP_GUEST_PASS s2idle_entries=2 kernel_exits=2[[:space:]]*$' "$logs/serial.log"
+fi
 if [[ ${RAM_TRIAL_KEXEC:-0} == 1 ]]; then
     grep -Fq 'RAM_QA_KEXEC_FILE_LOADED' "$logs/serial.log"
     grep -Fq 'RAM_QA_KEXEC_HANDOVER' "$logs/serial.log"

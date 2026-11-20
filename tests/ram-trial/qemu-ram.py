@@ -148,7 +148,12 @@ def touch_only(work, logs, guest):
             stage.sendall(b"LOGIN_SUBMITTED\n")
             wait_for_marker(report, guest, "FILE_TRIAL_TOUCH_SUBMITTED acknowledged=1", 30)
             wait_for_marker(report, guest, "COMBINED_PAM_XFCE account=y700 ordinary=1 active=1 local=1 seat=seat0 type=x11", 455)
-            wait_for_marker(report, guest, "RAM_TRIAL_PASS", 120 if os.getenv("RAM_TRIAL_VERSION") == "dev12.8" else 30)
+            if os.getenv("RAM_TRIAL_SLEEP") == "1":
+                # The virtio-serial ports reset during suspend. The PL011
+                # console carries the guest's post-resume verdict.
+                wait_for_marker(logs / "serial.log", guest, "RAM_TRIAL_PASS", 240)
+            else:
+                wait_for_marker(report, guest, "RAM_TRIAL_PASS", 120 if os.getenv("RAM_TRIAL_VERSION") == "dev12.8" else 30)
 
 
 def verify(logs, expected_bytes):
