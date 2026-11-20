@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
+import sys
 import threading
 import time
 
@@ -178,10 +179,21 @@ def main():
               f"keyboard={width}x{height}+{x}+{y} password_entry={ew}x{eh}+{ex}+{ey}", flush=True)
         return (x, y, width, height), control, (ex, ey, ew, eh)
 
+    rotation = None
     try:
         wait("private screensaver service", lambda: "is inactive" in
              run("xfce4-screensaver-command", "--query", check=False))
-        run("xfce4-screensaver-command", "--lock")
+        if Path("/qa/rotation").is_dir():
+            rotation = subprocess.Popen([sys.executable, "-B", "/qa/rotation/rotation.py"])
+
+            def rotation_locked():
+                if rotation.poll() is not None:
+                    raise RuntimeError(f"Rotation witness exited {rotation.returncode}")
+                return (Path(os.environ["XDG_RUNTIME_DIR"]) / "rotation-lock-checked").exists()
+
+            wait("rotation released its sensor and discarded the pending pose", rotation_locked, 45)
+        else:
+            run("xfce4-screensaver-command", "--lock")
         wait("private lock activated", active)
         bounds, control, entry_rect = show_prompt(0)
         if retry:
@@ -221,6 +233,8 @@ def main():
                 click_key(bounds, key)
             run("xdotool", "key", "Return")
         wait("native PAM accepted temporary identity", lambda: "ok" in states and not active(), 12)
+        if rotation and rotation.wait(timeout=18):
+            raise RuntimeError("Rotation failed to resume after the native PAM unlock")
         if retry:
             assert len(failures) == 1 and "cancel" not in states and dialogs == [xid] and keyboards == [kid]
             print("PRIVATE_RETRY_PASS native_pam=rejected-then-accepted dialog=unchanged "
@@ -229,6 +243,9 @@ def main():
             assert "failed" not in states
         print("PRIVATE_LOCK_PASS temporary_pam=authenticated input=embedded-key-clicks display=Xvfb", flush=True)
     finally:
+        if rotation and rotation.poll() is None:
+            rotation.terminate()
+            rotation.wait(timeout=5)
         print(f"PRIVATE_LOCK state dialog_count={len(dialogs)} keyboard_count={len(keyboards)} "
               f"cancel={'cancel' in states} pam_ok={'ok' in states} rejected={'failed' in states}", flush=True)
         daemon.terminate()

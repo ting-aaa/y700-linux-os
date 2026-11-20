@@ -20,6 +20,12 @@ The unattended 1024 × 768 run opened the real Xfce account menu, selected **Loc
 
 During this run, `org.xfce.ScreenSaver.GetActive` returned true at lock activation and after PAM rejected the password. It returned false after successful authentication. Logind reported `LockedHint=no` at all three points. The dev12.5 auto-rotation client reads the logind hint, so that client cannot detect this screen lock from the hint alone. The EFI run exercised the desktop with sensors disabled.
 
+## Rotation while locked
+
+An ARM64 QEMU test ran the packaged rotation client with Debian's Xfce screensaver and native PAM on a private 2560 × 1600 X11 display. An isolated bus provided simulated orientation changes and a logind session with `Active=true` and `LockedHint=false` throughout. The simulated display recorded the client's actual helper invocations.
+
+With the dev12.5 client, the display received a pending right rotation after the saver activated. With the dev12.6 package (`651fcc5de550d9ac645b53e853693bdc751dd07bfaee1a8c75f4f84d466b04bf`), the client released its accelerometer lease 1.62 seconds after the right orientation event, before the 3.5-second settling interval expired. An inverted orientation while locked produced no display command. PAM rejected a wrong password, then accepted the correct password in the same dialog. After unlock the client obtained a fresh lease and applied inverted. The full helper sequence was left before lock, then inverted after unlock. The local result is `out/touch-lock/rotation-dev12.6-final.log`, SHA-256 `8dd521a5e2c3dae6cf2c8b013b22a6fb2646af1082353b55b7ae7d0e4a5d6028`. [Reproduction instructions](../tests/touch-lock-private/README.md#rotation-during-native-lock-and-unlock)
+
 ## Run the virtual test
 
 Use the [combined EFI runner](../tests/combined-efi/README.md) with the documented sealed root, EFI partition, virtual U-Boot, and virtual device tree. Set `SCREEN_LOCK=baseline` to inspect the shipped image. For the candidate also supply `SCREEN_LOCK=candidate`, `SCREEN_LOCK_ARCHIVES` pointing to the locked Debian archives, and `UV_ARM64` pointing to an ARM64 Linux uv executable. The runner installs the candidates into a disposable snapshot after verifying the original package inventory.

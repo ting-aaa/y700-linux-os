@@ -1,8 +1,8 @@
 #!/bin/bash
 # Native ARM64 kernel handles setgid unix_chkpwd; the product disk is read-only.
 set -euo pipefail
-if (( $# != 6 )); then
-    echo 'Usage: run-qemu.sh SEALED_ROOT.ext4 KERNEL_IMAGE ARM64_BUSYBOX ARM64_UV CANDIDATE_ARCHIVES ARM64_HELPER_USR' >&2
+if (( $# != 6 && $# != 8 )) || [[ $# == 8 && $7 != --rotation-package ]]; then
+    echo 'Usage: run-qemu.sh SEALED_ROOT.ext4 KERNEL_IMAGE ARM64_BUSYBOX ARM64_UV CANDIDATE_ARCHIVES ARM64_HELPER_USR [--rotation-package PLATFORM.deb]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -21,6 +21,19 @@ install -m755 "$4" "$stage/uv"
 install -m755 "$6/bin/"{Xvfb,xdotool} "$stage/helpers/bin/"
 install -m644 "$6/lib/aarch64-linux-gnu/libxdo.so.3" "$stage/helpers/lib/aarch64-linux-gnu/"
 touch "$stage/retry-in-place"
+if (( $# == 8 )); then
+    platform=$(realpath -e "$8")
+    [[ $(dpkg-deb -f "$platform" Package) == y700-platform && $(dpkg-deb -f "$platform" Architecture) == all ]]
+    echo "ROTATION_PACKAGE version=$(dpkg-deb -f "$platform" Version) sha256=$(sha256sum "$platform" | cut -d' ' -f1)"
+    dpkg-deb -x "$platform" "$work/platform"
+    mkdir "$stage/rotation"
+    cp "$work/platform/usr/lib/y700/"{y700-auto-rotate.py,rotation_session.py} "$stage/rotation/"
+    cp "$work/platform/usr/share/glib-2.0/schemas/org.y700.tablet.gschema.xml" "$stage/rotation/"
+    glib-compile-schemas --strict "$stage/rotation"
+    cp "$here/../rotation-session.py" "$stage/rotation/providers.py"
+    cp "$here/rotation.py" "$stage/rotation/"
+    (cd "$stage" && sha256sum rotation/* >> SHA256SUMS)
+fi
 cat > "$init/init" <<'INIT'
 #!/bin/busybox sh
 set -eu
@@ -60,3 +73,6 @@ timeout -k 4 280 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${qemu_args[@]}"
     </dev/null 2>&1 | tr -d '\r' | tee "$work/guest.log"
 grep -Fxq 'PRIVATE_RETRY_PASS native_pam=rejected-then-accepted dialog=unchanged input=pointer-only letters-and-return=onboard supplementary_groups=0' "$work/guest.log"
 grep -Fxq 'PRIVATE_RETRY_GUEST_EXIT=0' "$work/guest.log"
+if (( $# == 8 )); then
+    grep -Fxq 'ROTATION_LOCK_RESUMED real_saver=inactive logind_hint=false fresh_lease=1 helper_calls=left,inverted stale_right=absent' "$work/guest.log"
+fi
