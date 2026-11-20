@@ -86,6 +86,14 @@ The survey was exercised in a networkless Debian ARM64 guest with the real pinne
 
 ### Read from the ordinary desktop account
 
+On November 20 one owner-authorized physical start exercised runtime 0.1.2 on the existing dev12.4 installation. SDSP registration automatically started the packaged FastRPC listener and SensorProxy. The ordinary desktop account (UID 1000) successfully claimed and released all three sensors. The stationary tablet reported `face-up` tilt, `undefined` cardinal orientation, 17.7435 lux and `ProximityNear=false`. During the observation the proxy signalled changes to tilt, light level and light unit. A near/far transition and a change between portrait and landscape remain unmeasured on the hardware.
+
+The coordinator completed in 8.253 seconds. The kernel timestamps put SLPI power-up and stop 7.040 seconds apart. A new USB SSH connection verified the original boot and service invocations, offline SLPI, running ADSP and an empty QRTR service-400 listing. The saved direction lock, powered-down backlight and original calibrated registry were intact. Local receipts are `out/ssc-live/desktop-trial-once.log`, `desktop-trial-after.log` and `desktop-trial-final-state.log`.
+
+The tablet subsequently received runtime 0.1.3 while SDSP was absent. Package verification passed, and the kernel journal still contained exactly the single power-up and stop from this trial. Runtime 0.1.3's recovery after immediate device removal and reappearance was tested in ARM64 QEMU. [Service lifecycle and offline update](SSC-SERVICE.md)
+
+The listener logged `0x80000600` for domain methods 2 and 5 during startup, followed by messages identifying unsupported domain interfaces and a successful listener start. Qualcomm FastRPC 1.0.7 retries these paths with `remotectl_open` and `adsp_listener_init2`. The packaged proxy became ready and returned the readings above. [FastRPC open fallback](https://github.com/qualcomm/fastrpc/blob/v1.0.7/src/fastrpc_apps_user.c#L1713-L1740) · [Listener initialization fallback](https://github.com/qualcomm/fastrpc/blob/v1.0.7/src/listener_android.c#L348-L369)
+
 The device-activated runtime (0.1.2) allows a bounded trial of the same services an installed desktop uses. Place `trial-ssc.sh`, `trial-ssc-assets.py` and `trial-ssc-desktop.py` together in the trusted trial directory. On the original PRC installation with SLPI offline and persistent SLPI firmware withheld, use the following command for one separately authorized activation.
 
 ```sh

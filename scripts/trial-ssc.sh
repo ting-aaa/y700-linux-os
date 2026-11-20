@@ -16,7 +16,8 @@ registry=/var/lib/y700-ssc
 desktop_reader=$(dirname -- "$script")/trial-ssc-desktop.py
 
 device_starts_listener() {
-    grep -Eq 'SYSTEMD_WANTS.*y700-ssc[.]service' /usr/lib/udev/rules.d/90-y700-ssc.rules 2>/dev/null
+    grep -Eq 'ENV\{SYSTEMD_WANTS\}\+="y700-ssc([.]service|-device[.]target)"' \
+        /usr/lib/udev/rules.d/90-y700-ssc.rules 2>/dev/null
 }
 
 die() { echo "SSC trial: $*" >&2; exit 1; }
@@ -76,7 +77,9 @@ check_baseline() {
     [[ $(<"$adsp/state") == running ]] || die 'Expected the original ADSP to remain running'
     [[ ! -e /dev/fastrpc-sdsp ]] || die 'SDSP node already exists'
     local service state
-    for service in y700-ssc.service iio-sensor-proxy.service "$listener"; do
+    local -a services=(y700-ssc.service iio-sensor-proxy.service "$listener")
+    if [[ -e /usr/lib/systemd/system/y700-ssc-device.target ]]; then services+=(y700-ssc-device.target); fi
+    for service in "${services[@]}"; do
         state=$(systemctl show "$service" --property=ActiveState --value)
         [[ $state == inactive ]] || die "$service is $state"
     done
@@ -446,7 +449,9 @@ cleanup() {
     if [[ -f $run/packaged-listener && $(phase) == owned ]] && mountpoint -q "$registry" &&
             [[ $registry -ef $run/state ]] && (board && locate && [[ $(identity) == "$(<"$run/identity")" ]]); then
         # The node was absent and both units inactive before our own start.
-        timeout -k 1 4 systemctl stop y700-ssc.service iio-sensor-proxy.service || rc=1
+        local -a stop=(y700-ssc.service iio-sensor-proxy.service)
+        if [[ -e $run/packaged-target ]]; then stop+=(y700-ssc-device.target); fi
+        timeout -k 1 4 systemctl stop "${stop[@]}" || rc=1
     fi
     if [[ -s $run/identity ]]; then
         if (board; locate; check_fault || :; release_once); then :; else rc=1; fi
@@ -505,6 +510,7 @@ worker() {
             die 'Expected an ordinary inactive sensor registry directory'
         listener=y700-ssc.service
         : > "$run/packaged-listener"
+        if [[ -e /usr/lib/systemd/system/y700-ssc-device.target ]]; then : > "$run/packaged-target"; fi
         mount --bind -- "$run/state" "$registry"
     else
         arm_listener "$listener_limit"
