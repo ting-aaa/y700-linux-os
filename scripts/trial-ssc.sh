@@ -12,6 +12,12 @@ dt=/sys/firmware/devicetree/base
 script=$(realpath -e -- "${BASH_SOURCE[0]}")
 assets=${script%/*}/trial-ssc-assets.py
 survey_channels=(accelerometer gyroscope magnetometer light proximity compass hall)
+registry=/var/lib/y700-ssc
+desktop_reader=$(dirname -- "$script")/trial-ssc-desktop.py
+
+device_starts_listener() {
+    grep -Eq 'SYSTEMD_WANTS.*y700-ssc[.]service' /usr/lib/udev/rules.d/90-y700-ssc.rules 2>/dev/null
+}
 
 die() { echo "SSC trial: $*" >&2; exit 1; }
 
@@ -248,6 +254,38 @@ first_sample() {
     grep -m1 -E "^Accelerometer sensor measurement: X=$axis Y=$axis Z=$axis m/s²$" "$run/sample"
 }
 
+desktop_account() {
+    local seat uid
+    seat=$(loginctl show-seat seat0 -p ActiveSession --value) || return 1
+    [[ -n $seat && $(loginctl show-session "$seat" -p Type --value) == x11 &&
+       $(loginctl show-session "$seat" -p Active --value) == yes &&
+       $(loginctl show-session "$seat" -p Remote --value) == no ]] || return 1
+    uid=$(loginctl show-session "$seat" -p User --value) || return 1
+    [[ $uid =~ ^[1-9][0-9]*$ && -S /run/user/$uid/bus ]] || return 1
+    printf '%s\n' "$uid"
+}
+
+read_desktop_sensors() {
+    local uid=$1 account
+    [[ $(desktop_account) == "$uid" ]] || return 1
+    account=$(id -nu "$uid") || return 1
+    runuser -u "$account" -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        systemd-run --user --quiet --wait --pipe --collect --property=RuntimeMaxSec=25s \
+        --property=WorkingDirectory=/tmp --setenv=LC_ALL=C.UTF-8 \
+        "$uv" run --offline --no-project --python /usr/bin/python3 python -B - < "$desktop_reader"
+}
+
+wait_for_packaged_listener() {
+    local i
+    for ((i=0; i<60; i++)); do
+        check_fault && [[ $(read_state) == running && $(<"$adsp/state") == running ]] || return 1
+        if systemctl is-active --quiet "$listener"; then return 0; fi
+        sleep .2
+    done
+    echo 'SSC trial: SDSP appeared without a running packaged listener' >&2
+    return 1
+}
+
 sdsp_present() { [[ -c /dev/fastrpc-sdsp ]]; }
 
 report_job() {
@@ -405,6 +443,11 @@ cleanup() {
             rc=1
         fi
     fi
+    if [[ -f $run/packaged-listener && $(phase) == owned ]] && mountpoint -q "$registry" &&
+            [[ $registry -ef $run/state ]] && (board && locate && [[ $(identity) == "$(<"$run/identity")" ]]); then
+        # The node was absent and both units inactive before our own start.
+        timeout -k 1 4 systemctl stop y700-ssc.service iio-sensor-proxy.service || rc=1
+    fi
     if [[ -s $run/identity ]]; then
         if (board; locate; check_fault || :; release_once); then :; else rc=1; fi
     fi
@@ -417,8 +460,12 @@ cleanup() {
         fi
     fi
     # PID 1 may have canceled the coordinator before it could reap a job.
+    if [[ -f $run/packaged-listener ]] && mountpoint -q "$registry"; then
+        if [[ $registry -ef $run/state ]]; then umount -- "$registry" || rc=1; else rc=1; fi
+    fi
     report_job qrtr || rc=1
     report_job sample || rc=1
+    report_job desktop || rc=1
     report_survey || rc=1
     if [[ $rc == 0 ]]; then echo 'SSC trial: cleanup completed'; fi
     return "$rc"
@@ -432,7 +479,12 @@ worker() {
     locate
     check_baseline
     firmware_baseline
-    local listener_limit=38
+    local listener_limit=38 uid=
+    if (( $# == 4 )); then
+        [[ $4 == --desktop && -r $desktop_reader ]] || die 'Missing desktop reader'
+        device_starts_listener || die 'The board runtime must provide SDSP device activation'
+        uid=$(desktop_account) || die 'An active local Xfce account is required'
+    fi
     if (( $# == 5 )); then
         : > "$run/survey-requested"
         stage_survey_tools "$4" "$5" || die 'Survey tool verification failed before SLPI startup'
@@ -448,11 +500,33 @@ worker() {
     firmware_baseline
     mount --bind -- "$run/firmware" "$target"
     mount -o remount,bind,ro -- "$target"
-    arm_listener "$listener_limit"
+    if device_starts_listener; then
+        [[ $(realpath -e "$registry") == "$registry" && ! -L $registry ]] && ! mountpoint -q "$registry" ||
+            die 'Expected an ordinary inactive sensor registry directory'
+        listener=y700-ssc.service
+        : > "$run/packaged-listener"
+        mount --bind -- "$run/state" "$registry"
+    else
+        arm_listener "$listener_limit"
+    fi
     (qrtr_lookup baseline 2) || die 'SSC QRTR baseline is not clear'
     start_once || die 'SLPI start was refused or failed'
-    : > "$run/armed/owned"
-    if (( $# == 5 )); then
+    if [[ -e $run/packaged-listener ]]; then
+        wait_for_packaged_listener || die 'Packaged desktop sensor listener did not start'
+    else
+        : > "$run/armed/owned"
+    fi
+    if [[ -n $uid ]]; then
+        (qrtr_lookup wait 12) > "$run/qrtr" 2>&1 &
+        wait_job qrtr "$!" || die 'Sensor service was unavailable'
+        (for _ in {1..72}; do
+            systemctl is-active --quiet iio-sensor-proxy.service && exit 0
+            sleep .25
+        done; exit 1) > "$run/proxy-ready" 2>&1 &
+        wait_job proxy-ready "$!" || die 'Packaged sensor proxy did not acquire its bus name'
+        read_desktop_sensors "$uid" > "$run/desktop" 2>&1 &
+        wait_job desktop "$!" || die 'Desktop sensor observation did not complete'
+    elif (( $# == 5 )); then
         discover_and_survey || die 'Incomplete sensor survey, inspect per-channel and transport results'
     else
         discover_and_sample || die 'No verified accelerometer sample, inspect QRTR, collector, listener and kernel output'
@@ -465,6 +539,7 @@ main() {
     if [[ $mode == --help ]]; then
         echo 'Usage: trial-ssc.sh [--preflight | --trial FIRMWARE.deb STATE STATE_SHA256]'
         echo '       trial-ssc.sh --survey FIRMWARE.deb STATE STATE_SHA256 SSC-SAMPLE SSC-HALL'
+        echo '       trial-ssc.sh --desktop FIRMWARE.deb STATE STATE_SHA256'
         return
     fi
     if [[ $mode == --_cleanup && $# == 0 ]]; then cleanup; return; fi
@@ -478,13 +553,19 @@ main() {
             check_baseline
             firmware_baseline
             echo 'SSC preflight passed. No trial was started.' ;;
-        --trial|--survey)
+        --trial|--survey|--desktop)
             local limit=38
             local -a tools=()
             [[ $EUID == 0 && ${3:-} =~ ^[0-9a-f]{64}$ ]] || die 'An explicit root trial requires the reviewed inputs'
             if [[ $mode == --survey ]]; then
                 [[ $# == 5 && -f $4 && -f $5 ]] || die 'A survey requires both native tools'
                 tools=("$(realpath -e -- "$4")" "$(realpath -e -- "$5")")
+                limit=75
+            elif [[ $mode == --desktop ]]; then
+                [[ $# == 3 && -r $desktop_reader ]] || die 'Expected firmware, registry, digest and adjacent reader'
+                device_starts_listener || die 'Desktop trial requires the device-activated listener'
+                desktop_account > /dev/null || die 'No local Xfce seat'
+                tools=(--desktop)
                 limit=75
             else
                 [[ $# == 3 ]] || die 'An accelerometer trial requires exactly three inputs'
@@ -502,7 +583,7 @@ main() {
                 -p "ExecStopPost=/bin/bash $script --_cleanup" \
                 --setenv=PATH=/usr/sbin:/usr/bin:/sbin:/bin --setenv="Y700_TRIAL_UV=$uv" \
                 /bin/bash "$script" --_worker "$(realpath -e -- "$1")" "$(realpath -e -- "$2")" "$3" "${tools[@]}" ;;
-        --_worker) [[ ( $# == 3 || $# == 5 ) && $3 =~ ^[0-9a-f]{64}$ ]] || die 'Invalid worker invocation'; worker "$@" ;;
+        --_worker) [[ ( $# == 3 || $# == 5 || ( $# == 4 && $4 == --desktop ) ) && $3 =~ ^[0-9a-f]{64}$ ]] || die 'Invalid worker invocation'; worker "$@" ;;
         *) die 'Unknown mode, see --help' ;;
     esac
 }

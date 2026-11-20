@@ -441,6 +441,15 @@ if (( EUID == 0 )); then
     main --survey "${inputs[@]}" "$scratch/one" "$scratch/two"
     grep -Fxq 'RuntimeMaxSec=75s' "$scratch/worker-arguments"
     [[ $(tail -n2 "$scratch/worker-arguments") == "$scratch/one"$'\n'"$scratch/two" ]]
+    device_starts_listener() { return 1; }
+    if (main --desktop "${inputs[@]}") >/dev/null 2>&1; then exit 1; fi
+    device_starts_listener() { return 0; }
+    desktop_account() { return 1; }
+    if (main --desktop "${inputs[@]}") >/dev/null 2>&1; then exit 1; fi
+    desktop_account() { echo 1000; }
+    main --desktop "${inputs[@]}"
+    grep -Fxq 'RuntimeMaxSec=75s' "$scratch/worker-arguments"
+    [[ $(tail -n1 "$scratch/worker-arguments") == --desktop ]]
 )
 fi
 echo 'PASS: survey opt-in, helper rejection, first health fault, partial output and skipped channels'

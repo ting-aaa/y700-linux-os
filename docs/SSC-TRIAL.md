@@ -84,6 +84,20 @@ The survey was exercised in a networkless Debian ARM64 guest with the real pinne
 
 ## Host checks
 
+### Read from the ordinary desktop account
+
+The device-activated runtime (0.1.2) allows a bounded trial of the same services an installed desktop uses. Place `trial-ssc.sh`, `trial-ssc-assets.py` and `trial-ssc-desktop.py` together in the trusted trial directory. On the original PRC installation with SLPI offline and persistent SLPI firmware withheld, use the following command for one separately authorized activation.
+
+```sh
+bash /path/to/trial-ssc.sh --desktop "$cn350_deb" "$private_state" "$reviewed_state_sha256"
+```
+
+The worker exposes the verified firmware and a writable copy of the calibrated registry for that activation. When Linux announces the SDSP device, the packaged udev rule starts the listener. The worker waits for SSC service 400 and the packaged SensorProxy. The active local X11 account then claims accelerometer, ambient light and proximity through its user service manager and the normal system-bus policy. The reader prints the reported orientation, tilt, light level and proximity, the names of properties signalled while subscribed, and its releases. A static reading gives the current reported state. Verifying direction, light or near/far transitions requires moving the tablet, changing illumination or moving a target.
+
+The coordinator has a 75-second runtime cap. Cleanup stops the managed services for its owned device, releases its remoteproc reference and removes its two temporary mounts. On the legacy 0.1.1 runtime, the original accelerometer and survey modes use their transient listener. With the device-activated runtime those modes use the packaged listener to avoid competing FastRPC processes. [Desktop reader](../scripts/trial-ssc-desktop.py)
+
+### Regression tests
+
 `bash tests/trial-ssc.sh` exercises read-only dispatch, duplicate protection, external references, failed and interrupted sysfs writes and endpoint identity checks using local files. It also checks delayed and absent service registrations, finite-row validation, the original collector failure exit code and cleanup reporting after interruption. Its test doubles issue no sysfs operations. In the ARM64 QRTR guest, the nameservice gate rejected a missing or already-present service and admitted a delayed mock registration. The installed `ssccli 0.4.4` registered an SSC client, subscribed, emitted finite UTF-8 accelerometer rows and requested unsubscription. Reproduce with the existing native libssc test payload, placing the scripts in `/opt/ssc-test/scripts` and `/opt/ssc-test/tests`, and running `bash /opt/ssc-test/tests/trial-ssc.sh --qrtr-fixture`.
 
 For the survey regression, also stage the two collectors as `ssc-sample.arm64` and `ssc-hall`, the Hall QRTR extension as `hall-mock.py` and its Hall sensor fixture alongside the gyroscope fixture in `ssc_server/data/`. Run `bash /opt/ssc-test/tests/trial-ssc.sh --survey-qrtr-fixture`. The guest rejects an existing SDSP node and requires the isolated fixture's kernel command line.
