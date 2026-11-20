@@ -107,6 +107,6 @@ agent_args=()
 if [[ $security == open ]]; then agent_args+=(--no-agent); fi
 nm-applet "${agent_args[@]}" >/dev/null 2>&1 & applet=$!
 "${py[@]}" "$bundle/probe.py" "$mode" "$applet"
-if [[ $mode == fixture ]] && grep -Eq 'y700.wifi_rejoin=[12]( |$)' /proc/cmdline; then
+if [[ $mode == fixture ]] && grep -Eq 'y700.wifi_rejoin=[123]( |$)' /proc/cmdline; then
     "${py[@]}" "$bundle/rejoin/observer.py" "$applet"
 fi

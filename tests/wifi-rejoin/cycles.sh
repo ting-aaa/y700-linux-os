@@ -3,7 +3,7 @@ wifi_rejoin_setup() {
     local extra_phy
     install -d -m755 /run/wifi-fixture/rejoin
     install -d -m700 -o y700 -g y700 /run/wifi-fixture/rejoin/user
-    if (( rejoin == 2 )); then
+    if (( rejoin >= 2 )); then
         alternate_ap=${radios[2]##*/}
         extra_phy=$(basename "$(readlink -f "/sys/class/net/$alternate_ap/phy80211")")
         [[ $extra_phy =~ ^phy[0-9]+$ ]] || fail rejoin-alternate-phy
@@ -91,6 +91,11 @@ wifi_rejoin_cycles() {
     wifi_rejoin_verify_link
     original_bssid=$(wifi_rejoin_bssid)
     echo 'WIFI_REJOIN_BASELINE applet=1 autoconnect=1 sae=1 pmf=1 dhcp=1 ping=1'
+    if (( rejoin == 3 )); then
+        wifi_crossband
+        touch "$root/done"
+        return
+    fi
     for ((i=1; i<=rejoin+1; i++)); do
         kill -0 "$seat_job" || fail rejoin-seat-closed
         # Only stop the owned AP process. No client disconnect commands, scans,

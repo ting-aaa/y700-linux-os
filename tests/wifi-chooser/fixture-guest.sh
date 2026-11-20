@@ -32,10 +32,15 @@ mkdir -p /run/wifi-fixture /run/dbus
 rejoin=0
 if grep -qw y700.wifi_rejoin=1 /proc/cmdline; then rejoin=1; fi
 if grep -qw y700.wifi_rejoin=2 /proc/cmdline; then rejoin=2; fi
+if grep -qw y700.wifi_rejoin=3 /proc/cmdline; then rejoin=3; fi
 test ! -e /sys/module/mac80211_hwsim || fail simulator-already-loaded
 radio_count=2
-if (( rejoin == 2 )); then radio_count=3; fi
-insmod ./mac80211_hwsim.ko radios="$radio_count" || fail simulator-load
+if (( rejoin >= 2 )); then radio_count=3; fi
+module_options=(radios="$radio_count")
+# HWSIM_REGTEST_CUSTOM_WORLD gives these virtual APs a fixed beacon-capable
+# channel 36 independently of the guest's early platform regulatory request.
+if (( rejoin == 3 )); then module_options+=(regtest=5); fi
+insmod ./mac80211_hwsim.ko "${module_options[@]}" || fail simulator-load
 radios=(/sys/class/net/wlan*)
 test "${#radios[@]}" = "$radio_count" || fail unexpected-radio-count
 for path in "${radios[@]}"; do
@@ -70,7 +75,11 @@ fi
 security=$(sed -nE 's/.*[[:space:]]y700.wifi_security=([a-z0-9]+).*/\1/p' /proc/cmdline)
 case $security in open|wpa2|sae) ;; *) fail bad-security-mode;; esac
 uv run --offline --no-project --python /usr/bin/python3 python ./prepare-ap.py "$security" "$ap"
-if (( rejoin == 2 )); then wifi_rejoin_configs; fi
+if (( rejoin >= 2 )); then wifi_rejoin_configs; fi
+if (( rejoin == 3 )); then
+    . ./rejoin/crossband.sh
+    sed -i 's/^channel=1$/channel=36/;s/^hw_mode=g$/hw_mode=a/' /run/wifi-fixture/hostapd.conf.alt
+fi
 "${ap_net[@]}" hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & ap_process=$!; pids+=("$ap_process")
 ap_ready() { hostapd_cli -p /run/wifi-fixture/hostapd -i "$ap" status 2>/dev/null | grep -Fxq 'state=ENABLED'; }
 for _ in {1..40}; do

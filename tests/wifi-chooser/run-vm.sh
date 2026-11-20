@@ -15,7 +15,7 @@ case "$actor" in root|seat) ;; *) exit 2;; esac
 rejoin=${WIFI_REJOIN:-0}
 case $rejoin in
     0) ;;
-    1|2) [[ $security == sae && $actor == seat && $attempt == fresh ]] || exit 2 ;;
+    1|2|3) [[ $security == sae && $actor == seat && $attempt == fresh ]] || exit 2 ;;
     *) exit 2 ;;
 esac
 systemd_target=
@@ -58,6 +58,9 @@ cp -- "$here/fixture-seat.service" "$payload/"
 if (( rejoin )); then
     install -m644 -D "$here/../wifi-rejoin/cycles.sh" "$payload/rejoin/cycles.sh"
     install -m644 "$here/../wifi-rejoin/observer.py" "$payload/rejoin/observer.py"
+    if (( rejoin == 3 )); then
+        install -m644 "$here/../wifi-rejoin/crossband.sh" "$here/../wifi-rejoin/stream.py" "$payload/rejoin/"
+    fi
 fi
 (
     cd "$work/init"
@@ -91,6 +94,10 @@ if [[ $actor == seat ]]; then
     grep -Fxq 'WIFI_SEAT ordinary_uid=1 active=1 local=1 type=x11 network_control=yes' "$work/guest.log"
 fi
 if (( rejoin )); then
-    [[ $(grep -Ec '^WIFI_REJOIN_RECOVERED ' "$work/guest.log") == $((rejoin + 1)) ]]
+    if (( rejoin == 3 )); then
+        grep -Fq 'WIFI_TCP_BANDS mhz=2412,5180,2412 one_connection=1' "$work/guest.log"
+    else
+        [[ $(grep -Ec '^WIFI_REJOIN_RECOVERED ' "$work/guest.log") == $((rejoin + 1)) ]]
+    fi
     grep -Fxq 'WIFI_REJOIN_PASS no_prompt=1 no_manual_activation=1' "$work/guest.log"
 fi
