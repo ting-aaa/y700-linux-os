@@ -1,6 +1,16 @@
 # Y700 internal speaker routing and digital gain
 
-The dev11 platform profile corrects a mute setting on both internal CS35L45 amplifiers. On the real TB320FC_PRC, both amplifiers moved from raw 0 (mute) to raw 249 (**−40.00 dB**) when the signed-in desktop reloaded the profile. Five seconds of digital silence then reached both protected speaker routes. Actual sound from the left and right grilles still needs a listener. [Managed profile](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf) · [Original Asphalt profile](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/asphalt/HiFi.conf#L15-L47)
+On November 20 the owner of a TB320FC_PRC confirmed sustained YouTube audio at a comfortable level in Chromium. The desktop volume was 40%. Both CS35L45 protection DSPs had selected their individual factory calibration, and both digital gains were raw 361 (−12 dB). The dev12 platform package now applies these settings when the desktop opens the speaker profile. [Managed profile](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf) · [Calibration tool](../scripts/speaker-calibration.py)
+
+## From a silent video to audible playback
+
+The owner initially heard occasional crackles and no program audio. Chromium supplied two active channels to the internal speaker sink, with peaks around −7 to −4 dBFS at its playback monitor. The hardware PCM advanced and both amplifier DSPs were running. The MI2S clock, word select and data pins all changed level. Both hardware output mute bits were clear. The DSP power telemetry continued to report zero even with audible playback, so this field alone cannot establish silence on this firmware.
+
+The original Android audio HAL loads each speaker's own resistance and ambient temperature from the unit's `persist` partition. With both amplifiers disabled, Debian staged the four factory control words for each speaker in the ALSA cache while both DSP cores were stopped. After the protection firmware restarted and the normal playback route opened, each `CAL_R_SELECTED` matched its physical speaker's factory resistance, `CAL_SET_STATUS` changed from 1 to 2 and both `CSPL_ERRORNO` values were zero. Writing the same values with the cores already running had left both on their fallback resistance. Only the factory data for this tablet was used. The service reads the partition and prepares a private record under `/run` at boot. [Startup service](../packaging/root/usr/lib/systemd/system/y700-speaker-calibration.service)
+
+With calibration active and the earlier raw-249 gain (−40 dB), the owner heard none of three spoken prompts at desktop volume 40%, 55% and 70%. A brief hardware gain trial produced intelligible speech. Holding raw 361 at 40% desktop volume then produced continuous YouTube sound at a level the owner found appropriate. The analog gain remained at +10 dB and both DACs used the protection DSP outputs throughout. No measurement established a maximum volume or physical grille separation.
+
+On the same tablet, the dev12 package was installed and its boot service enabled. Reloading the signed-in user's WirePlumber reopened Chromium's speaker stream and automatically restored raw 361, both factory-selected resistances, zero DSP errors and the 40% desktop volume. On a system without a prepared per-device record the profile retains raw 249. To check an actively playing tablet, run `sudo /usr/libexec/y700-speaker-calibration verify-live`. Per-device calibration words stay off distributable media. The local test receipts are under `out/speaker-ucm/`, including `physical-factory--reload.log`, `physical-factory-sustain.log` and `physical-dev12-automatic.log`.
 
 ## Read-only observations with the dev10 profile
 
@@ -44,7 +54,7 @@ Tap the speaker icon on the Xfce panel. The top row controls playback. Tap its s
 
 In the isolated dev11.1 ARM64 desktop at 200%, the stock plugin responded to synthetic pointer taps. The private PipeWire Pulse server reported playback changing from about 47% to 77%, switching to muted and back at 77%, then returning to the exact selected 47% level in both channels. The software sink carried digital silence to keep its audio format active. It had no hardware audio device. This qualifies the menu and its software control path. Audible output from the tablet speakers still requires separate evidence.
 
-## Attended stereo check
+## Low-level stereo probe for the earlier dev11 profile
 
 With the corrected profile active, run the following from a terminal in the tablet's signed-in desktop. The probe checks that the default sink is the protected internal speaker and that both hardware controls already report −40.00 dB. It waits for Enter and sends a 440 Hz tone at 1% of digital full scale, first exclusively left and then exclusively right, with a quarter-second quiet interval. It opens a targeted playback stream and leaves volume and routing controls alone.
 

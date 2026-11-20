@@ -75,6 +75,7 @@ for unit in ssh.service ssh.socket asphalt-usb-status.service asphalt-usb-mainte
 done
 systemctl --root="$root" enable y700-usb-maintenance.service y700-maintenance-sshd.service systemd-timesyncd.service
 systemctl --root="$root" enable y700-bluetooth-identity.service
+systemctl --root="$root" enable y700-speaker-calibration.service
 # Seed early boot time from the deterministic build epoch; network NTP still
 # performs the actual synchronization. Never move an existing newer seed back.
 epoch=$(cat "$root/usr/lib/y700/build-epoch")
