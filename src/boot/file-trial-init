@@ -1,0 +1,122 @@
+#!/bin/busybox sh
+# Selected only by the dev12.5 file trial menu entry.
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+mount -t proc proc /proc || exit 1
+mount -t sysfs sysfs /sys || exit 1
+mount -t tmpfs -o mode=0755,nodev,nosuid,strictatime tmpfs /run || exit 1
+exec </dev/console >/dev/console 2>&1
+umask 077
+exitrd=/run/initramfs
+backing=$exitrd/backing
+images=$backing/var/lib/y700-trial/dev12.5
+rootloop=
+esploop=
+outer=
+moved=
+fail() {
+    echo "y700-file-trial: $*; rebooting to default"
+    for fs in $moved; do mount --move "/newroot/$fs" "/$fs"; done
+    for path in /newroot/boot /newroot "$backing"; do
+        if [ "$path" = "$backing" ]; then
+            for loop in "$esploop" "$rootloop"; do
+                [ -z "$loop" ] || losetup -d "$loop"
+            done
+        fi
+        grep -Fq " $path " /proc/mounts && umount "$path"
+    done
+    sync
+    reboot -f
+    exit 1
+}
+hex() { dd if="$1" bs=1 skip="$2" count="$3" 2>/dev/null | hexdump -ve '1/1 "%02x"'; }
+# The ext4 magic, UUID, valid-state bit and absence of NEEDS_RECOVERY are
+# checked before allowing any journal or filesystem writes.
+clean_ext4() {
+    [ "$(hex "$1" 1080 2)" = 53ef ] &&
+    [ "$(hex "$1" 1128 16)" = "$2" ] &&
+    [ "$(hex "$1" 1082 2)" = 0100 ] || return 1
+    flags=$(hex "$1" 1120 1)
+    [ -n "$flags" ] && [ "$((0x$flags & 4))" = 0 ]
+}
+case " $(cat /proc/cmdline) " in *' y700.media=file '*) ;; *) fail 'file media option missing' ;; esac
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    [ "$(tr -d '\000' </proc/device-tree/region_country)" = PRC ] || fail 'unexpected board region'
+    prefix=sd
+elif [ "$compat" = linux,dummy-virt ]; then
+    prefix=vd
+else
+    fail 'unexpected board'
+fi
+for tick in $(seq 1 60); do
+    for block in /sys/class/block/"$prefix"*; do
+        [ -f "$block/partition" ] && grep -qx PARTNAME=linux "$block/uevent" || continue
+        if [ "$prefix" = sd ]; then
+            case "$(readlink -f "$block")" in */1d84000.ufshc/*) ;; *) continue ;; esac
+        fi
+        dev=/dev/${block##*/}
+        [ -b "$dev" ] && [ "$(hex "$dev" 1128 16)" = ef30676423154235879669e2c9b61946 ] || continue
+        [ -z "$outer" ] || fail 'ambiguous backing partition'
+        outer=$dev
+    done
+    [ -z "$outer" ] || break
+    sleep 1
+done
+[ -n "$outer" ] || fail 'backing partition unavailable'
+if [ "$prefix" = sd ]; then
+    freq=/sys/class/devfreq/1d84000.ufshc/max_freq
+    [ -w "$freq" ] && echo 75000000 > "$freq" && [ "$(cat "$freq")" = 75000000 ] || fail 'UFS frequency limit unavailable'
+fi
+clean_ext4 "$outer" ef30676423154235879669e2c9b61946 || fail 'backing filesystem requires attention'
+mkdir -m 700 "$exitrd" && mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs "$exitrd" || fail 'exitrd unavailable'
+mkdir -p "$exitrd"/bin "$exitrd"/dev "$exitrd"/sys "$exitrd"/proc "$exitrd"/run "$exitrd"/oldroot "$backing" || fail 'exitrd layout failed'
+cp /bin/busybox "$exitrd/bin/busybox" && cp /y700-file-trial-shutdown "$exitrd/shutdown" || fail 'exitrd copy failed'
+safe_dir() {
+    [ ! -L "$1" ] && [ -d "$1" ] && [ "$(stat -c '%u:%g' "$1")" = 0:0 ] || return 1
+    mode=$(stat -c %a "$1")
+    [ "$((0$mode & 0022))" = 0 ]
+}
+private_image() {
+    [ ! -L "$1" ] && [ -f "$1" ] && [ "$(stat -c '%u:%g:%a:%h:%s' "$1")" = "0:0:600:1:$2" ]
+}
+attach() {
+    # PID 1 is the sole userspace actor. An explicit busy loop fails the
+    # association ioctl; record a device for cleanup only after success.
+    loop=$(losetup -f) || return 1
+    losetup "$@" "$loop" "$image" || return 1
+    printf '%s\n' "$loop"
+}
+mount -t ext4 -o ro,noload,noexec,nodev,nosuid "$outer" "$backing" || fail 'read-only backing mount failed'
+[ "$(cat "$backing/etc/y700/image-id")" = asphalt-prc-debian13-xfce-7.3.4-v1 ] || fail 'unexpected backing image identity'
+for dir in "$backing/var" "$backing/var/lib"; do safe_dir "$dir" || fail 'unsafe trial ancestor'; done
+for dir in "$backing/var/lib/y700-trial" "$images"; do
+    safe_dir "$dir" && [ "$(stat -c %a "$dir")" = 700 ] || fail 'unsafe trial directory'
+done
+private_image "$images/root.ext4" 6442450944 || fail 'unsafe root image'
+private_image "$images/linux-boot.fat" 1073741824 || fail 'unsafe ESP image'
+clean_ext4 "$images/root.ext4" 171a4adb916b47639e6f722b4a99988f || fail 'unexpected or unclean inner ext4'
+[ "$(hex "$images/linux-boot.fat" 67 4)" = db4a1a17 ] &&
+[ "$(hex "$images/linux-boot.fat" 82 8)" = 4641543332202020 ] || fail 'unexpected inner FAT'
+image=$images/root.ext4
+rootloop=$(attach -r) || fail 'cannot attach read-only root'
+mount -t ext4 -o ro,noload "$rootloop" /newroot || fail 'read-only root mount failed'
+[ "$(cat /newroot/etc/y700/image-id)" = y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ] || fail 'unexpected inner image identity'
+# The verified generic root may later persist local changes, including enrollment.
+umount /newroot && losetup -d "$rootloop" || fail 'cannot release verified root'
+rootloop=
+umount "$backing" && mount -t ext4 -o rw,noatime,noexec,nodev,nosuid "$outer" "$backing" || fail 'cannot open backing read-write'
+image=$images/root.ext4
+rootloop=$(attach) || fail 'cannot attach persistent root'
+image=$images/linux-boot.fat
+esploop=$(attach) || fail 'cannot attach persistent ESP'
+mount -t ext4 -o rw "$rootloop" /newroot || fail 'cannot mount persistent root'
+mount -t vfat -o rw,umask=0077 "$esploop" /newroot/boot || fail 'cannot mount persistent ESP'
+printf '%s\n' "$rootloop" "$esploop" > "$exitrd/loops" || fail 'cannot record loops'
+echo "y700-file-trial: verified persistent root=$rootloop esp=$esploop backing=$outer"
+for fs in dev proc sys run; do
+    mount --move "/$fs" "/newroot/$fs" || fail "cannot move $fs"
+    moved="$fs $moved"
+done
+exec switch_root /newroot /sbin/init

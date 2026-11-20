@@ -1,0 +1,43 @@
+#!/bin/busybox sh
+# systemd-shutdown has switched PID 1 to /run/initramfs.
+export PATH=/bin
+/bin/busybox --install -s /bin
+verb=$1
+finish() {
+    sync
+    case "$verb" in poweroff|halt) poweroff -f ;; *) reboot -f ;; esac
+    exit 1
+}
+fail() {
+    echo "y700-file-trial: shutdown incomplete: $*" >/dev/console
+    finish
+}
+[ "$$" = 1 ] && [ -r /loops ] || exit 1
+sync
+# systemd may leave API mounts below /oldroot or have already released /boot.
+# Release children first; lazy unmount is used only for in-memory API mounts.
+awk '$5 ~ /^\/oldroot\// {print length($5),$5}' /proc/self/mountinfo | sort -rn > /mount-list
+while read -r len encoded; do
+    path=$(printf '%b' "$encoded")
+    if ! umount "$path"; then
+        case "$path" in
+            /oldroot/dev|/oldroot/dev/*|/oldroot/proc|/oldroot/proc/*|/oldroot/sys|/oldroot/sys/*|/oldroot/run|/oldroot/run/*)
+                umount -l "$path" || fail "could not release $path" ;;
+            *) fail "could not release $path" ;;
+        esac
+    fi
+done < /mount-list
+umount /oldroot || fail 'persistent root is busy'
+while read -r loop; do
+    file=/sys/class/block/${loop##*/}/loop/backing_file
+    if [ -e "$file" ]; then
+        case "$(cat "$file")" in */var/lib/y700-trial/dev12.5/root.ext4|*/var/lib/y700-trial/dev12.5/linux-boot.fat) ;; *) fail 'unexpected loop backing';; esac
+        losetup -d "$loop" || [ ! -e "$file" ] || fail "cannot detach $loop"
+    fi
+    for wait in 1 2 3 4 5; do [ -e "$file" ] || break; sleep 1; done
+    [ ! -e "$file" ] || fail "$loop remains attached"
+done < /loops
+sync
+umount /backing || fail 'backing filesystem is busy'
+echo 'y700-file-trial: clean shutdown' >/dev/console
+finish
