@@ -14,6 +14,7 @@ repo=$(cd -- "$(dirname -- "$0")/../.." && pwd -P)
 source_root=$(realpath -e -- "$1")
 platform=$(realpath -e -- "$2")
 qcam=$(realpath -e -- "$3")
+qcam_lock=$repo/tests/onboard-image/camera-qcam.lock.json
 ssc=$(realpath -e -- "$4")
 onboard=$(realpath -e -- "$5")
 out=$(realpath -m -- "$6")
@@ -24,7 +25,7 @@ parent_sha=9054df11e3a7d6cceacdfa6dffdb081c4a94428468ada09076c286c61ac17f30
 platform_sha=37bb3cc3afba68f6a73e9aed41958a28bd28a4f6d62a8acc11bba4d051190618
 parent_inventory=e0caf1e65e742059c826219046fad6e39437c45d8b33d50325f15054a0b6ac8a
 printf '%s  %s\n' "$parent_sha" "$source_root" "$platform_sha" "$platform" | sha256sum --strict -c -
-"${py[@]}" "$repo/scripts/repair-inputs.py" verify "$qcam" "$repo/config/camera-qcam.lock.json"
+"${py[@]}" "$repo/scripts/repair-inputs.py" verify "$qcam" "$qcam_lock"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$ssc" "$repo/config/ssc.lock.json"
 "${py[@]}" "$repo/scripts/repair-inputs.py" verify "$onboard" "$repo/config/onboard.lock.json"
 work=$(mktemp -d -- "${out%/*}/.y700-onboard-image.XXXXXXXX")
@@ -79,7 +80,8 @@ guest=(chroot "$root" /usr/bin/env SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteract
     gsettings get org.onboard.auto-show keyboard-device-detection-enabled) == true ]]
 rm -f -- "$root/usr/sbin/policy-rc.d" "$stage"/*.deb
 rmdir -- "$stage"
-for lock in camera-qcam ssc onboard; do
+install -m644 "$qcam_lock" "$root/var/lib/y700/build/camera-qcam.lock.json"
+for lock in ssc onboard; do
     install -m644 "$repo/config/$lock.lock.json" "$root/var/lib/y700/build/$lock.lock.json"
 done
 record=$root/var/lib/y700/build/packages.tsv
@@ -93,7 +95,7 @@ sed -e 's/^onboard\t1\.4\.1-10\t/onboard\t1.4.1-10+y7002\t/' \
     cmp - "$work/after.tsv"
 comm -3 "$work/before.tsv" "$work/after.tsv" > "$work/result/package-changes.tsv"
 [[ $(wc -l < "$work/result/package-changes.tsv") == 8 ]]
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" | tee "$work/result/inventory.txt"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" --qcam-lock "$qcam_lock" | tee "$work/result/inventory.txt"
 generic
 umount -R -- "$root"
 tree_digest() {

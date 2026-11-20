@@ -63,6 +63,7 @@ qcam=disabled
 tests=true
 if [[ $component == qcam ]]; then
     patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/tablet-photo.patch"
+    patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/lens-selector.patch"
     export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795143600}
     export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
     cam=disabled
@@ -86,7 +87,7 @@ summary='Private libcamera runtime for the Lenovo TB320FC'
 details=$' Contains the simple pipeline, software ISP, cam and a GStreamer plugin.\n Programs and libraries in /opt/y700-camera require explicit selection.'
 if [[ $component == qcam ]]; then
     package=y700-camera-qcam
-    version=0.7.2-1~bpo13+1.y7003
+    version=0.7.2-1~bpo13+1.y7004
     extra_dependencies="$runtime_package (= $runtime_version), "
     summary='Qt desktop camera app for the Lenovo TB320FC'
     details=' Saves photos from the Qt viewfinder using the Y700 camera runtime and CPU software ISP.'

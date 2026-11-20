@@ -3,8 +3,16 @@
   "scope": "optional-y700-camera-qcam-and-debian-runtime",
   "sources": {
     "application": "scripts/build-camera-backport.sh --qcam",
-    "application_patch": "packaging/camera-qcam/tablet-photo.patch",
-    "application_patch_sha256": "a4ce9ca253fe2e6b0115caabe941d99d1c7860c66f11c63ed704f6838e37b843",
+    "application_patches": [
+      {
+        "path": "packaging/camera-qcam/tablet-photo.patch",
+        "sha256": "a4ce9ca253fe2e6b0115caabe941d99d1c7860c66f11c63ed704f6838e37b843"
+      },
+      {
+        "path": "packaging/camera-qcam/lens-selector.patch",
+        "sha256": "07a6ecdb655d57cacc881b6741391fad1e8df0c0d9812e568509f872d7fd1d01"
+      }
+    ],
     "source_date_epoch": 1795143600,
     "debian": "config/camera-qcam-debian-auth.lock.json"
   },
@@ -130,10 +138,10 @@
     },
     {
       "package": "y700-camera-qcam",
-      "version": "0.7.2-1~bpo13+1.y7003",
+      "version": "0.7.2-1~bpo13+1.y7004",
       "architecture": "arm64",
-      "size": 110388,
-      "sha256": "f04073685168c81a8a20d3f078f8825df559cc75260916759f58771f335e0c36"
+      "size": 112616,
+      "sha256": "3d4f42c310ea0b2be4162c56e8dcf578367263d438c9997f1b4264473c950dd0"
     }
   ]
 }

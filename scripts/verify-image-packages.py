@@ -22,6 +22,7 @@ def replacements(lock):
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('root', type=Path)
+parser.add_argument('--qcam-lock', type=Path, help='Use this qcam build input lock for a sealed image')
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--camera-lock', type=Path, help='Require this exact camera layer receipt')
 mode.add_argument('--check-upgrade', choices=('blueman', 'onboard', 'xorg-dsi'),
@@ -60,8 +61,11 @@ for layer in ('firstboot-touch', 'firstboot-drm', 'warm-greeter', 'ssc', 'bluema
     if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
         raise SystemExit(f'{name} receipt must be a regular file')
     if not receipt.exists():
+        if layer == 'camera-qcam' and args.qcam_lock:
+            raise SystemExit('Requested qcam layer receipt is missing')
         continue
-    expected = json.loads((repo / 'config' / name).read_text())
+    lock_path = args.qcam_lock if layer == 'camera-qcam' and args.qcam_lock else repo / 'config' / name
+    expected = json.loads(lock_path.read_text())
     if json.loads(receipt.read_text()) != expected:
         raise SystemExit(f'{name} receipt differs from the build input lock')
     for original in replacements(expected):
