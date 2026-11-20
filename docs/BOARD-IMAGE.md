@@ -350,6 +350,8 @@ The exact generic root booted through virtual U-Boot and EFI to Linux 7.3.4-asph
 
 ## Dev12.5 standalone image
 
+The complete dev12.5 microSD trial kit includes a 512-byte-sector GPT disk and an internal EFI menu supplement. See the [trial and recovery guide](DEV12.5-SD-TRIAL.md) for current files, hashes, physical preflight and how to return to the internal install. The older candidate 03 console-enrollment procedure below applies to that earlier image.
+
 The local archive in `out/dev12.5-board/` can be unpacked independently as an ordinary Linux user. It includes all three raw board images and a Chinese extraction guide. The generic output matches the three input hashes. A separate test of per-device Bluetooth provisioning used synthetic input and checked the private file's owner, mode and content. [Extraction guide](DEV12.5-IMAGE.md) · [Four-package change from dev12.4](KEYBOARD-IMAGE.md)
 
 | Delivered file or inventory | SHA-256 |
