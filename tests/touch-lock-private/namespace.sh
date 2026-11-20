@@ -41,6 +41,7 @@ ln -s /proc/self/fd "$r/dev/fd"
 mount -t proc -o nosuid,nodev,noexec proc "$r/proc"
 mount -t tmpfs -o ro,nodev,nosuid,noexec tmpfs "$r/proc/sys"
 install -m644 "$stage/"{session.sh,exercise.py} "$r/qa/"
+if [[ -f $stage/retry-in-place ]]; then touch "$r/qa/retry-in-place"; fi
 if [[ -n ${PRIVATE_LOCK_UV:-} ]]; then install -m755 "$PRIVATE_LOCK_UV" "$r/qa/uv"; fi
 chroot "$r" /usr/bin/dbus-uuidgen --ensure=/etc/machine-id
 chroot "$r" /bin/ln -s /etc/machine-id /var/lib/dbus/machine-id

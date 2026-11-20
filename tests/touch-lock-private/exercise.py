@@ -44,7 +44,7 @@ def ancestors(xid):
     return result
 
 
-def entry_geometry(dialog):
+def password_control(dialog):
     import gi
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
@@ -79,9 +79,28 @@ def entry_geometry(dialog):
             scale = round(width / top_rect.width)
             if scale not in (1, 2) or abs(height - top_rect.height * scale) > 4:
                 continue
-            return (x + (rect.x - top_rect.x) * scale, y + (rect.y - top_rect.y) * scale,
-                    rect.width * scale, rect.height * scale)
+            bounds = (x + (rect.x - top_rect.x) * scale, y + (rect.y - top_rect.y) * scale,
+                      rect.width * scale, rect.height * scale)
+            return entry, bounds
     return None
+
+
+KEYS = {"e": (.251, .30), "h": (.448, .50), "l": (.631, .50), "o": (.616, .30), "Return": (.873, .40)}
+
+
+def click_key(bounds, key):
+    x, y, width, height = bounds
+    dx, dy = KEYS[key]
+    run("xdotool", "mousemove", str(x + round(dx * width)), str(y + round(dy * height)), "click", "1")
+
+
+def click_password(bounds, control, password):
+    # GDK masks this widget. Count only; never ask AT-SPI for its contents.
+    assert control.get_character_count() == 0
+    for expected, key in enumerate(password, 1):
+        click_key(bounds, key)
+        wait("masked entry length after embedded key", lambda: control.get_character_count() == expected, 3)
+    click_key(bounds, "Return")
 
 
 def ephemeral_login():
@@ -108,6 +127,7 @@ def ephemeral_login():
 
 def main():
     password = ephemeral_login()
+    retry = Path("/qa/retry-in-place").is_file()
     bus = run("dbus-daemon", "--session", "--fork", "--print-address=1")
     os.environ["DBUS_SESSION_BUS_ADDRESS"] = bus
     run("gsettings", "set", "org.gnome.desktop.interface", "toolkit-accessibility", "true")
@@ -118,6 +138,7 @@ def main():
     daemon = subprocess.Popen(["xfce4-screensaver", "--debug"], stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, text=True, errors="replace")
     keyboards, dialogs, states = [], [], set()
+    failures = []
 
     def monitor():
         for line in daemon.stdout:
@@ -132,6 +153,7 @@ def main():
                 states.add("ok")
             if "Authorization failed" in line:
                 states.add("failed")
+                failures.append(True)
 
     threading.Thread(target=monitor, daemon=True).start()
 
@@ -139,7 +161,10 @@ def main():
         return "is active" in run("xfce4-screensaver-command", "--query", check=False)
 
     def show_prompt(index):
-        run("xdotool", "key", "Shift_L")
+        if retry:
+            run("xdotool", "mousemove", "40", "40", "click", "1")
+        else:
+            run("xdotool", "key", "Shift_L")
         wait("mapped native unlock dialog and embedded keyboard", lambda: len(keyboards) > index
              and len(dialogs) > index and geometry(keyboards[index]) and geometry(dialogs[index]), 20)
         xid = keyboards[index]
@@ -147,29 +172,61 @@ def main():
         assert set(ancestors(xid)).intersection(ancestors(dialogs[index]))
         x, y, width, height = geometry(xid)
         assert width >= 600 and height >= 120 and x >= 0 and y >= 0 and x + width <= panel[0] and y + height <= panel[1]
-        ex, ey, ew, eh = wait("mapped private password entry geometry", lambda: entry_geometry(dialogs[index]), 6)
+        control, (ex, ey, ew, eh) = wait("mapped private password entry geometry", lambda: password_control(dialogs[index]), 8)
         assert ew > 0 and eh > 0 and ex >= 0 and ey >= 0 and ex + ew <= panel[0] and ey + eh <= y
         print(f"PRIVATE_LOCK display={panel[0]}x{panel[1]} gdk_scale=2 embedded=yes shared_locker_ancestor=yes "
               f"keyboard={width}x{height}+{x}+{y} password_entry={ew}x{eh}+{ex}+{ey}", flush=True)
-        return x, y, width, height
+        return (x, y, width, height), control, (ex, ey, ew, eh)
 
     try:
         wait("private screensaver service", lambda: "is inactive" in
              run("xfce4-screensaver-command", "--query", check=False))
         run("xfce4-screensaver-command", "--lock")
         wait("private lock activated", active)
-        show_prompt(0)
-        run("xdotool", "key", "Escape")
-        wait("cancel dismissed the prompt with lock retained", lambda: "cancel" in states and active())
-        print("PRIVATE_LOCK cancel=still-locked", flush=True)
-        x, y, width, height = show_prompt(1)
-        keys = {"e": (.251, .30), "h": (.448, .50), "l": (.631, .50), "o": (.616, .30)}
-        for key in password:
-            dx, dy = keys[key]
-            run("xdotool", "mousemove", str(x + round(dx * width)), str(y + round(dy * height)), "click", "1")
-        run("xdotool", "key", "Return")
+        bounds, control, entry_rect = show_prompt(0)
+        if retry:
+            from gi.repository import Atspi
+            click_password(bounds, control, "ehl")
+            wait("one native PAM rejection with locker still active", lambda: len(failures) == 1 and active())
+            xid, kid, pid = dialogs[0], keyboards[0], control.get_process_id()
+
+            def ready():
+                control.clear_cache()
+                flags = control.get_state_set()
+                required = (Atspi.StateType.SENSITIVE, Atspi.StateType.ENABLED, Atspi.StateType.EDITABLE)
+                return control.get_character_count() == 0 and all(flags.contains(flag) for flag in required)
+
+            wait("cleared and sensitive private password entry", ready)
+            assert dialogs == [xid] and keyboards == [kid] and geometry(xid) and geometry(kid)
+            control, entry_rect = password_control(xid)
+            assert control.get_process_id() == pid
+            ex, ey, ew, eh = entry_rect
+
+            def focused():
+                control.clear_cache()
+                return control.get_state_set().contains(Atspi.StateType.FOCUSED)
+
+            focus_before = focused()
+            run("xdotool", "mousemove", str(ex + ew // 2), str(ey + eh // 2), "click", "1")
+            wait("password entry refocused after pointer click", focused)
+            print(f"PRIVATE_RETRY rejected=1 active=yes cleared=yes sensitive=yes editable=yes "
+                  f"focused_before_tap={focus_before} focused_after_tap=True", flush=True)
+            click_password(bounds, control, password)
+        else:
+            run("xdotool", "key", "Escape")
+            wait("cancel dismissed the prompt with lock retained", lambda: "cancel" in states and active())
+            print("PRIVATE_LOCK cancel=still-locked", flush=True)
+            bounds, _, _ = show_prompt(1)
+            for key in password:
+                click_key(bounds, key)
+            run("xdotool", "key", "Return")
         wait("native PAM accepted temporary identity", lambda: "ok" in states and not active(), 12)
-        assert "failed" not in states
+        if retry:
+            assert len(failures) == 1 and "cancel" not in states and dialogs == [xid] and keyboards == [kid]
+            print("PRIVATE_RETRY_PASS native_pam=rejected-then-accepted dialog=unchanged "
+                  "input=pointer-only letters-and-return=onboard supplementary_groups=" + str(len(os.getgroups())), flush=True)
+        else:
+            assert "failed" not in states
         print("PRIVATE_LOCK_PASS temporary_pam=authenticated input=embedded-key-clicks display=Xvfb", flush=True)
     finally:
         print(f"PRIVATE_LOCK state dialog_count={len(dialogs)} keyboard_count={len(keyboards)} "

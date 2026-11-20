@@ -10,7 +10,6 @@ archives=$(realpath -e "$2")
 helper=$3
 [[ $helper =~ ^/var/tmp/[A-Za-z0-9._/-]+/usr$ ]]
 here=$(cd "$(dirname "$0")" && pwd)
-repo=$(realpath "$here/../..")
 local_stage=$(mktemp -d)
 remote=
 cleanup() {
@@ -20,22 +19,8 @@ cleanup() {
     rm -rf -- "$local_stage"
 }
 trap cleanup EXIT
-cp -- "$archives/"*.deb "$archives/../legacy-deps/libdbus-glib-1-2_0.114-1_arm64.deb" \
-    "$here/"{namespace.sh,session.sh,exercise.py} "$local_stage/"
+bash "$here/stage.sh" "$archives" "$local_stage"
 cd "$local_stage"
-uv run --offline --no-project --python /usr/bin/python3 python - "$repo/config" <<'PY'
-import hashlib, json, pathlib, sys
-config = pathlib.Path(sys.argv[1])
-pins = json.loads((config / "touch-lock.lock.json").read_text())["packages"]
-legacy = json.loads((config / "warm-greeter-debian-auth.lock.json").read_text())["packages"]
-pins += [row for row in legacy if row["package"] == "libdbus-glib-1-2"]
-archives = sorted(pathlib.Path(".").glob("*.deb"))
-assert len(archives) == len(pins) == 4
-for row in pins:
-    archive, = [f for f in archives if f.name.split("_")[0] == row["package"]]
-    assert archive.stat().st_size == row["size"] and hashlib.sha256(archive.read_bytes()).hexdigest() == row["sha256"]
-PY
-sha256sum *.deb namespace.sh session.sh exercise.py >SHA256SUMS
 remote=$(bash "$ssh" 'set -eu; umask 077; test "$(findmnt -nro FSTYPE -T /run)" = tmpfs; mktemp -d /run/y700-private-lock.XXXXXXXX')
 [[ $remote =~ ^/run/y700-private-lock\.[[:alnum:]]{8}$ ]]
 tar -cf - *.deb namespace.sh session.sh exercise.py SHA256SUMS | bash "$ssh" "umask 077; tar -xf - -C '$remote'"

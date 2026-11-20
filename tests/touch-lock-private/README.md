@@ -11,3 +11,16 @@ The trial runs with private mount, PID, IPC and network namespaces, a tmpfs root
 The Xvfb screen is 2560×1600 with GTK scale 2. The test checks that the mapped Onboard plug and unlock dialog share a locker ancestor, measures the password entry without reading it and confirms the keyboard fits below it. Escape must dismiss the first prompt while the screen remains locked. On the second prompt the checker clicks the embedded Compact layout via X11, submits with Return and requires successful PAM authentication and deactivation of the private locker.
 
 The runner compares the boot ID, active seat and lock hint, four service invocation IDs and installed package states before and after the trial. It enforces an 85-second namespace timeout, checks for leaked mounts and removes its staging directory. The physical panel, finger input and locking the owner's session require separate tests.
+
+## Retry an incorrect password in the same dialog on a PC
+
+`run-qemu.sh` boots the hash-pinned dev12.5 root read-only with the board's ARM64 kernel, no network adapter and a private 2560×1600 Xvfb desktop at GTK scale 2. It uses the normal ARM64 PAM helper and a generated test account with zero supplementary groups. The helper directory must contain ARM64 `bin/Xvfb`, `bin/xdotool` and `lib/aarch64-linux-gnu/libxdo.so.3`. The archive directory and its sibling `legacy-deps` use the same layout as the hardware runner.
+
+```sh
+bash tests/touch-lock-private/run-qemu.sh "$root_ext4" "$kernel_image" "$busybox_arm64" \
+    "$uv_arm64" out/touch-lock/archives "$helper_usr"
+```
+
+The checker clicks Onboard's letter and Return keys to submit an incorrect password, waits for native PAM rejection and verifies that the locker remains active. It checks the masked field's length, sensitivity and editability without reading its contents. It then clicks the password field, checks focus, enters the correct password and submits using the embedded Return key. Success requires the same dialog process, dialog window and keyboard window throughout, one rejection, zero cancellations and successful PAM authentication. The earlier physical `out/touch-lock/private-native.log` covers the separate cancel-and-reopen path.
+
+The November 20 full-system ARM64 run passed with one dialog and one keyboard. After PAM rejected the first submission, the empty, editable field already had focus. It stayed focused after the explicit tap and accepted the next password. The local receipt is `out/touch-lock/private-qemu-same-dialog-retry.log`, SHA-256 `b6ddb87cd9b59b2a07a648ae855cdf44b3b4a341bbbd119aca1e2954bad1a075`.
