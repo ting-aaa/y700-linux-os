@@ -24,7 +24,7 @@ bash scripts/build-power-manager-touch.sh out/power-manager-source out/power-man
 
 ## 构建及交互实测
 
-两个离线 ARM64 构建根分别从源包开始编译，经 `cmp` 比对得到相同的 129,112 字节归档。包的 SHA-256 为 `b4fe51dcac6b90de809f12814e8495952b286e3526e77cc758111d5d2dae5df4`，其中 `/usr/bin/xfce4-power-manager` 的 SHA-256 为 `bdae8fa01f32676e3095ab73ed492132fb94c0bc27fc9962e3d9fb929c281366`。用 `readelf` 确认其为 AArch64，逐项比对原版包的 Depends、Recommends、安装路径及权限均相同。归档与核验记录位于 `out/power-manager-touch/`。
+三个离线 ARM64 构建根分别从源包开始编译，经 `cmp` 比对得到相同的 129,112 字节归档。第三轮还在输出目录预放了首轮的包，验证重复执行能正常结束。包的 SHA-256 为 `b4fe51dcac6b90de809f12814e8495952b286e3526e77cc758111d5d2dae5df4`，其中 `/usr/bin/xfce4-power-manager` 的 SHA-256 为 `bdae8fa01f32676e3095ab73ed492132fb94c0bc27fc9962e3d9fb929c281366`。用 `readelf` 确认其为 AArch64，逐项比对原版包的 Depends、Recommends、安装路径及权限均相同。归档与核验记录位于 `out/power-manager-touch/`。
 
 PC 上的私有 ARM64 Debian 会话运行真实的 `xfce4-panel`、`xfce4-power-manager` 和 Xvfb。测试从实际嵌入面板的图标开始，用 X11 输入事件点击或按键。库存版在 1024×768 上单击图标没有菜单，右击图标后可从菜单打开电源设置。在 2560×1600、GTK 200% 下，板级包的图标为 44×44 物理像素。以下三种操作都弹出同一个电源管理器进程所属的 352×218 菜单，并能选中最后一行打开电源设置窗口。
 
@@ -32,4 +32,4 @@ PC 上的私有 ARM64 Debian 会话运行真实的 `xfce4-panel`、`xfce4-power-
 - 右击图标。
 - 图标获得焦点后按回车。
 
-用户选择隐藏图标后，重新启动电源管理器仍保持隐藏，再开启可重新显示。原版与候选的会话记录分别为 `out/upower/arm64-tray-settings.log` 和 `out/upower/arm64-tray-candidate.log`。测试覆盖了 X11 的主激活和键盘路径，实机面板上的手指点按、滚动调节实际亮度和整机挂起仍需各自的硬件验证。
+用户选择隐藏图标后，重新启动电源管理器仍保持隐藏，再开启可重新显示。原版与候选的会话记录分别为 `out/upower/arm64-tray-settings.log` 和 `out/upower/arm64-tray-candidate-final.log`。测试覆盖了 X11 的主激活和键盘路径，实机面板上的手指点按、滚动调节实际亮度和整机挂起仍需各自的硬件验证。
