@@ -1,0 +1,39 @@
+--- a/drivers/media/i2c/asphalt-sensors.c
++++ b/drivers/media/i2c/asphalt-sensors.c
+@@ -8,6 +8,7 @@
+ #include <linux/i2c.h>
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
++#include <linux/property.h>
+ #include <linux/regulator/consumer.h>
+ #include <media/v4l2-cci.h>
+ #include <media/v4l2-ctrls.h>
+@@ -102,7 +103,7 @@
+ 	const struct asphalt_info *info;
+ 	struct clk *clock;
+ 	struct gpio_desc *reset;
+-	struct regulator_bulk_data supplies[4];
++	struct regulator_bulk_data supplies[5];
+ 	unsigned int num_supplies;
+ 	struct v4l2_subdev sd;
+ 	struct media_pad pad;
+@@ -409,6 +410,9 @@
+ 	s->supplies[2].supply = "avdd";
+ 	s->supplies[3].supply = "dvdd";
+ 	s->num_supplies = p->model == SC202CS ? 3 : 4;
++	/* Slot 0 stock power table also enables WL2864C LDO5. */
++	if (p->model == HI1339 && device_property_present(dev, "aux-supply"))
++		s->supplies[s->num_supplies++].supply = "aux";
+ 	ret = devm_regulator_bulk_get(dev, s->num_supplies, s->supplies);
+ 	if (ret)
+ 		return dev_err_probe(dev, ret, "supplies\n");
+--- a/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dts
++++ b/arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dts
+@@ -1037,6 +1037,7 @@
+   vdd-supply = <&pm8350c_l4>;
+   avdd-supply = <&camera_ldo4>;
+   dvdd-supply = <&camera_ldo1>;
++  aux-supply = <&camera_ldo5>;
+   orientation = <1>;
+   rotation = <270>;
+   port {
