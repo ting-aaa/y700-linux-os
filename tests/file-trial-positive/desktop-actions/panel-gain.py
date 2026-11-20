@@ -186,5 +186,5 @@ if __name__ == "__main__":
     def timed_out(signum, frame):
         raise TimeoutError("Numerical volume test exceeded its wall-clock budget")
     signal.signal(signal.SIGALRM, timed_out)
-    signal.alarm(175)
+    signal.alarm(175 + panel.ALLOCATION_WAIT)
     main()

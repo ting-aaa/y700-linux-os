@@ -9,6 +9,7 @@ import time
 
 os.environ["LC_ALL"] = "C"
 DEFAULT = "@DEFAULT_AUDIO_SINK@"
+ALLOCATION_WAIT = 100
 
 
 def run(*args):
@@ -51,24 +52,18 @@ def bounds(xid):
     return tuple(int(re.search(rf"{field}:\s+(-?\d+)", info)[1]) for field in fields)
 
 
-def mapped_speaker(pid, socket_id):
-    xid = hex(socket_id)
+def speaker_geometry(pid, xid):
     socket = bounds(xid)
-    if not socket:
-        raise RuntimeError(f"Speaker socket {xid} for pid={pid} is not viewable")
-    x, y, w, h = socket
-    cx, cy = x + w // 2, y + h // 2
-    if min(w, h) < 12 or not (0 <= cx < 1024 and 0 <= cy < 768):
-        raise RuntimeError(f"Speaker socket {xid} has unusable bounds={socket}")
-
     tree = run("xwininfo", "-id", xid, "-tree")
     plug = re.search(r'^\s*(0x[\da-f]+) .*\("[^"]*" "Wrapper-2\.0"\)', tree, re.I | re.M)
-    if not plug:
-        raise RuntimeError(f"Speaker socket {xid} bounds={socket} contains no Xfce wrapper")
-    owner = run("xprop", "-id", plug[1], "_NET_WM_PID")
-    plug_pid = re.search(r"_NET_WM_PID\(CARDINAL\) = (\d+)", owner)
-    if plug_pid and int(plug_pid[1]) != pid:
-        raise RuntimeError(f"Socket {xid} embeds pid={plug_pid[1]}, expected pid={pid}")
+    plug_id = plug[1] if plug else None
+    plug_rect = None
+    if plug_id:
+        owner = run("xprop", "-id", plug_id, "_NET_WM_PID")
+        plug_pid = re.search(r"_NET_WM_PID\(CARDINAL\) = (\d+)", owner)
+        if plug_pid and int(plug_pid[1]) != pid:
+            raise RuntimeError(f"Socket {xid} bounds={socket} embeds pid={plug_pid[1]}, expected pid={pid}")
+        plug_rect = bounds(plug_id)
 
     for _ in range(8):
         parent = re.search(r"Parent window id: (0x[\da-f]+)", tree, re.I)
@@ -77,15 +72,45 @@ def mapped_speaker(pid, socket_id):
         panel_id = parent[1]
         if '"xfce4-panel"' in run("xprop", "-id", panel_id, "WM_CLASS").lower():
             bar = bounds(panel_id)
-            if bar:
-                bx, by, bw, bh = bar
-                if bw > bh and by <= cy < by + bh and bx <= cx < bx + bw and cy < 768 // 2:
-                    print(f"PANEL_X11_SOCKET pid={pid} socket={xid} bounds={socket} "
-                          f"plug={plug[1]} panel={panel_id} panel_bounds={bar}", flush=True)
-                    return pid, socket
-            raise RuntimeError(f"Socket {xid} bounds={socket} is outside the top Xfce bar {panel_id} bounds={bar}")
+            if not bar or bar[2] <= bar[3] or not 0 <= bar[1] + bar[3] // 2 < 768 // 2:
+                raise RuntimeError(f"Socket {xid} bounds={socket} has unusable top panel {panel_id} bounds={bar}")
+            return socket, plug_id, plug_rect, panel_id, bar
         tree = run("xwininfo", "-id", panel_id, "-tree")
     raise RuntimeError(f"Socket {xid} bounds={socket} has no Xfce panel ancestor")
+
+
+def mapped_speaker(pid, socket_id):
+    xid = hex(socket_id)
+    started = time.monotonic()
+    geometry = None
+    while True:
+        try:
+            socket, plug, plug_rect, panel_id, bar = speaker_geometry(pid, xid)
+        except (subprocess.SubprocessError, RuntimeError) as exc:
+            raise RuntimeError(f"Cannot validate speaker pid={pid} socket={xid} after "
+                               f"{time.monotonic() - started:.1f}s: {exc}; last={geometry}") from exc
+        elapsed = time.monotonic() - started
+        first = geometry is None
+        geometry = (f"pid={pid} socket={xid} bounds={socket} plug={plug} plug_bounds={plug_rect} "
+                    f"panel={panel_id} panel_bounds={bar} elapsed={elapsed:.1f}s")
+        if first:
+            print(f"PANEL_ALLOCATION_FIRST {geometry}", flush=True)
+        if socket and plug_rect:
+            # XEmbed clips the wrapper to its socket. Only accept a real
+            # patch of the wrapper that the top panel can receive touches on.
+            rectangles = (socket, plug_rect, bar, (0, 0, 1024, 768))
+            left = max(r[0] for r in rectangles)
+            top = max(r[1] for r in rectangles)
+            width = min(r[0] + r[2] for r in rectangles) - left
+            height = min(r[1] + r[3] for r in rectangles) - top
+            if min(width, height) >= 12:
+                target = left, top, width, height
+                print(f"PANEL_X11_SOCKET {geometry} touch_bounds={target}", flush=True)
+                return pid, target
+        if elapsed >= ALLOCATION_WAIT:
+            print(f"PANEL_ALLOCATION_TIMEOUT {geometry}", flush=True)
+            raise RuntimeError(f"No touchable speaker allocation after {ALLOCATION_WAIT}s: {geometry}")
+        time.sleep(min(2.0, ALLOCATION_WAIT - elapsed))
 
 
 def speaker_button():
@@ -230,5 +255,5 @@ if __name__ == "__main__":
     def timed_out(signum, frame):
         raise TimeoutError("Desktop volume test exceeded its wall-clock budget")
     signal.signal(signal.SIGALRM, timed_out)
-    signal.alarm(145)
+    signal.alarm(145 + ALLOCATION_WAIT)
     main()
