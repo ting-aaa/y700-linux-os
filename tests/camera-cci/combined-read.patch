@@ -1,0 +1,155 @@
+Subject: [PATCH] i2c: qcom-cci: keep Asphalt CCI0 register reads on one queue
+
+The existing driver sends the register prefix and read as separate
+hardware executions. A normal WRITE ends with STOP, even when the caller
+submits a combined transfer. Match the SM8450 camera driver's NO_STOP and
+READ sequence for fixed-length register reads on the main camera bus.
+
+Keep other controllers and transfer shapes on their existing path. Wait
+for the queue word count to reach zero after RD_DONE before releasing the
+adapter lock and PM reference. Preserve the read FIFO limits and error
+handling.
+---
+
+diff --git a/drivers/i2c/busses/i2c-qcom-cci.c b/drivers/i2c/busses/i2c-qcom-cci.c
+--- a/drivers/i2c/busses/i2c-qcom-cci.c
++++ b/drivers/i2c/busses/i2c-qcom-cci.c
+@@ -6,6 +6,7 @@
+ #include <linux/completion.h>
+ #include <linux/i2c.h>
+ #include <linux/io.h>
++#include <linux/iopoll.h>
+ #include <linux/interrupt.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -72,9 +73,14 @@
+ #define NUM_QUEUES	2
+ 
+ #define CCI_I2C_SET_PARAM	1
++#define CCI_I2C_LOCK		6
++#define CCI_I2C_UNLOCK		7
+ #define CCI_I2C_REPORT		8
+ #define CCI_I2C_WRITE		9
+ #define CCI_I2C_READ		10
++#define CCI_I2C_WRITE_NO_STOP	11
++
++#define CCI_COMBINED_READ_WORDS	5
+ 
+ #define CCI_I2C_REPORT_IRQ_EN	BIT(8)
+ 
+@@ -127,6 +133,7 @@
+ 	const struct cci_data *data;
+ 	struct clk_bulk_data *clocks;
+ 	int nclocks;
++	bool combined_read;
+ 	struct cci_master master[NUM_MASTERS];
+ };
+ 
+@@ -327,8 +334,8 @@
+ 	return cci_run_queue(cci, master, queue);
+ }
+ 
+-static int cci_i2c_read(struct cci *cci, u16 master,
+-			u16 addr, u8 *buf, u16 len)
++static int cci_i2c_read(struct cci *cci, u16 master, u16 addr, u8 *buf,
++			u16 len, const struct i2c_msg *prefix)
+ {
+ 	u32 val, words_read, words_exp;
+ 	u8 queue = QUEUE_1;
+@@ -346,13 +353,36 @@
+ 	val = CCI_I2C_SET_PARAM | (addr & 0x7f) << 4;
+ 	writel(val, cci->base + CCI_I2C_Mm_Qn_LOAD_DATA(master, queue));
+ 
++	if (prefix) {
++		writel(CCI_I2C_LOCK,
++		       cci->base + CCI_I2C_Mm_Qn_LOAD_DATA(master, queue));
++
++		val = CCI_I2C_WRITE_NO_STOP | prefix->len << 4;
++		for (i = 0; i < prefix->len; i++)
++			val |= (u32)prefix->buf[i] << (8 * (i + 1));
++		writel(val, cci->base + CCI_I2C_Mm_Qn_LOAD_DATA(master, queue));
++	}
++
+ 	val = CCI_I2C_READ | len << 4;
+ 	writel(val, cci->base + CCI_I2C_Mm_Qn_LOAD_DATA(master, queue));
++	if (prefix)
++		writel(CCI_I2C_UNLOCK,
++		       cci->base + CCI_I2C_Mm_Qn_LOAD_DATA(master, queue));
+ 
+ 	ret = cci_run_queue(cci, master, queue);
+ 	if (ret < 0)
+ 		return ret;
+ 
++	if (prefix) {
++		/* RD_DONE may precede the trailing UNLOCK. */
++		ret = readl_poll_timeout(cci->base + CCI_I2C_Mm_Qn_CUR_WORD_CNT(master, queue),
++					 val, !val, 10, jiffies_to_usecs(CCI_TIMEOUT));
++		if (ret) {
++			cci_reset(cci);
++			return ret;
++		}
++	}
++
+ 	words_read = readl(cci->base + CCI_I2C_Mm_READ_BUF_LEVEL(master));
+ 	words_exp = len / 4 + 1;
+ 	if (words_read != words_exp) {
+@@ -418,6 +448,20 @@
+ 	return cci_run_queue(cci, master, queue);
+ }
+ 
++static bool cci_is_combined_read(const struct cci_master *master,
++				 const struct i2c_msg *msgs, int num)
++{
++	const struct cci *cci = master->cci;
++
++	return cci->combined_read && !master->master && num == 2 &&
++	       !(msgs[0].flags & ~I2C_M_DMA_SAFE) &&
++	       (msgs[1].flags & ~I2C_M_DMA_SAFE) == I2C_M_RD &&
++	       msgs[0].addr <= 0x7f && msgs[0].addr == msgs[1].addr &&
++	       msgs[0].len && msgs[0].len <= 2 && msgs[1].len &&
++	       msgs[1].len <= cci->data->quirks.max_read_len &&
++	       cci->data->queue_size[QUEUE_1] >= CCI_COMBINED_READ_WORDS;
++}
++
+ static int cci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+ {
+ 	struct cci_master *cci_master = i2c_get_adapdata(adap);
+@@ -428,11 +472,17 @@
+ 	if (ret < 0)
+ 		goto err;
+ 
++	if (cci_is_combined_read(cci_master, msgs, num)) {
++		ret = cci_i2c_read(cci, cci_master->master, msgs[1].addr,
++				   msgs[1].buf, msgs[1].len, &msgs[0]);
++		goto done;
++	}
++
+ 	for (i = 0; i < num; i++) {
+ 		if (msgs[i].flags & I2C_M_RD)
+ 			ret = cci_i2c_read(cci, cci_master->master,
+ 					   msgs[i].addr, msgs[i].buf,
+-					   msgs[i].len);
++					   msgs[i].len, NULL);
+ 		else
+ 			ret = cci_i2c_write(cci, cci_master->master,
+ 					    msgs[i].addr, msgs[i].buf,
+@@ -442,6 +492,7 @@
+ 			break;
+ 	}
+ 
++done:
+ 	if (!ret)
+ 		ret = num;
+ 
+@@ -568,6 +619,11 @@
+ 	if (IS_ERR(cci->base))
+ 		return PTR_ERR(cci->base);
+ 
++	/* Limit the first diagnostic to the main camera's CCI instance. */
++	cci->combined_read = of_machine_is_compatible("lenovo,asphalt") &&
++			     of_device_is_compatible(dev->of_node, "qcom,sm8450-cci") &&
++			     r->start == 0x0ac15000;
++
+ 	/* Clocks */
+ 
+ 	ret = devm_clk_bulk_get_all(dev, &cci->clocks);
