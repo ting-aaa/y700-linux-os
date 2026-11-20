@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "deb.debian.org_debian_dists_trixie_InRelease",
+      "sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "date": "Sat, 12 Sep 2026 07:55:41 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "f97011263173eaccb1a215a28a6ec7ba1f6e5cebd8bb68e8fa0475b1d4021161",
+          "size": 56162922
+        }
+      ]
+    }
+  ],
+  "installed_count": 2,
+  "authenticated_count": 2,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "libxss1",
+      "version": "1:1.2.3-1+b3",
+      "architecture": "arm64",
+      "size": 17088,
+      "sha256": "ffbdfe7ee0644984dfe7577a22edee74f1e3b2dd76721417c8e45aed9388a220",
+      "uri": "https://deb.debian.org/debian/pool/main/libx/libxss/libxss1_1.2.3-1+b3_arm64.deb",
+      "repository_path": "pool/main/libx/libxss/libxss1_1.2.3-1+b3_arm64.deb"
+    },
+    {
+      "package": "xfce4-screensaver",
+      "version": "4.18.4-1",
+      "architecture": "arm64",
+      "size": 248912,
+      "sha256": "0936b08c4cbf170ea4728545b3193f5aeaf50c430b2619780286e13ddc47df24",
+      "uri": "https://deb.debian.org/debian/pool/main/x/xfce4-screensaver/xfce4-screensaver_4.18.4-1_arm64.deb",
+      "repository_path": "pool/main/x/xfce4-screensaver/xfce4-screensaver_4.18.4-1_arm64.deb"
+    }
+  ]
+}

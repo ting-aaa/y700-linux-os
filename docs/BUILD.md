@@ -24,6 +24,24 @@ The captured memory facts under the reference tree contain only memory/reservati
 
 Upstream source references and relevant artifact hashes are recorded in [PROVENANCE.md](PROVENANCE.md). Absence of an input is a real migration task, not permission to remove a validation check.
 
+## Touchscreen session lock
+
+The optional `touch-lock` layer adds Debian's Xfce screen locker, its X11 screensaver library and the Y700 defaults for the embedded Onboard keyboard. The existing local password is checked by Debian's PAM configuration. The original dev12.5 archive predates this layer. [Debian package](https://packages.debian.org/trixie/xfce4-screensaver) · [Xfce keyboard settings](https://github.com/xfce-mirror/xfce4-screensaver/blob/xfce4-screensaver-4.18.4/src/gs-prefs.h#L113-L132)
+
+On a Linux build host, choose an empty `lock_archives` directory. The download and configuration-package build can run as an ordinary user.
+
+```sh
+uv run --no-project --python 3.13 python scripts/fetch-debian-inputs.py \
+  --lock config/touch-lock-debian-auth.lock.json --cache "$lock_archives"
+bash scripts/build-touch-lock.sh "$lock_archives"
+uv run --no-project --python 3.13 python scripts/repair-inputs.py \
+  verify "$lock_archives" config/touch-lock.lock.json
+sudo env UV_BIN="$(command -v uv)" bash scripts/add-board-layer.sh \
+  touch-lock "$disposable_arm64_root" "$lock_archives"
+```
+
+For a disposable build root that still carries the sealed dev12.5 camera application, add `--qcam-lock tests/onboard-image/camera-qcam.lock.json` before `touch-lock` in the last command. The installer verifies that exact camera receipt and the full starting package inventory before adding the lock packages.
+
 ## First implementation milestone
 
 1. Inventory every recipe input/output and privilege boundary. Split host build, image customization and device deployment.

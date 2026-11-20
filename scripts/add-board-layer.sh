@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Install one optional, locked archive set in an offline Debian build root.
 set -euo pipefail
+qcam_args=()
+if [[ ${1:-} == --qcam-lock && $# -ge 2 ]]; then
+    qcam_args=(--qcam-lock "$(realpath -e -- "$2")")
+    shift 2
+fi
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -35,6 +40,10 @@ case $layer in
         ;;
 esac
 py=("${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python)
+if (( ${#qcam_args[@]} )); then
+    [[ $layer != camera-qcam ]] || { echo 'An existing qcam lock applies only when retaining the camera app.' >&2; exit 2; }
+    "${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${qcam_args[@]}"
+fi
 stage=$(mktemp -d "$root/tmp/y700-board-layer.XXXXXXXX")
 policy=$root/usr/sbin/policy-rc.d
 cleanup() {
@@ -96,6 +105,14 @@ case $layer in
         selection=$(chroot "$root" /usr/sbin/lightdm --show-config 2>&1)
         grep -Fq 'greeter-session=arctica-greeter' <<< "$selection"
         ;;
+    touch-lock)
+        test -x "$root/usr/bin/xfce4-screensaver"
+        test -x "$root/usr/bin/onboard"
+        test -s "$root/etc/pam.d/xfce4-screensaver"
+        test -s "$root/etc/xdg/autostart/xfce4-screensaver.desktop"
+        cmp "$repo/packaging/touch-lock/xfce4-screensaver.xml" \
+            "$root/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml"
+        ;;
     ssc)
         test -x "$root/usr/libexec/y700-ssc/sdsprpcd"
         test -x "$root/usr/libexec/y700-ssc/import-calibration"
@@ -134,4 +151,4 @@ install -m644 "$lock" "$stage/$layer.lock.json"
 mv -T -- "$stage/$layer.lock.json" "$record/$layer.lock.json"
 chroot "$root" dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > "$stage/packages.tsv"
 mv -T -- "$stage/packages.tsv" "$record/packages.tsv"
-"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root"
+"${py[@]}" "$repo/scripts/verify-image-packages.py" "$root" "${qcam_args[@]}"

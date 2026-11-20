@@ -1,0 +1,9 @@
+Package: y700-touch-lock
+Version: 0.1.0
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
+Section: x11
+Priority: optional
+Depends: xfce4-screensaver, onboard
+Description: Touchscreen unlock for the Y700 Xfce session
+ Provides an embedded Onboard keyboard in the native Xfce unlock dialog.
