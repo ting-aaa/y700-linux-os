@@ -18,4 +18,6 @@ bash tests/qcam-photo/run-virtual-qemu.sh \
   "$arm64_busybox" "$arm64_uv"
 ```
 
-The runner boots an offline guest with the root and backing chain read-only. The packaged app ELF opens a synthetic colour-bar camera using the test-only library. The verifier locates the actual Qt shutter at 200%, sends one X11 pointer click, then independently decodes exactly one 800×600 JPEG and checks all eight bars. It deletes the test photo and confirms preview continues. The run uses virtual hardware and no device passthrough.
+The runner boots an offline ARM64 guest with its root disk read-only. The test-only library registers three synthetic cameras under the board's libcamera IDs. Their sources are moving colour bars at 800×600, diagonal stripes at 640×480 and a generated red/green image at 320×240. A fourth synthetic external camera shares the main camera's address suffix to check that its name stays unchanged.
+
+At 200%, the verifier uses AT-SPI to locate widgets and sends X11 pointer clicks to the toolbar, chooser, list row, confirmation and shutter. One process takes photos in main, front, macro and main order. Each save must add exactly one complete JPEG. The verifier checks its dimensions and pixel pattern, checks that preview continues and removes all four files. The `y7004` checks also require the chooser to remember the active lens and its controls to measure at least 96 device pixels high. Set `QCAM_VIRTUAL_LANGUAGE=zh` to exercise the Chinese UI. There is no hardware passthrough.

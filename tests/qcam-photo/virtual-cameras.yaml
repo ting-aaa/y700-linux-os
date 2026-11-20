@@ -1,0 +1,37 @@
+%YAML 1.1
+---
+"/base/soc@0/cci@ac15000/i2c-bus@0/camera@20":
+  supported_formats:
+  - width: 800
+    height: 600
+    frame_rates: [30, 60]
+  - width: 640
+    height: 480
+    frame_rates: [30, 60]
+  test_pattern: "bars"
+  location: "CameraLocationBack"
+  model: "Synthetic colour bars"
+"/base/soc@0/cci@ac15000/i2c-bus@1/camera@10":
+  supported_formats:
+  - width: 640
+    height: 480
+    frame_rates: [30, 60]
+  test_pattern: "lines"
+  location: "CameraLocationFront"
+  model: "Synthetic diagonal lines"
+"/base/soc@0/cci@ac16000/i2c-bus@0/camera@36":
+  supported_formats:
+  - width: 320
+    height: 240
+    frame_rates: [30, 60]
+  frames:
+    path: "/run/qcam-qa/macro-source.jpg"
+  location: "CameraLocationBack"
+  model: "Synthetic red and green patches"
+"/fixture/unknown/camera@20":
+  supported_formats:
+  - width: 160
+    height: 120
+  test_pattern: "bars"
+  location: "CameraLocationExternal"
+  model: "Unknown external camera"

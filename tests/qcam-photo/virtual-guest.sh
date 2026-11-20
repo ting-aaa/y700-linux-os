@@ -25,21 +25,7 @@ if grep -F 'not found' /run/qcam-libraries; then exit 1; fi
 
 config=/usr/share/libcamera/pipeline/virtual
 mkdir -p "$config"
-cat > "$config/virtual.yaml" <<'YAML'
-%YAML 1.1
----
-"Y700Virtual":
-  supported_formats:
-  - width: 800
-    height: 600
-    frame_rates: [30, 60]
-  - width: 640
-    height: 480
-    frame_rates: [30, 60]
-  test_pattern: "bars"
-  location: "CameraLocationBack"
-  model: "Y700 QA colour bars"
-YAML
+install -m644 ./virtual-cameras.yaml "$config/virtual.yaml"
 # The disposable test has no physical cameras. Grant its actor access to
 # the kernel's synthetic buffer allocator without changing any live policy.
 test -c /dev/udmabuf

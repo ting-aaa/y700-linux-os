@@ -19,7 +19,7 @@ payload=$work/init/test
 install -m755 "$6" "$work/init/bin/busybox"
 install -m755 "$7" "$payload/uv"
 install -m644 "$app" "$payload/qcam.deb"
-install -m644 "$fixture/"{virtual-guest.sh,virtual-session.sh,virtual-shutter.py} "$payload/"
+install -m644 "$fixture/"{virtual-guest.sh,virtual-session.sh,virtual-shutter.py,virtual-cameras.yaml} "$payload/"
 install -m644 "$runtime/"*.deb "$payload/runtime/"
 install -m644 "$x11/"{libxdo3,xdotool,xvfb}_*.deb "$payload/x11/"
 printf 'QCAM_VIRTUAL_ROOT '; sha256sum "$disk"
@@ -59,15 +59,20 @@ args=()
 if [[ -n ${QEMU_FIRMWARE_DIR:-} ]]; then args+=(-L "$QEMU_FIRMWARE_DIR"); fi
 preflight=
 if [[ ${QCAM_VIRTUAL_PREFLIGHT:-0} == 1 ]]; then preflight=y700.qcam_virtual_preflight=1; fi
-timeout -k 5 180 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
+case ${QCAM_VIRTUAL_LANGUAGE:-en} in
+    en) language= ;;
+    zh) language=y700.qcam_virtual_chinese=1 ;;
+    *) echo 'QCAM_VIRTUAL_LANGUAGE must be en or zh' >&2; exit 2 ;;
+esac
+timeout -k 5 360 "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     -machine virt,gic-version=3 -cpu max -smp 2 -m 1152 -nodefaults -no-user-config \
     -monitor none -display none -serial stdio -nic none -no-reboot -kernel "$kernel" -initrd "$work/initrd" \
-    -append "console=ttyAMA0 quiet loglevel=3 panic=4 y700.qcam_virtual_fixture=1 $preflight" \
+    -append "console=ttyAMA0 quiet loglevel=3 panic=4 y700.qcam_virtual_fixture=1 $preflight $language" \
     -drive "if=none,id=root,format=qcow2,readonly=on,file=$disk" -device virtio-blk-device,drive=root \
     </dev/null 2>&1 | tr -d '\r' | tee "$work/guest.log"
 grep -Fxq 'QCAM_VIRTUAL_GUEST_EXIT=0' "$work/guest.log"
 if [[ -n $preflight ]]; then
     grep -Fxq 'QCAM_VIRTUAL_PREFLIGHT_PASS' "$work/guest.log"
 else
-    grep -Fxq 'Y700_QCAM_VIRTUAL_SHUTTER_PASS clicks=1 published=1 preview_continued=yes' "$work/guest.log"
+    grep -Fxq 'Y700_QCAM_VIRTUAL_LENS_PASS switches=3 shutters=4 published=4 same_process=yes preview_continued=yes' "$work/guest.log"
 fi
