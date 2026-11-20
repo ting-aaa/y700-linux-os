@@ -24,6 +24,16 @@ The captured memory facts under the reference tree contain only memory/reservati
 
 Upstream source references and relevant artifact hashes are recorded in [PROVENANCE.md](PROVENANCE.md). Absence of an input is a real migration task, not permission to remove a validation check.
 
+## Battery indicator
+
+The `power-desktop` board layer adds UPower and the Xfce notification-area battery indicator. Seven runtime archives come directly from the authenticated Debian package index. The power-manager binary is rebuilt from the corresponding Debian source with primary activation enabled. The board configuration supplies an Xfconf fallback for showing the icon. Debian's power-button setting and explicit user preferences retain precedence. [Power manager build](POWER-MANAGER-TOUCH.md) · [Debian input hashes](../config/power-desktop-debian-auth.lock.json) · [Complete layer](../config/power-desktop.lock.json)
+
+Build the board configuration with `bash scripts/build-power-desktop.sh "$archives"`. In the same directory place the seven selected Debian archives and the locally built power-manager archive at the versions in the layer lock. On a Linux ARM64 or binfmt-enabled build host, run the following to make a new root from the generic dev12.6 image.
+
+```bash
+sudo env UV_BIN="$(command -v uv)" bash scripts/build-power-root.sh "$dev126_ext4" "$archives" "$new_dir"
+```
+
 ## Touchscreen session lock
 
 The optional `touch-lock` layer adds Debian's Xfce screen locker, its X11 screensaver library and the Y700 defaults for the embedded Onboard keyboard. The existing local password is checked by Debian's PAM configuration. The original dev12.5 archive predates this layer. [Debian package](https://packages.debian.org/trixie/xfce4-screensaver) · [Xfce keyboard settings](https://github.com/xfce-mirror/xfce4-screensaver/blob/xfce4-screensaver-4.18.4/src/gs-prefs.h#L113-L132)

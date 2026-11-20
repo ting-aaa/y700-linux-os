@@ -1,0 +1,9 @@
+Package: y700-power-desktop
+Version: 0.1.0
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
+Section: x11
+Priority: optional
+Depends: xfce4-power-manager, upower
+Description: Native Xfce battery indicator for the Lenovo Y700 tablet
+ Shows the battery in the Xfce notification area using Debian UPower.

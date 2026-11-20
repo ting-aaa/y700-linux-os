@@ -18,6 +18,10 @@ case $version in
         package_count=1115
         package_sha=a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98
         ;;
+    dev12.7)
+        package_count=1124
+        package_sha=bbb696086ce1bb4a425dbf63876f12548e7e6a6048ed89415e64cb6a793eba6a
+        ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
 epoch=${SOURCE_DATE_EPOCH:-1795132800}
@@ -68,7 +72,7 @@ cd "$base"
 zstd -q -T2 -3 "$boot" -o asphalt-prc-u-boot.img.zst
 zstd -q -T2 -3 "$esp" -o linux-boot.fat.zst
 zstd -q -T2 -3 "$root" -o root.ext4.zst
-if [[ $version == dev12.6 ]]; then
+if [[ $version != dev12.5 ]]; then
     # zstd inherits input permissions, which can differ between verified copies.
     chmod 600 -- *.zst
 fi

@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "scope": "xfce-native-battery-indicator",
+  "sources": {
+    "configuration": "scripts/build-power-desktop.sh",
+    "debian": "config/power-desktop-debian-auth.lock.json",
+    "xfce4-power-manager": "scripts/build-power-manager-touch.sh"
+  },
+  "packages": [
+    {
+      "package": "libimobiledevice-1.0-6",
+      "version": "1.3.0+git20250228-2",
+      "architecture": "arm64",
+      "size": 129864,
+      "sha256": "c3e7ff3cf2a5558fcde5bbedb4eb72082169b8c7e7eabcf377fe151a7459e135"
+    },
+    {
+      "package": "libimobiledevice-glue-1.0-0",
+      "version": "1.3.1-1",
+      "architecture": "arm64",
+      "size": 29836,
+      "sha256": "08b338fc97268e7e3b18e43640340546c14b49c2291b373c0a701f5d117d858d"
+    },
+    {
+      "package": "libplist-2.0-4",
+      "version": "2.6.0-2+b1",
+      "architecture": "arm64",
+      "size": 46824,
+      "sha256": "45d585abe7d0ba46abda543513d18869a14d21e4abba266b851dd71f2f69882b"
+    },
+    {
+      "package": "libupower-glib3",
+      "version": "1.90.9-1",
+      "architecture": "arm64",
+      "size": 37216,
+      "sha256": "079b9323da3f7d96a2813c468a4d36ceb454c208b6f8013ac931ff0f17c3b987"
+    },
+    {
+      "package": "libusbmuxd-2.0-7",
+      "version": "2.1.0-1+b1",
+      "architecture": "arm64",
+      "size": 16436,
+      "sha256": "63d890b56970dfb60382eedc888aca0d3e84c0699635cd2c99b95f06a5662287"
+    },
+    {
+      "package": "upower",
+      "version": "1.90.9-1",
+      "architecture": "arm64",
+      "size": 92088,
+      "sha256": "b1ab1fa427f75bbfd2dc60fdfe59a2a501fedf7ccbe726d105d969c5de22044c"
+    },
+    {
+      "package": "xfce4-power-manager",
+      "version": "4.20.0-1+y7001",
+      "architecture": "arm64",
+      "size": 129112,
+      "sha256": "b4fe51dcac6b90de809f12814e8495952b286e3526e77cc758111d5d2dae5df4"
+    },
+    {
+      "package": "xfce4-power-manager-data",
+      "version": "4.20.0-1",
+      "architecture": "all",
+      "size": 408808,
+      "sha256": "2738edc575fdf76e6c2498ae70e261e1f9ebe453f4d9499eddbf2eeff5ed97a8"
+    },
+    {
+      "package": "y700-power-desktop",
+      "version": "0.1.0",
+      "architecture": "all",
+      "size": 2160,
+      "sha256": "2ed97c9be05985f12147f2cd23de0250e2d6520b2d4dc2dc55350e6ae487d204"
+    }
+  ]
+}

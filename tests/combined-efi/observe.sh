@@ -50,6 +50,14 @@ if [[ $1 == setup ]]; then
         test ! -e /boot/lock-archives
         echo '5079a43e218503018b28bec9e22a0960824204623db866e17b98dfab48718a99  /usr/lib/y700/rotation_session.py' | sha256sum --strict -c -
     fi
+    if grep -qw y700.combined_power=1 /proc/cmdline; then
+        count=1124
+        expected=bbb696086ce1bb4a425dbf63876f12548e7e6a6048ed89415e64cb6a793eba6a
+        platform='0.1.0~dev12.6'
+        camera='0.7.2-1~bpo13+1.y7004'
+        [[ $(dpkg-query -W -f='${Version}' xfce4-power-manager) == '4.20.0-1+y7001' ]]
+        [[ -z $(dpkg -V xfce4-power-manager xfce4-power-manager-data upower y700-power-desktop) ]]
+    fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)
     [[ ${digest%% *} == "$expected" ]]
@@ -154,6 +162,15 @@ ids=$(asuser xfconf-query -c xfce4-panel -p /panels/panel-1/plugin-ids | awk '/^
 wrapper=$(pgrep -o -u "$uid" -f '^/usr/lib/[^ ]+/xfce4/panel/wrapper-2\.0 .*/libpulseaudio-plugin\.so 19( |$)')
 grep -Fq '/libpulseaudio-plugin.so' "/proc/$wrapper/maps"
 echo 'COMBINED_AUDIO_PANEL ordinary=1 marker=1 top_panel=1 mapped_wrapper=1'
+if grep -qw y700.combined_power=1 /proc/cmdline; then
+    asuser timeout 45 gdbus wait --session org.xfce.PowerManager
+    manager=$(asuser gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.GetConnectionUnixProcessID org.xfce.PowerManager | sed -nE 's/^\(uint32 ([0-9]+),\)$/\1/p')
+    [[ $manager =~ ^[0-9]+$ && $(stat -c %u "/proc/$manager") == "$uid" ]]
+    [[ $(readlink -f "/proc/$manager/exe") == /usr/bin/xfce4-power-manager ]]
+    systemctl is-active --quiet upower.service
+    echo 'COMBINED_POWER packaged=1 ordinary_manager=1 system_upower=active'
+fi
 if [[ -f /boot/lock-mode ]]; then
     if [[ $(cat /boot/lock-mode) == installed ]]; then
         saver_started() {

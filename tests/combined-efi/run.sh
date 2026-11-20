@@ -13,6 +13,8 @@ out=$(realpath -m "$7")
 [[ $2 =~ ^[0-9a-f]{64}$ && $4 =~ ^[0-9a-f]{64}$ ]]
 regdb=${VERIFY_REGDB:-1}
 [[ $regdb == 0 || $regdb == 1 ]]
+power=${POWER_DESKTOP:-0}
+[[ $power == 0 || $power == 1 ]]
 cold=${COLD_BOOT:-0}
 [[ $cold == 0 || $cold == 1 ]]
 screen_lock=${SCREEN_LOCK:-off}
@@ -71,7 +73,7 @@ UNIT
 mcopy -i test-esp.fat ::/loader/entries/debian.conf entry
 grep -Eq '^options .* drm_kms_helper\.fbdev_emulation=0( |$)' entry
 unit=$(base64 -w0 observer.service)
-sed -i "/^options /s|$| console=ttyAMA0 y700.combined_efi=1 y700.combined_regdb=$regdb$regdom systemd.wants=combined-observer.service systemd.set_credential_binary=systemd.extra-unit.combined-observer.service:$unit|" entry
+sed -i "/^options /s|$| console=ttyAMA0 y700.combined_efi=1 y700.combined_regdb=$regdb$regdom y700.combined_power=$power systemd.wants=combined-observer.service systemd.set_credential_binary=systemd.extra-unit.combined-observer.service:$unit|" entry
 mcopy -o -i test-esp.fat entry ::/loader/entries/debian.conf
 mcopy -o -i test-esp.fat "$dtb" ::/EFI/debian/board.dtb
 mcopy -i test-esp.fat "$here/observe.sh" ::/combined-observe.sh
@@ -161,6 +163,11 @@ fi
 if (( regdb )); then
     for report in "$out"/*/report.log; do
         grep -Fxq 'COMBINED_REGDB cfg80211=1 load_errors=0 runtime_pair=upstream global_country=CN radios=0' "$report"
+    done
+fi
+if (( power )); then
+    for report in "$out"/*/report.log; do
+        grep -Fxq 'COMBINED_POWER packaged=1 ordinary_manager=1 system_upower=active' "$report"
     done
 fi
 sha256sum --strict -c "$manifest" | tee "$out/after.log"

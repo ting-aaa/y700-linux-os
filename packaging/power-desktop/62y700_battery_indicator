@@ -1,0 +1,14 @@
+# Add a fallback Xfconf default on the tablet, including with an external display.
+case ${BASESTARTUP:-} in
+    startxfce4|xfce4-session)
+        if grep -zFxq 'lenovo,asphalt' /proc/device-tree/compatible 2>/dev/null; then
+            case :${XDG_CONFIG_DIRS:-/etc/xdg}: in
+                *:/usr/share/y700/power-xdg:*) ;;
+                *)
+                    XDG_CONFIG_DIRS=${XDG_CONFIG_DIRS:-/etc/xdg}:/usr/share/y700/power-xdg
+                    export XDG_CONFIG_DIRS
+                    ;;
+            esac
+        fi
+        ;;
+esac

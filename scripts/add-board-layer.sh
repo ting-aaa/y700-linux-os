@@ -12,12 +12,12 @@ if [[ ${1:-} == --qcam-lock && $# -ge 2 ]]; then
     shift 2
 fi
 if (( $# != 3 )); then
-    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
+    echo 'Usage: add-board-layer.sh [--sealed-dev12-5] [--qcam-lock EXISTING_LOCK] firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-desktop|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal DISPOSABLE_ARM64_ROOT ARCHIVES' >&2
     exit 2
 fi
 repo=$(cd "$(dirname "$0")/.." && pwd)
 layer=$1
-case $layer in firstboot-touch|firstboot-drm|warm-greeter|touch-lock|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
+case $layer in firstboot-touch|firstboot-drm|warm-greeter|touch-lock|power-desktop|ssc|blueman|onboard|chinese-ime|xorg-dsi|camera-qcam|camera-pipewire|camera-portal) ;; *) echo 'Unknown board layer' >&2; exit 2 ;; esac
 root=$(realpath -e -- "$2")
 archives=$(realpath -e -- "$3")
 lock=$repo/config/$layer.lock.json
@@ -73,6 +73,13 @@ chroot "$root" env SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive dpkg -i "${d
 chroot "$root" apt-get check
 test -z "$(chroot "$root" dpkg --audit)"
 case $layer in
+    power-desktop)
+        test -x "$root/usr/libexec/upowerd"
+        test -x "$root/usr/bin/xfce4-power-manager"
+        test -s "$root/etc/xdg/autostart/xfce4-power-manager.desktop"
+        cmp "$repo/packaging/power-desktop/xfce4-power-manager.xml" \
+            "$root/usr/share/y700/power-xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml"
+        ;;
     chinese-ime)
         test -x "$root/usr/bin/ibus-daemon"
         test -x "$root/usr/libexec/ibus-x11"

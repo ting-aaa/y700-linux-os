@@ -18,3 +18,5 @@ Set `COLD_BOOT=1` and provide `qemu-img` to reuse one private QCOW2 child of the
 Use `SCREEN_LOCK=baseline` or `SCREEN_LOCK=candidate` for the separate single-boot test of locking and unlocking an existing desktop. [Required inputs and session-lock checks](../../docs/SCREEN-LOCK.md#run-the-virtual-test)
 
 Use `SCREEN_LOCK=installed` with a dev12.6 root and `UV_ARM64` pointing to an ARM64 Linux uv binary to test the packaged desktop. The guest checks the complete 1,115-package inventory, the rotation client, and the existing Xfce autostarts before the lock test. It gets the test observer from the copied EFI partition and all desktop packages from the candidate root. With `COLD_BOOT=1`, the test exercises the screen lock, PAM and draft recovery again after power-off and a second login.
+
+With `POWER_DESKTOP=1`, supply the dev12.7 root. The guest checks the entire 1,124-package inventory and requires the packaged Xfce power manager to own its bus name in the logged-in user's session and UPower to be active on the system bus. The QEMU virtual board has no Y700 battery.
