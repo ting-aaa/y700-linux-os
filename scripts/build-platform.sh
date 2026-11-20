@@ -8,7 +8,8 @@ mkdir -p "$out"
 stage=$(mktemp -d)
 trap 'rm -rf -- "$stage"' EXIT
 install -Dm644 "$repo/packaging/control" "$stage/DEBIAN/control"
-cp -a "$repo/packaging/root/." "$stage/"
+tar -C "$repo/packaging/root" --exclude='__pycache__' --exclude='*.py[co]' -cf - . |
+    tar -C "$stage" -xf -
 # Do not inherit DrvFS/NTFS's synthetic executable/world-writable modes.
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +

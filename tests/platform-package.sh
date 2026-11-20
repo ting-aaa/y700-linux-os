@@ -9,6 +9,7 @@ package="y700-platform_$(sed -n 's/^Version: //p' "$repo/packaging/control")_all
 cmp "$temp/one/$package" "$temp/two/$package"
 dpkg-deb -x "$temp/one/$package" "$temp/root"
 test -z "$(find "$temp/root" -perm /0022 -print)"
+test -z "$(find "$temp/root" \( -name '__pycache__' -o -name '*.py[co]' \) -print -quit)"
 test "$(stat -c %a "$temp/root/usr/lib/systemd/system/y700-usb-maintenance.service")" = 644
 test -x "$temp/root/usr/bin/y700-display"
 test -x "$temp/root/usr/libexec/y700-session"

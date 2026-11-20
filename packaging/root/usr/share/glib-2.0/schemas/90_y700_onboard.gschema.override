@@ -20,4 +20,5 @@ in-use=true
 
 [org.onboard.auto-show:XFCE]
 enabled=true
+keyboard-device-detection-enabled=true
 hide-on-key-press=false
