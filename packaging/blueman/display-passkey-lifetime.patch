@@ -1,0 +1,71 @@
+Description: Disconnect the active keyboard display's property handler together with its notification
+Origin: other, Y700 Linux OS
+Forwarded: no
+
+--- a/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
++++ b/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
+@@ -3,5 +3,5 @@
+ from html import escape
+ from xml.etree import ElementTree
+-from typing import Dict, Optional, overload, Callable, Union, TYPE_CHECKING, Tuple, Any, List
++from typing import Optional, overload, Callable, Union, TYPE_CHECKING, Tuple, Any, List
+ 
+ from blueman.bluez.Device import Device
+@@ -49,5 +49,5 @@
+         self.dialog: Optional[Gtk.Dialog] = None
+         self._db: Optional[ElementTree.ElementTree] = None
+-        self._devhandlerids: Dict[str, int] = {}
++        self._display_watch: Optional[Tuple[Device, int]] = None
+         self._notification: Optional[Union[_NotificationBubble, _NotificationDialog]] = None
+         self._service_notifications: List[Union[_NotificationBubble, _NotificationDialog]] = []
+@@ -60,4 +60,5 @@
+     def unregister_agent(self) -> None:
+         logging.info("Unregister Agent")
++        self._on_cancel()
+         self.unregister()
+         AgentManager().unregister_agent(self.__agent_path)
+@@ -142,6 +143,4 @@
+     def _on_device_property_changed(self, device: Device, key: str, value: Any, path: str) -> None:
+         if (key == "Paired" and value) or (key == "Connected" and not value):
+-            handlerid = self._devhandlerids.pop(path)
+-            device.disconnect_signal(handlerid)
+             self._on_cancel()
+ 
+@@ -157,5 +156,15 @@
+         self._close()
+ 
++    def _watch_display_device(self, object_path: str) -> None:
++        self._close()
++        device = Device(obj_path=object_path)
++        handler = device.connect_signal("property-changed", self._on_device_property_changed)
++        self._display_watch = (device, handler)
++
+     def _close(self) -> None:
++        if self._display_watch is not None:
++            device, handler = self._display_watch
++            self._display_watch = None
++            device.disconnect_signal(handler)
+         if self._notification is not None:
+             self._notification.close()
+@@ -181,6 +190,5 @@
+     def _on_display_passkey(self, object_path: str, passkey: int, entered: int) -> None:
+         logging.info(f"DisplayPasskey ({object_path}, {passkey:d} {entered:d})")
+-        dev = Device(obj_path=object_path)
+-        self._devhandlerids[object_path] = dev.connect_signal("property-changed", self._on_device_property_changed)
++        self._watch_display_device(object_path)
+ 
+         key = f"{passkey:06}"
+@@ -189,5 +197,4 @@
+         notify_message = _("Pairing passkey for") + f" {self.get_device_string(object_path)}: " \
+                                                     f"{key[:entered]}<b>{next_digit}</b>{key[entered + 1:]}"
+-        self._close()
+         self._notification = Notification("Bluetooth", notify_message, 0, icon_name="blueman")
+         self._notification.show()
+@@ -195,6 +202,5 @@
+     def _on_display_pin_code(self, object_path: str, pin_code: str) -> None:
+         logging.info(f'DisplayPinCode ({object_path}, {pin_code})')
+-        dev = Device(obj_path=object_path)
+-        self._devhandlerids[object_path] = dev.connect_signal("property-changed", self._on_device_property_changed)
++        self._watch_display_device(object_path)
+ 
+         notify_message = _("Pairing PIN code for") + f" {self.get_device_string(object_path)}: {pin_code}"

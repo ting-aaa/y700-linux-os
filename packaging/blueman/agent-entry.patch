@@ -1,0 +1,29 @@
+Description: Keep one active local entry dialog and display zero-padded comparison values
+Origin: other, Y700 Linux OS
+Forwarded: no
+
+--- a/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
++++ b/usr/lib/python3/dist-packages/blueman/main/applet/BluezAgent.py
+@@ -125,11 +125,13 @@
+         if self.dialog:
+             logging.info("Agent: Another dialog still active, cancelling")
+             err(BluezErrorCanceled("Canceled"))
++            return
+ 
+         self.dialog, pin_entry = self.build_passkey_dialog(dev_str, dialog_msg, is_numeric)
+         if not self.dialog:
+             logging.error("Agent: Failed to build dialog")
+             err(BluezErrorCanceled("Canceled"))
++            return
+ 
+         Notification(_("Bluetooth Authentication"), notify_message, icon_name="blueman").show()
+ 
+@@ -210,7 +212,7 @@
+         logging.info("Agent.RequestConfirmation")
+         notify_message = _("Pairing request for:") + f"\n{self.get_device_string(object_path)}"
+ 
+-        if passkey:
++        if passkey is not None:
+             notify_message += "\n" + _("Confirm value for authentication:") + f" <b>{passkey:06}</b>"
+         actions = [("confirm", _("Confirm")), ("deny", _("Deny"))]
+ 
