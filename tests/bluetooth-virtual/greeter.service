@@ -1,0 +1,14 @@
+[Unit]
+Description=Isolated Classic HID greeter acceptance
+Requires=dbus.service systemd-logind.service systemd-udevd.service systemd-user-sessions.service
+After=dbus.service systemd-logind.service systemd-udevd.service systemd-user-sessions.service
+SuccessAction=poweroff-immediate
+FailureAction=poweroff-immediate
+
+[Service]
+Type=oneshot
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyAMA0
+TimeoutStartSec=300
+ExecStart=/bin/bash /opt/y700-virtual-hid/guest.sh

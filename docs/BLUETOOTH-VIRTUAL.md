@@ -58,6 +58,20 @@ An independent variant stops the peripheral application while the two radios are
 
 The automatic-reconnect run used boot IDs `1792430d-1b51-48c4-922d-12160f0937fc` and `c9e81eca-9b79-4581-bd0e-e9b8e16731b6`. Raw HCI captures stayed inside each guest and the runner discarded the private bond disk. Cold-boot behavior of the tablet's WCN6855 and a physical accessory still requires a device measurement. [Cold-boot checks](../tests/bluetooth-virtual/cold-boot.py)
 
+## Classic bond across two cold boots on dev12.7
+
+The sealed dev12.7 root (`dd885eb7bc88e3fb87b0567ff7f382afbe079363910d6f0fd5b4bb41935e220a`) paired a virtual BR/EDR keyboard and mouse and reused the bond after the first VM powered off. A new QEMU process started with the same two controller addresses, a fresh BlueZ 5.82 daemon and the private ext4 adapter stores. The accessory initiated both HIDP channels on reconnect.
+
+- On boot 1, one `Device1.Pair` produced matching nonzero Classic link keys in both device records. Both controllers reported successful Simple Pairing, a new-key notification and encryption on their connections.
+- On boot 2, both controllers were non-pairable, the fixture registered no pairing agent, and both devices came back paired and bonded. Each controller requested its peer's link key. Linux returned the same 16 bytes saved on boot 1 for each remote address. Both controllers reported encryption for their respective ACL handles. The HCI trace contained zero new-key notifications or Simple Pairing completions for the pair.
+- On both boots the ordinary user's focused GTK entry received the challenge, Shift, Backspace, cursor edits and Ctrl+End from the matched Bluetooth keyboard. The same paired device supplied relative mouse motion, a left click and upward scrolling. Onboard enumerated one typing keyboard on each connection. The private key store was discarded at the end of the run.
+
+The runner checks the original BlueZ monitor packets, matching controller, each remote address and the encrypted ACL handle. It emits booleans for the key comparison. The reduced receipt is `out/bluetooth-virtual/cold-classic-run3.log`, SHA-256 `8aed3ad12fc7f7b986d78cd460ae6254cc614fbd8a5397ed43072bf3402ab94b`. [Cold-boot checks](../tests/bluetooth-virtual/cold-boot.py) · [BlueZ monitor packet format](https://github.com/bluez/bluez/blob/5.82/src/shared/btsnoop.h) · [BlueZ controller emulator](https://github.com/bluez/bluez/blob/5.82/emulator/btdev.c)
+
+A second run paired the accessory on boot 1 and waited for the installed Arctica login screen on boot 2. LightDM and logind reported an active X11 greeter on seat0. Before the accessory connected, an observer running as the `lightdm` user found Arctica's focused, empty username field. After reconnect, Xorg/libinput exposed the keyboard and pointer from the bonded Bluetooth address. Using its HIDP keyboard reports, the accessory typed and edited a fresh challenge in the username field. The observer read back the exact result through AT-SPI. The matched evdev nodes also delivered F15, a left click, relative motion and wheel events while the greeter was active. The test ended before username submission or password entry. Pointer dispatch inside Arctica and physical tablet login remain unmeasured. [Greeter observer](../tests/bluetooth-virtual/greeter.py) · [Seat setup](../tests/bluetooth-virtual/greeter-seat.sh)
+
+Both controllers again resumed encryption with their boot-1 link keys. This run used boot IDs `9d0d8bf1-5741-4f4a-838b-08050bcce076` and `f5388119-8d28-462c-aed2-be7c091ff953`. The reduced receipt is `out/bluetooth-virtual/cold-classic-greeter6.log`, SHA-256 `82715d23c9d39b096346a1ead4019e82ee49a3f7b2c9a20dd7b23e2d0fec3d41`.
+
 ## Reproduce
 
 Use Linux with QEMU for AArch64, LLVM 21, `make`, `cpio` and `gzip`. The runner needs the project dev9 QCOW2 with its backing chain, the configured and built Y700 Linux 7.3.4 tree, static ARM64 BusyBox, ARM64 uv, the BlueZ 5.82 source tree and the ARM64 `btvirt` executable. Debian supplies the last executable in `bluez-test-tools`. The package used here was `5.82-1.1` with SHA-256 `e4ad401561bd0daf0bf13ca4761a8d9dc2a3261233da0e4b19f075ed3d1f694a`. Extract it with `dpkg-deb -x` and pass its `usr/bin/btvirt`. [Debian archive](https://snapshot.debian.org/binary/bluez-test-tools/5.82-1.1/)
@@ -79,6 +93,13 @@ export XORG_DUMMY_DEB="$dummy_deb" Y700_BT_ROOT_FORMAT=raw
 inputs=("$root_ext4" "$kernel_build" "$busybox_arm64" "$uv_arm64" "$bluez_src" "$btvirt_arm64")
 Y700_BT_TYPING=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}"
 Y700_BT_TYPING=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}" --classic
+```
+
+Point the first array entry at the exact dev12.7 ext4 root to reproduce the two-boot Classic test. The kernel, BlueZ sources, tools and dummy Xorg package are the same pinned inputs.
+
+```sh
+Y700_BT_TYPING=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}" --cold-classic
+Y700_BT_TYPING=1 Y700_BT_GREETER=1 bash tests/bluetooth-virtual/run-qemu.sh "${inputs[@]}" --cold-classic
 ```
 
 The runner accepts `QEMU_SYSTEM_AARCH64` and `QEMU_FIRMWARE_DIR` for a non-system QEMU installation. It verifies the Y700 kernel, module symbols, VHCI source, BlueZ example sources and `btvirt` hashes. The product kernel omits the virtual HCI driver. The runner builds that upstream driver as an external test module against the exact kernel tree and loads it in the VM. The product root supplies the regular Bluetooth, crypto and input modules, daemon, system D-Bus and Python libraries. The guest runs Python through uv and powers off after each test.

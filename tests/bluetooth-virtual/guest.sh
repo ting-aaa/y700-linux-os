@@ -14,6 +14,8 @@ bond_phase=
 for phase in seed resume; do
     if grep -qw "y700.virtual_bond=$phase" /proc/cmdline; then bond_phase=$phase; fi
 done
+greeter=0
+if grep -qw y700.virtual_greeter=1 /proc/cmdline; then greeter=1; fi
 if [[ -n $bond_phase ]]; then
     mount -t ext4 -o nodev,nosuid,noexec LABEL=Y700_BT_TEST /var/lib/bluetooth
     chmod 700 /var/lib/bluetooth
@@ -21,9 +23,10 @@ if [[ -n $bond_phase ]]; then
 else
     mount -t tmpfs -o mode=700 tmpfs /var/lib/bluetooth
 fi
-mount -t tmpfs -o mode=1777 tmpfs /dev/shm
+if ! mountpoint -q /dev/shm; then mount -t tmpfs -o mode=1777 tmpfs /dev/shm; fi
 export UV_CACHE_DIR=/run/uv UV_OFFLINE=1 PYTHONUNBUFFERED=1
 pids=()
+stage=kernel
 cleanup() {
     local rc=$?
     if (( rc != 0 )) && [[ -z $bond_phase ]]; then
@@ -38,6 +41,10 @@ cleanup() {
         wait "${pids[i]}" 2>/dev/null || :
     done
     if [[ -n $bond_phase ]]; then sync; umount /var/lib/bluetooth; fi
+    if (( greeter )); then
+        if (( rc != 0 )); then echo "GREETER_FIXTURE_ERROR line-or-stage=$stage"; fi
+        echo "Y700_VIRTUAL_HID_EXIT=$rc"
+    fi
 }
 trap cleanup EXIT
 wait_for() {
@@ -46,7 +53,7 @@ wait_for() {
 }
 adapter_boolean() {
     local path=$1 property=$2 value=$3
-    if [[ $(busctl --system get-property org.bluez "$path" org.bluez.Adapter1 "$property") == "b $value" ]]; then
+    if [[ $(busctl --system --timeout=4 get-property org.bluez "$path" org.bluez.Adapter1 "$property") == "b $value" ]]; then
         return 0
     fi
     busctl --system set-property org.bluez "$path" org.bluez.Adapter1 "$property" b "$value" >/dev/null 2>&1 || :
@@ -60,8 +67,12 @@ modprobe algif_skcipher
 modprobe cmac
 insmod ./hci_vhci.ko
 test -c /dev/vhci && test -c /dev/uhid
-dbus-daemon --system --fork
-if [[ -f dummy.deb ]]; then source ./desktop-xorg.sh; fi
+stage=display
+if (( ! greeter )); then
+    dbus-daemon --system --fork
+    if [[ -f dummy.deb ]]; then source ./desktop-xorg.sh; fi
+fi
+stage=bluetooth
 mode=()
 controller=()
 if grep -qw y700.virtual_classic=1 /proc/cmdline; then mode=(classic); controller=(-B); fi
@@ -96,13 +107,23 @@ done
 if ((${#mode[@]})); then
     busctl --system set-property org.bluez /org/bluez/hci1 org.bluez.Adapter1 Discoverable b true
 fi
-if [[ $bond_phase == resume ]]; then mode=(resume); fi
+if [[ $bond_phase == resume ]]; then mode+=(resume); fi
 ./uv run --offline --no-project --python /usr/bin/python3 python -B peer.py "${mode[@]}" >/run/peer.log 2>&1 & pids+=($!)
 wait_for grep -q '^PEER_READY$' /run/peer.log
+if (( greeter )); then
+    stage=display
+    source ./greeter-seat.sh
+    stage=greeter-input
+fi
 if [[ -n $bond_phase ]]; then
-    timeout -k 3 90 ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "$bond_phase"
+    timeout -k 3 150 ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "$bond_phase"
     kill -INT "$monitor"
     wait "$monitor"
+    if grep -qw y700.virtual_classic=1 /proc/cmdline; then
+        ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "classic-trace-$bond_phase"
+        echo "Y700_COLD_${bond_phase^^}_PASS"
+        exit 0
+    fi
     btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
     grep -q 'Enabled with AES-CCM' /run/cold-bond/decoded
     if [[ $bond_phase == resume ]]; then
