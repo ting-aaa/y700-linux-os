@@ -290,6 +290,30 @@ sudo bash upgrade/upgrade-platform-dev11.sh install \
 
 The helper preserves the original platform package and the previously unowned speaker profile in `/var/backups/y700-platform-dev10-to-dev11/`. Keep that backup to roll back with `sudo bash upgrade/upgrade-platform-dev11.sh rollback`. The next desktop login loads the installed sound profile. The physical installation reloaded the active user's idle WirePlumber to test it in the existing session. An independent ARM64 installation repeated the update twice, rolled back twice and reinstalled the new package. Rollback reproduced the original file bytes, root ownership, mode 0644 and unowned dpkg status. Reinstallation reproduced the release package tuples. [Upgrade helper](../scripts/upgrade-platform-dev11.sh)
 
+### Dev12.1 factory speaker calibration
+
+The local `out/dev12.1-board` bundle upgrades `y700-platform` from `0.1.0~dev11.1` to `0.1.0~dev12.1`. The other 1,111 installed package tuples, ESP and U-Boot match dev11.1. The generic root starts with a locked account, an empty machine ID and no per-tablet calibration or Bluetooth address. The enabled preparation service reads this tablet's speaker calibration on a supported device. The speaker UCM calls the staging helper with ALSA's `shell` action. [Speaker calibration and physical results](SPEAKERS.md)
+
+| File or receipt | SHA-256 |
+| --- | --- |
+| Distribution `SHA256SUMS` | `eca4703cabdb27b20f4b47d5f551e12b5336e2b5fdefaa86e6510789a1fcd9da` |
+| `TOOLS-SHA256SUMS` | `587caddac744ac5c952802c45f0ca505816c39b541fc125fc6e9f0412f12e55a` |
+| Portable `dev12.1.qcow2` (350,289,920 bytes) | `19c20e6a21e7b1a1bd11ba61d5add0815d5686c2bf1fe98aa169007602de9605` |
+| Generic 6 GiB `root.ext4` | `b6bd657421f3741ee274a40c3a80ba075827c2319cd868424fe66de99e547eb4` |
+| 1,112 installed package tuples | `67345abdae49f42ab640b4eef44bb10d4009f1e8d9755dd963b6c36f8bea804c` |
+| `y700-platform_0.1.0~dev12.1_all.deb` | `844a0996e6e9947ddc6859ef2896b91c3980816cf6b373e7335b22c07e2c6bbb` |
+
+To recover the exact release bytes on a Linux PC, check the distribution and tools manifests above, then run `bash unpack.sh /new/destination` from the bundle. The optional `--bluetooth-address` argument takes the private address file produced from the target tablet's original adapter record as described above. Readback checked the generic 6 GiB root, the ext4 and FAT filesystems, package ownership and installed checksums. A second extraction used a synthetic, locally administered adapter address; only the personalized root and its checksum changed.
+
+The host verified the complete 6 GiB root digest, then booted the sealed root in an ARM64 EFI guest with a throwaway write overlay. The virtual U-Boot loaded the original EFI executable, kernel and initrd from an ESP fixture using the virtual board DT. Linux 7.3.4-asphalt-prc mounted the root and ESP on the simulated 4 KiB-sector disk. The guest confirmed the speaker preparation unit was enabled, the packaged calibration files matched, and the factory record was absent. Touchscreen password enrollment rejected a mismatch and retained the account lock. After successful enrollment, the user signed in through Arctica and LightDM/PAM to an active Xfce X11 session, opened the brightness setting and shut down cleanly. The test includes no physical amplifier or backlight. Full-image boot on the physical tablet remains untested. Receipts are in `out/dev12.1-board-verified/efi/`.
+
+To repeat the native package transaction with no network or tablet, use the pinned dev11.1 bundle, a Linux filesystem with space for the raw files, and GNU coreutils, util-linux, zstd, QEMU (`qemu-img`, `qemu-system-aarch64`), cpio, gzip, mtools and e2fsprogs. The output must be a new directory. The guest uses the original verified ARM64 kernel and BusyBox, upgrades the single allowed package, checks dependency health and the exact resulting package inventory, and powers off. The supplied scripts also passed on a Linux host as UID 1000. A fresh dpkg transaction creates new filesystem metadata and logs. The builder records its own raw digest in the output's `SHA256SUMS`; the sealed distribution above reproduces the published byte digest. [Offline rebuild script](../scripts/build-dev12.1-image.sh)
+
+```sh
+bash rebuild/build-dev12.1-image.sh /path/to/combined-kms-dev11.1 \
+    ./y700-platform_0.1.0~dev12.1_all.deb /new/dev12.1-rebuild
+```
+
 ## Attended candidate 03 tablet gate
 
 The U-Boot DT shipped in the current PRC container disables the SD controller at 0x8804000. The Linux DT enables it. On the running baseline, read-only inspection found the SD card behind that controller, the working default entry named `debian.conf`, about 924 MiB free on the internal ESP, and unused trial entry paths. The physical verification probe correctly rejected the old installed image. The existing card contains a partition and has no implied erase permission.
