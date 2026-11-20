@@ -25,12 +25,12 @@ In a disposable Debian 13 ARM64 X11 session, Xfce started Onboard through its pa
 ## Package build and checks
 
 ```sh
-bash scripts/build-platform.sh
+SOURCE_DATE_EPOCH=1795182000 bash scripts/build-platform.sh out/platform-dev12.8
 bash tests/platform-package.sh
 uv run --python 3.13 --no-project python -m unittest discover -s tests -v
 ```
 
-Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz, glib-compile-schemas and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. By default the epoch is the Git commit timestamp. Source archives without Git metadata must supply an explicit valid epoch. Future epochs are rejected to protect the early-boot clock. This establishes determinism of the package on the tested builder.
+Requirements include Bash, GNU coreutils, findutils, dpkg-deb, xz, glib-compile-schemas and uv. The package contains architecture-independent scripts and configuration. Its runtime dependencies are resolved in the ARM64 candidate. Repeated builds with the same `SOURCE_DATE_EPOCH` are compared byte-for-byte. Use the epoch in the platform archive lock to reproduce that archive. Future epochs are rejected to protect the early-boot clock. [Current platform archive lock](../config/platform.lock.json)
 
 The package includes X11 touch alignment, Onboard/Xfce defaults, the temporary Chromium/compositor workaround, USB ACM/NCM, the dedicated maintenance SSH service and optional Bluetooth controller address provisioning. The offline image builder enables service ordering. The package installs the unit files for local activation. `y700-onboard.desktop` provides the Onboard autostart for Xfce. The Xfce session prepares panel size settings once per user. Touch alignment starts even if that initialization fails.
 
@@ -60,14 +60,15 @@ BlueZ can exit on stdin EOF even when given a command. The helper keeps stdin op
 
 ## Locked repair archives and offline integration
 
-`config/desktop-repair.lock.json` records the 30 archives used by the deployed repair, including exact name, version, architecture, length and SHA-256. These were originally obtained from verified Debian repository metadata. Obtain matching versions from authenticated Debian repositories/archive services; the lock verifies bytes but does not replace signature verification. Do not silently substitute newer versions or treat the lock as the entire base distribution lock.
+`config/desktop-repair.lock.json` records the 30 archives used by the deployed repair, including exact name, version, architecture, length and SHA-256. These were originally obtained from verified Debian repository metadata. Obtain matching versions from authenticated Debian repositories or archive services. The lock verifies the selected archives' bytes. The current integration also requires the matching dev12.8 archive from the build above and records its lock in the root. The dev5 integration and UFS-layout results below describe earlier builds. [Current platform archive lock](../config/platform.lock.json) · [Authenticated base package lock](../config/debian-base.lock.json)
 
 ```sh
 uv run --python 3.13 --no-project python scripts/repair-inputs.py verify /build/repair-debs config/desktop-repair.lock.json
 # Build and configure /build/candidate using DEBIAN-SNAPSHOT.md first.
 # That builder writes the disposable-root marker after checking all packages.
 sudo env UV_BIN=/path/to/uv bash scripts/integrate-rootfs.sh \
-  /build/candidate /build/repair-debs out/packages/y700-platform_0.1.0~dev5_all.deb
+  /build/candidate /build/repair-debs out/platform-dev12.8/y700-platform_0.1.0~dev12.8_all.deb
+uv run --python 3.13 --no-project python scripts/verify-image-packages.py /build/candidate
 sudo env UV_BIN=/path/to/uv bash tests/arm64-rootfs.sh /build/candidate
 ```
 
