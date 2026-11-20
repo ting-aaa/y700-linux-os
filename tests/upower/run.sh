@@ -36,7 +36,7 @@ while read -r _ archive; do cp -- "$archives/$archive" "$root/run/input/"; done 
 if [[ $# == 4 ]]; then
     repo=$(cd "$here/../.." && pwd -P)
     "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python \
-        "$repo/scripts/repair-inputs.py" verify "$3" "$repo/config/power-desktop.lock.json"
+        "$repo/scripts/repair-inputs.py" verify "$3" "${Y700_TRAY_LAYER_LOCK:-$repo/config/power-desktop.lock.json}"
     cp "$3"/{xfce4-power-manager*,y700-power-desktop}_*.deb "$root/run/input/"
     for bin in Xvfb xdotool; do install -m755 "$4/bin/$bin" "$root/usr/bin/$bin"; done
     install -m644 "$4/lib/aarch64-linux-gnu/libxdo.so.3" "$root/usr/lib/aarch64-linux-gnu/"
@@ -57,9 +57,12 @@ fi
 [[ $(chroot "$root" dpkg --print-architecture) == arm64 ]]
 install -m 644 "$here/probe.sh" "$root/run/probe.sh"
 install -d -o "$desktop_uid" -g "$desktop_gid" -m700 "$root/run/up-test"
-timeout -k 3s 230s chroot --userspec="$desktop_uid:$desktop_gid" "$root" /usr/bin/env -i \
+# Bus-activated desktop helpers can outlive the probe. A dedicated PID namespace
+# releases their file descriptors before the builder unmounts the private /dev.
+timeout -k 3s 230s unshare --mount --propagation private --pid --fork --kill-child --mount-proc="$root/proc" \
+    chroot --userspec="$desktop_uid:$desktop_gid" "$root" /usr/bin/env -i \
     PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C HOME=/run/up-test SYSTEMD_DEVICE_VERIFY_SYSFS=0 \
     Y700_TRAY_SCREEN="${Y700_TRAY_SCREEN:-1024x768}" GDK_SCALE="${GDK_SCALE:-1}" Y700_TRAY_PANEL_SIZE="${Y700_TRAY_PANEL_SIZE:-40}" \
-    Y700_TRAY_EXPECT_PRIMARY="${Y700_TRAY_EXPECT_PRIMARY:-absent}" Y700_TRAY_EXPECT_CONTEXT="${Y700_TRAY_EXPECT_CONTEXT:-visible}" \
+    Y700_TRAY_EXPECT_PRIMARY="${Y700_TRAY_EXPECT_PRIMARY:-auto}" Y700_TRAY_EXPECT_CONTEXT="${Y700_TRAY_EXPECT_CONTEXT:-visible}" \
     Y700_TRAY_CHECK_RETURN="${Y700_TRAY_CHECK_RETURN:-0}" \
     /bin/bash /run/probe.sh

@@ -42,4 +42,10 @@ sudo env UV_BIN="$(command -v uv)" bash tests/upower/run.sh \
   "$sealed_dev12_6_root" "$new_archives" "$desktop_archives" "$arm64_x11_usr"
 ```
 
-The local runtime receipt is `out/upower/arm64-runtime-sealed.log`. The stock 4.20.0-1 desktop receipt is `out/upower/arm64-tray-settings.log`, SHA-256 `6bde9de0b2f9da83e92b7b777cece9ddb8e5a1a809b0ec8c2e0420e0d309ceb7`.
+With `xfce4-power-manager 4.20.0-1+y7001`, the test ran at 2560×1600 and 200% GTK scaling. A primary click, a secondary click and Return sent directly to the focused tray icon each opened a 352×218 menu owned by the manager. Each menu opened a new, visible Power Manager Settings process. The opt-out persisted across a manager restart. Run with `Y700_TRAY_SCREEN=2560x1600 GDK_SCALE=2 Y700_TRAY_CHECK_RETURN=1` in the `sudo env` invocation to exercise the same inputs. The focus check explicitly puts focus on the icon before sending Return; tab navigation through the entire panel is a separate path.
+
+| Local receipt in `out/upower/` | SHA-256 |
+| --- | --- |
+| `arm64-runtime-sealed.log`, three synthetic battery states | `46166f21d80265b5a4dd5c954d2eb6863b5132bb46a722453b3e3a3bca8811b6` |
+| `arm64-tray-settings.log`, Debian 4.20.0-1 at 1× | `6bde9de0b2f9da83e92b7b777cece9ddb8e5a1a809b0ec8c2e0420e0d309ceb7` |
+| `arm64-tray-candidate-final.log`, 4.20.0-1+y7001 at 2× | `66f6786d45d8705e5ccba5275846149523aa737dbd77061d2fdfa8fd0b855051` |

@@ -11,7 +11,14 @@ screen=${Y700_TRAY_SCREEN:-1024x768}
 export GDK_SCALE=${GDK_SCALE:-1}
 panel_size=${Y700_TRAY_PANEL_SIZE:-40}
 [[ $screen =~ ^[0-9]{3,4}x[0-9]{3,4}$ && $GDK_SCALE =~ ^[12]$ && $panel_size =~ ^[1-9][0-9]?$ ]]
-expected_primary=${Y700_TRAY_EXPECT_PRIMARY:-absent}
+expected_primary=${Y700_TRAY_EXPECT_PRIMARY:-auto}
+if [[ $expected_primary == auto ]]; then
+    case $(dpkg-query -W -f='${Version}' xfce4-power-manager) in
+        4.20.0-1) expected_primary=absent ;;
+        4.20.0-1+y7001) expected_primary=visible ;;
+        *) echo 'Set Y700_TRAY_EXPECT_PRIMARY for this manager version' >&2; exit 2 ;;
+    esac
+fi
 expected_context=${Y700_TRAY_EXPECT_CONTEXT:-visible}
 [[ $expected_primary =~ ^(visible|absent)$ && $expected_context =~ ^(visible|absent)$ ]]
 export DISPLAY=:74 XAUTHORITY=$HOME/Xauthority XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=XFCE
