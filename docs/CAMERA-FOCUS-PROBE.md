@@ -104,7 +104,7 @@ On a stationary subject the first normal single-shot trigger yielded 113 scannin
 
 The next trial waited for two steady eight-frame image windows and triggered after frame 40. Actual sensor metadata between frames 24 and 144 showed a constant 33,280 µs exposure and analogue gain rising from 4.0 to 9.9375. The USB connection dropped and the service exceeded its 70-second limit. The final AF state is unknown. The partial receipt has SHA-256 `809d85624e1e6066bffc3e894664cab4958e2ec0ae2afa872e82765328fb4745`. Both trials computed numbers in RAM. The updated [measurement](../tests/camera-autofocus/optical.md) also waits for stable applied exposure and gain. A synthetic constant-image, rising-gain case verifies this guard.
 
-After USB returned in the same boot the sensor was suspended. The table uses the start of the second camera service as time zero. Kernel call traces showed the Wi-Fi driver in two DMA unmap paths waiting for an ARM SMMU TLB synchronization. Their shared cause and any dependency on the camera power sequence remain open. Device health takes priority over another optical trial. [Qualcomm ARM SMMU driver](https://github.com/torvalds/linux/blob/master/drivers/iommu/arm/arm-smmu/arm-smmu-qcom.c)
+After USB returned in the same boot the sensor was suspended. The table uses the start of the second camera service as time zero.
 
 | Time after service start | Observation |
 | --- | --- |
@@ -113,6 +113,42 @@ After USB returned in the same boot the sensor was suspended. The table uses the
 | 31.0–37.2 s | RCU stall followed by a watchdog soft lockup. Stack samples included the ath11k copy-engine and monitor-ring paths. |
 | 70.2 s | systemd reached the camera service time limit. The measurement process initially remained present after SIGKILL. |
 | 671.1 s | UFS Hibern8 exit timed out. PHY recalibration and host reset failed, the outer `sdb17` and nested `loop0` ext4 journals aborted and both filesystems switched to emergency read-only. |
+
+#### Kernel fault evidence
+
+Eight stack samples alternate between the ath11k copy-engine tasklet and monitor-ring timer, both in DMA unmap through `arm_smmu_tlb_sync_context`. The sampled instruction is in `_raw_spin_unlock_irqrestore`. The traces identify the repeated path, while the duration and result of each hardware sync are unknown. This build uses the Qualcomm SMMU path with its timeout debug reporting disabled. RDDM is a firmware notification that schedules Wi-Fi recovery. The earlier battery timeout is a missing ADSP PMIC GLINK response. The first fault and any dependency on camera activity remain unknown. [ARM SMMU context sync](https://github.com/torvalds/linux/blob/f24ba334afafc70c3149e9db9c0cf8ecc6d52a09/drivers/iommu/arm/arm-smmu/arm-smmu.c#L247) · [Qualcomm timeout reporting](https://github.com/torvalds/linux/blob/f24ba334afafc70c3149e9db9c0cf8ecc6d52a09/drivers/iommu/arm/arm-smmu/arm-smmu-qcom.c) · [WCN6855 recovery](https://lists.infradead.org/pipermail/ath11k/2022-February/002640.html) · [Battery manager](https://github.com/torvalds/linux/blob/f24ba334afafc70c3149e9db9c0cf8ecc6d52a09/drivers/power/supply/qcom_battmgr.c)
+
+The exact dev12.11 DTB (`53bc7191…`) assigns PM8350 LDO5 to the CAMSS, PCIe0 Wi-Fi, UFS and eUSB2 PHYs, and PM8350C LDO10 to the CAMSS, UFS and eUSB2 PHYs. The inner display's DSI PHYs also use LDO5. GT9768 uses BOB for VAF. CAMSS, PCIe0, UFS, SD and USB share an APPS SMMU instance with different stream IDs. The captured logs contain no rail voltage or context-bank measurements. UFS failed during clock ungating, which is still enabled with the 75 MHz devfreq cap. The kernel already carries the same-board PHY base-table, system-suspend PHY retention, and turbo/OPP fixes. The retained events do not establish a preceding system suspend or CX collapse. [Board PHY wiring](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0006-asphalt-board-dts.patch) · [CAMSS wiring](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0016-asphalt-camera-wiring.patch) · [Suspend fix](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0027-sm8450-ufs-no-phy-retention.patch) · [PHY initialization fix](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0032-sm8475-ufs-phy-base-tables.patch) · [UFS OPPs](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0035-sm8475-ufs-opp-table.patch)
+
+For a later timing diagnosis, this read-only preflight lists available ftrace function names from an already mounted tracefs. Check for both the context sync and Qualcomm backend in the output. The command leaves the tracer configuration untouched.
+
+```sh
+find_trace_functions() {
+    for tracefs in /sys/kernel/tracing /sys/kernel/debug/tracing; do
+        functions=$tracefs/available_filter_functions
+        [ -r "$functions" ] || continue
+        awk '$1 ~ /^(arm_smmu_tlb_sync_context|qcom_smmu_tlb_sync|rpmh_write|rpmh_write_async)(\.[[:alnum:]_]+)*$/ {
+            print $1
+            found = 1
+        }
+        END { if (!found) exit 1 }' "$functions"
+        return $?
+    done
+    printf '%s\n' 'No readable tracefs function list' >&2
+    return 2
+}
+find_trace_functions
+```
+
+#### Recovery and RAM follow-up
+
+The owner then authorized an orderly reboot. The stock dev12.11 entry replayed both ext4 journals, mounted both filesystems read-write and started LightDM, NetworkManager, Bluetooth and SSH. The outer partition enumerated as `sda17` in the new boot. Each filesystem reported clean with zero recorded ext4 errors. A fresh 4 KiB file on each passed fsync, byte-for-byte direct readback, removal and filesystem sync. The Debian package audit was clean. This was a bounded check on the running filesystems. USB connectivity and Wi-Fi association returned. The user account's Xfce idle suspend timeout was explicitly set to zero for both battery and external power, verified via Xfconf and its saved settings. Logind's idle action was already `ignore`.
+
+After recovery, the physical tablet ran the exposure-gated measurement ELF and temporary diagnostic libcamera from tmpfs with `--self-test`. It exited successfully, reported `synthetic=1 camera_access=0`, and left the rear sensor suspended with `sensor_active_ms_delta=0`. This qualifies the synthetic path on the board. The receipt `out/camera-optical-qa/board-gated-diag-self-test.log` has SHA-256 `d04c14f1e7274043046f0103774c1de4b98ca2b7f7e5ce77dd7385eab86df119`. The optical AF result remains open.
+
+For a diskless follow-up the [DTB builder](../scripts/build-diskless-dtb.sh) changes only the UFS and microSD host status properties in the sealed dev12.12 PRC tree. Two builds yielded SHA-256 `8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82`. Restoring those properties in a private copy reproduces the original canonical tree. A physical boot with these controllers disabled still needs verification.
+
+Compare an idle run and the same AF workload on the diskless system. A separate DT with PCIe0 disabled can test whether the WCN6855 host path is needed to reproduce the stall. The AF service's private network namespace leaves that host path active. Keep the kernel and display mode fixed across runs. The dev12.12 diskless bundle uses the dual-refresh kernel `0c92b63a…`, while the original failure used dev12.11 kernel `b103d0fc…`. [Kernel identities](PANEL-REFRESH.md)
 
 ## Reproducing the bounded read
 
