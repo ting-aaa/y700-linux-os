@@ -2,8 +2,10 @@
 # Compare RTC class registration on the physical baseline kernel in two small VMs.
 set -euo pipefail
 awake=0
+control=
 if [[ ${1:-} == --awake ]]; then awake=1; shift; fi
-[[ $# == 3 ]] || { echo 'Usage: run.sh [--awake] PREPARED_KERNEL STATIC_ARM64_BUSYBOX NEW_LOG_DIRECTORY' >&2; exit 2; }
+if [[ ${1:-} == --suspend-control ]]; then control=$(realpath -e "${2:?missing dev12.11 kernel}"); shift 2; fi
+[[ $# == 3 ]] || { echo 'Usage: run.sh [--awake|--suspend-control DEV12.11_KERNEL] PREPARED_KERNEL STATIC_ARM64_BUSYBOX NEW_LOG_DIRECTORY' >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 k=$(realpath -e "$1")
 busybox=$(realpath -e "$2")
@@ -13,6 +15,10 @@ work=$(mktemp -d)
 trap 'rm -r -- "$work"' EXIT
 image=$k/arch/arm64/boot/Image
 printf '%s  %s\n' 9afa9b69763b33133f20d137047084343c5e5465cbb1a0bbfa56b01b9d76b4db "$image" | sha256sum --strict -c
+if [[ -n $control ]]; then
+    image=$control
+    printf '%s  %s\n' b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625 "$image" | sha256sum --strict -c
+fi
 mkdir -p "$work"/{module,root/{bin,dev,proc,sys}}
 cp "$k/drivers/rtc/rtc-pl031.c" "$work/module/"
 echo 'obj-m += rtc-pl031.o' >"$work/module/Makefile"
@@ -20,11 +26,12 @@ make -s -C "$k" M="$work/module" ARCH=arm64 LLVM=1 modules
 cp "$work/module/rtc-pl031.ko" "$work/root/"
 cp "$busybox" "$work/root/bin/busybox"
 ln -s busybox "$work/root/bin/sh"
-if (( awake )); then
+if (( awake )) || [[ -n $control ]]; then
     cc=${AARCH64_CC:-aarch64-linux-gnu-gcc}
     "$cc" -static -O2 -Wall -Wextra -Werror -s "$here/awake-alarm.c" -o "$work/root/board-probe"
     "$cc" -static -O2 -Wall -Wextra -Werror -s -DRTC_QA_PL031 "$here/awake-alarm.c" -o "$work/root/guest-probe"
-    cp "$here/check-awake.sh" "$work/root/awake-qa"
+    if [[ -n $control ]]; then cp "$here/../suspend/guest-control.sh" "$work/root/awake-qa"
+    else cp "$here/check-awake.sh" "$work/root/awake-qa"; fi
 fi
 cat >"$work/root/init" <<'INIT'
 #!/bin/sh
@@ -78,7 +85,7 @@ dtc -q -I dtb -O dtb -o "$work/plain.dtb" "$work/dump.dtb"
 cp "$work/plain.dtb" "$work/aliased.dtb"
 fdtput -t s "$work/aliased.dtb" /aliases rtc1 /pl031@9010000
 for variant in plain aliased; do
-    if (( awake )) && [[ $variant == plain ]]; then continue; fi
+    if [[ $variant == plain && ( $awake == 1 || -n $control ) ]]; then continue; fi
     alias_id=0
     if [[ $variant == aliased ]]; then alias_id=1; fi
     timeout 90 "${qemu[@]}" -M virt,gic-version=3 "${common[@]}" -serial "file:$logs/$variant.log" -no-reboot \
@@ -86,7 +93,12 @@ for variant in plain aliased; do
         -rtc base=2010-01-02T03:04:05,clock=vm \
         -append "console=ttyAMA0,115200 nokaslr rdinit=/init rtcqa.alias=$alias_id" \
         >"$logs/$variant.qemu.log" 2>&1
-    if (( awake )); then
+    if [[ -n $control ]]; then
+        grep '^S2IDLE_CONTROL_PASS ' "$logs/$variant.log"
+        if bash "$here/../suspend/board-cycle.sh" --check-deep-trace "$logs/$variant.log"; then
+            echo 'Unexpectedly accepted virtual s2idle as deep.' >&2; exit 1
+        fi
+    elif (( awake )); then
         grep '^RTC_AWAKE_QA_PASS ' "$logs/$variant.log"
         grep '^RTC_RESERVE_QA_PASS ' "$logs/$variant.log"
     else grep '^RTC_ALIAS_PASS ' "$logs/$variant.log"; fi
