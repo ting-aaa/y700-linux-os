@@ -1,5 +1,9 @@
 # Xfce Wi-Fi chooser on Y700
 
+On the installed dev12.10 tablet, the saved Wi-Fi profile connected after the second reboot. The wireless interface received replies to all three probes to each of its IPv4 and IPv6 default routers. The tablet used the distribution versions of NetworkManager and wpa_supplicant. [Physical installation](DEV12.10-INSTALLATION.md)
+
+An optional update passed two WPA3 password-recovery tests in ARM64 QEMU. With hostapd 2.11 the ordinary Xfce applet reopened the password dialog after SAE status 15. With hostapd 2.10 the station reported status 1, and a second selection of the same access point requested a replacement password from the same user's SecretAgent. A missing access point caused no password request. Both corrected connections negotiated SAE and protected management frames, obtained an address and passed traffic. The legacy run exercised the agent protocol. Physical touchscreen password recovery remains open. [Offline update and rollback](WIFI-PASSWORD-RETRY.md) · [Legacy test](../tests/wifi-sae-retry/README.md)
+
 ## Radio bands and reconnection on the physical tablet
 
 The tablet's supplicant journal recorded a completed association on 5220 MHz. After 2,639.6 seconds the station reported disconnect reason 34. It scanned, associated on 2437 MHz with another BSSID advertising the same SSID and completed WPA negotiation 6.728 seconds after the disconnect. The supplicant network ID stayed the same. The same NetworkManager instance renewed both leases with their previous addresses. Its final IPv6 lease arrived 6.760 seconds after the disconnect and its IPv4 lease at 6.777 seconds, respectively 32 ms and 49 ms after authentication completed. The wireless device's last recorded state was activated, with no intervening device state change before either final lease. Application traffic across this physical transition was not captured. [Anonymized association and lease history](../tests/wifi-association-history.py)
