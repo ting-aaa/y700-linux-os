@@ -42,3 +42,6 @@
 
 唤醒后，内屏仍启用 1600 × 2560 模式，USB SSH 可用，Wi-Fi 的 IPv4、IPv6 网关各应答三次。第二次唤醒后连续 20 轮离屏图形校验通过，每轮从 GPU 运行时挂起状态开始。每轮用 GLES 校验 24,576 个像素，用 Vulkan 校验 8,192 个像素。Iris 也在醒后通过 H.264 1920 × 1080 实测，硬解的 24 帧与软件参考逐像素一致，解码器随后再次进入运行时挂起。[视频解码核验](VIDEO-CODEC-BOARD.md)
 随后在同一次正式启动上运行 306 秒混合图形循环。360 轮均从 Adreno 运行时挂起状态开始；每轮先用 FD730 在三个 GLES 上下文绘制并验证 12 帧，再用 Turnip 完成四次渲染及传输。360 轮 GLES 和 360 轮 Vulkan 的数据全部吻合，日志中未检出所检查的 GPU、GMU 或显示超时与故障。每轮之间有短暂停顿，持续满负荷、长时间游戏和浏览器有各自的验收范围。电脑上 `out/dev12.11-verified/mixed-five-minutes.log` 保存汇总，同目录的 `mixed-five-minutes-detail.log` 保存每次渲染的 GPU 计数与回读结果。
+## Chromium WebGL 2
+
+在同一台平板的 dev12.11 上，以桌面账户启动发行版内的 Chromium 156，使用全新的临时配置和本地测试页。默认浏览器入口带有 `--disable-gpu`，返回 SwiftShader。单独选择 ANGLE/Vulkan 和 Turnip 后，WebGL 2 报告 Adreno 730，60 帧的像素采样全部正确，浏览器 GPU 子进程出现已完成的 MSM 工作计数。测量期间渲染进程沙箱生效。此轮使用无窗口模式；日常启动器仍默认使用软件渲染。两轮之后系统失败单元和本轮检查的内核图形错误计数均为零。[测试说明](../tests/chromium-gpu.md)
