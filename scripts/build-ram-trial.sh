@@ -13,9 +13,12 @@ elif [[ ${1:-} == --dev12.8 ]]; then
 elif [[ ${1:-} == --dev12.9 ]]; then
     root_sha=e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb
     shift
+elif [[ ${1:-} == --dev12.10 ]]; then
+    root_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
+    shift
 fi
 if [[ $# != 2 ]]; then
-    echo "Usage: build-ram-trial.sh [--dev12.6|--dev12.8|--dev12.9] IMAGES NEW_DIRECTORY" >&2
+    echo "Usage: build-ram-trial.sh [--dev12.6|--dev12.8|--dev12.9|--dev12.10] IMAGES NEW_DIRECTORY" >&2
     exit 2
 fi
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)

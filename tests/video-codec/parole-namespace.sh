@@ -7,7 +7,7 @@ stage=$PWD
 helper=$(realpath -e "$2")
 source ./profiles.sh
 ram_profile "$3"
-[[ ($release == dev12.8 || $release == dev12.9) && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
+[[ ($release == dev12.8 || $release == dev12.9 || $release == dev12.10) && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
 for ns in mnt pid net ipc; do [[ $(readlink "/proc/self/ns/$ns") != "$(cat "host-$ns")" ]]; done
 mapfile -t nodes < <(grep -lFx qcom-iris-decoder /sys/class/video4linux/video*/name)
 [[ ${#nodes[@]} == 1 && $(cat /sys/bus/platform/devices/aa00000.video-codec/power/runtime_status) == suspended ]]
@@ -43,7 +43,7 @@ if [[ -f save-player-trace ]]; then touch root/qa/save-player-trace; fi
 install -m644 h264.mp4 hevc.mp4 vp9.webm root/qa/clips/
 chroot root dbus-uuidgen >root/etc/machine-id
 player_env=()
-if [[ $release == dev12.9 ]]; then
+if [[ $release == dev12.9 || $release == dev12.10 ]]; then
     [[ ! -e player.tgz ]]
     chroot root dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
         sed -n 's/^installed\t//p' | sort > inventory
@@ -52,7 +52,16 @@ if [[ $release == dev12.9 ]]; then
     chroot root dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n' |
         cmp - lower/var/lib/y700/build/packages.tsv
     echo "PLAYER_PREINSTALLED edition=$release packages=$package_count package_sha=$package_sha"
-    if [[ -f plugin.so ]]; then
+    if [[ $release == dev12.10 ]]; then
+        [[ ! -e plugin.so && ! -e upgrade.tgz ]]
+        (cd lower && sha256sum --strict -c <<'HASHES'
+76cb6ec197596e29ee5a720160b0b1683c38864b80f10dec6759a8fa5a49f2cb  usr/bin/parole
+a64bdb5bf9e4454f371638cf17c2564c3cbe3a3bc379ba5151de3c689f4a69f0  usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
+844986bb49db504a7e5611af2496b4f80f85af74fdc6ce068f0d259fa9c1c93f  usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideo4linux2.so
+HASHES
+        )
+        touch root/qa/single-seek
+    elif [[ -f plugin.so ]]; then
         target=/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
         echo "7c3e57f206c81fa0af09a3cf34d9836a686527212c7738dc4657d6c315ec9962  root$target" | sha256sum -c --status
         install -m644 plugin.so "root$target"
@@ -71,7 +80,9 @@ else
     if ! chroot root bash "$installer" --install >install.log 2>&1; then tail -25 install.log; exit 1; fi
     grep -E 'Preflight passed|Installed 1240 packages' install.log
 fi
-[[ $(chroot root dpkg-query -W -f='${Version}' parole) == 4.18.2-1 ]]
+baseline_version=4.18.2-1
+if [[ $release == dev12.10 ]]; then baseline_version+=+y7002; fi
+[[ $(chroot root dpkg-query -W -f='${Version}' parole) == "$baseline_version" ]]
 if [[ -f upgrade.tgz ]]; then
     [[ $release == dev12.9 && ! -e plugin.so ]]
     tar --no-same-owner -xzf upgrade.tgz -C root/run
@@ -118,7 +129,7 @@ if grep -Ei '(iris|vpu|video-codec|iommu|arm-smmu).*(fatal|retained|fault|watchd
     exit 1
 fi
 [[ $player_rc == 0 ]] || exit "$player_rc"
-if [[ -f upgrade.tgz && -f parole-transport.py ]]; then
+if [[ (-f upgrade.tgz || $release == dev12.10) && -f parole-transport.py ]]; then
     expected=3
     if [[ -f transport-codec ]]; then expected=1; fi
     awk -v expected="$expected" '

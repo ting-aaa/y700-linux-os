@@ -153,7 +153,7 @@ def touch_only(work, logs, guest):
                 # console carries the guest's post-resume verdict.
                 wait_for_marker(logs / "serial.log", guest, "RAM_TRIAL_PASS", 240)
             else:
-                checks_ambient = os.getenv("RAM_TRIAL_VERSION") in ("dev12.8", "dev12.9")
+                checks_ambient = os.getenv("RAM_TRIAL_VERSION") in ("dev12.8", "dev12.9", "dev12.10")
                 wait_for_marker(report, guest, "RAM_TRIAL_PASS", 120 if checks_ambient else 30)
 
 
@@ -165,11 +165,14 @@ def verify(logs, expected_bytes):
         "dev12.6": (1115, "a5f46346523f60efb2545e290d209372daa983b094e42c37e7ced2cdb97b3d98"),
         "dev12.8": (1124, "a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84"),
         "dev12.9": (1240, "89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d"),
+        "dev12.10": (1240, "ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3"),
     }
     count, digest = inventories[release]
     packages = [line for line in lines if line.startswith("RAM_TRIAL_PACKAGES ")]
     if packages != [f"RAM_TRIAL_PACKAGES count={count} digest={digest} account=locked"]:
         raise RuntimeError(f"Guest inventory or first-login account state differs from sealed {release}")
+    if release == "dev12.10" and "COMBINED_MEDIA_UPDATE edition=dev12.10 parole=4.18.2-1+y7002 package_files=verified" not in lines:
+        raise RuntimeError("Missing verification of the preinstalled dev12.10 Parole package")
     origin = "kexec" if os.getenv("RAM_TRIAL_KEXEC") == "1" else "direct"
     if [line for line in lines if line.startswith("RAM_TRIAL_BOOT_ORIGIN=")] != [f"RAM_TRIAL_BOOT_ORIGIN={origin}"]:
         raise RuntimeError("The live DT reports a different kernel boot origin")
@@ -177,7 +180,7 @@ def verify(logs, expected_bytes):
         raise RuntimeError("Missing the RAM-only swap witness")
     if release != "dev12.5" and "RAM_TRIAL_SWAP zram=0 disk_backed=0" not in lines:
         raise RuntimeError(f"Expected the {release} trial to run without active swap")
-    if release in ("dev12.8", "dev12.9") and "RAM_TRIAL_DESKTOP fresh=1 canary=upper-only ambient_client=ordinary auto_brightness=false" not in lines:
+    if release in ("dev12.8", "dev12.9", "dev12.10") and "RAM_TRIAL_DESKTOP fresh=1 canary=upper-only ambient_client=ordinary auto_brightness=false" not in lines:
         raise RuntimeError(f"Missing the {release} volatile desktop witness")
     if "RAM_TRIAL_TOPOLOGY root=overlay carrier=squashfs_ro lower=ext4_ro upper=tmpfs external_disks=0 boot_mount=0 write_confined=1" not in lines:
         raise RuntimeError("Missing the diskless RAM root topology witness")

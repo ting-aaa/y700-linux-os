@@ -40,7 +40,7 @@ install -d -m755 root/qa/{bin,lib}
 install -m755 "$helper/bin/"{Xvfb,xdotool} root/qa/bin/
 install -m644 "$helper/lib/aarch64-linux-gnu/libxdo.so.3" root/qa/lib/
 install -m644 desktop.sh thunar.sh root/qa/
-if [[ $release == dev12.8 || $release == dev12.9 ]]; then
+if [[ $release == dev12.8 || $release == dev12.9 || $release == dev12.10 ]]; then
     install -m755 "$(command -v uv)" root/qa/bin/uv
     install -m644 brightness.py probe.py root/qa/
 fi

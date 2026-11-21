@@ -30,13 +30,14 @@ source "$ramtests/profiles.sh"
 initrd_sha=$(sha256sum "$bundle/initrd" | cut -d' ' -f1)
 ram_profile "$initrd_sha"
 if [[ $3 == --preinstalled ]]; then
-    [[ $release == dev12.9 ]]
+    [[ $release == dev12.9 || $release == dev12.10 ]]
 else
     [[ $release == dev12.8 && ${PAROLE_BUNDLE_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
     player=$(realpath -e "$3")
     printf '%s  %s\n' "$PAROLE_BUNDLE_SHA256" "$player" | sha256sum -c --strict --status -
 fi
 if [[ $# == 6 ]]; then
+    [[ $release != dev12.10 ]]
     plugin=$(realpath -e "$6")
     [[ ${IRIS_V4L2_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
     printf '%s  %s\n' "$IRIS_V4L2_SHA256" "$plugin" | sha256sum -c --strict --status -
