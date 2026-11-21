@@ -9,6 +9,7 @@ images=$(realpath -e -- "$1")
 full=$(realpath -e -- "$2")
 dest=$(realpath -m -- "$3")
 [[ ! -e $dest && ! -L $dest ]]
+source "$repo/scripts/build-storage-guard.sh" receiver "${dest%/*}"
 work=$(mktemp -d -- "$(dirname -- "$dest")/.y700-ram-receive.XXXXXXXX")
 trap 'rm -r -- "$work"' EXIT
 out=$work/bundle

@@ -36,6 +36,7 @@ repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 images=$(realpath -e -- "$1")
 [[ -d $images && ! -e $2 && ! -L $2 ]]
 dest=$(realpath -m -- "$2")
+source "$repo/scripts/build-storage-guard.sh" ram "${dest%/*}"
 epoch=1795150416
 for input in root.ext4 linux-boot.fat; do
     [[ -f $images/$input && ! -L $images/$input ]]
