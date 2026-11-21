@@ -2,7 +2,7 @@
 # Apply one locked layer to a copy of its sealed generic predecessor.
 set -euo pipefail
 if (( EUID != 0 || $# != 4 )); then
-    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update|camera-autofocus|platform-desktop-update SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
+    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update|camera-autofocus|platform-desktop-update|tablet-desktop SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
     exit 2
 fi
 if [[ ${Y700_POWER_PRIVATE:-} != 1 ]]; then
@@ -64,8 +64,17 @@ case $layer in
         prior_args=()
         lock_args=(--platform-version '0.1.0~dev12.8+gpu1.2')
         ;;
+    tablet-desktop)
+        parent_sha=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
+        prior_inventory=ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047
+        inventory_sha=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+        prior_args=(--platform-version '0.1.0~dev12.8+gpu1.2')
+        lock_args=("${prior_args[@]}")
+        ;;
     *) echo "Unsupported image layer: $layer" >&2; exit 2 ;;
 esac
+deb_layer=false
+case $layer in camera-autofocus|platform-desktop-update|tablet-desktop) deb_layer=true ;; esac
 [[ $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
 umask 077
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -105,7 +114,7 @@ if [[ -n $prior_inventory ]]; then
     mount -t devpts -o newinstance,ptmxmode=0666 devpts "$root/dev/pts"
     ln -s pts/ptmx "$root/dev/ptmx"
     mknod -m666 "$root/dev/tty" c 5 0
-    if [[ $layer != camera-autofocus && $layer != platform-desktop-update ]]; then
+    if ! "$deb_layer"; then
         cp -- "$archives" "$stage/layer.tar"
         [[ $(stat -c %s "$stage/layer.tar") == "$(jq -er .size "$lock")" ]]
         echo "$(jq -er .sha256 "$lock")  $stage/layer.tar" | sha256sum --strict -c -
@@ -124,7 +133,7 @@ if [[ -n $prior_inventory ]]; then
         cmp "$stage/y700-player-update/stock/libgstvideo4linux2.so" "$root/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so"
         install_command=(bash /run/media-build/y700-player-update/install.sh install)
         verify_command=(bash /run/media-build/y700-player-update/install.sh verify)
-    elif [[ $layer == camera-autofocus || $layer == platform-desktop-update ]]; then
+    elif "$deb_layer"; then
         [[ -d $archives && ! -e $record/$layer.lock.json ]]
         [[ $(jq -er .parent_root_sha256 "$lock") == "$parent_sha" ]]
         if [[ $layer == platform-desktop-update ]]; then
@@ -144,6 +153,8 @@ if [[ -n $prior_inventory ]]; then
         done < <(jq -r '.packages[] | [.package,.version,.architecture,.size,.sha256] | @tsv' "$lock")
         if [[ $layer == camera-autofocus ]]; then
             [[ ${#install_command[@]} == 5 ]]
+        elif [[ $layer == tablet-desktop ]]; then
+            [[ ${#install_command[@]} == 6 && ! -e $root/etc/xdg/autostart/ibus.desktop && ! -L $root/etc/xdg/autostart/ibus.desktop ]]
         else
             [[ ${#install_command[@]} == 3 && ${verify_command[2]} == y700-platform ]]
             dpkg-deb -x "$stage/$deb" "$stage/payload"
@@ -170,8 +181,9 @@ if [[ -n $prior_inventory ]]; then
     run=(chroot "$root" env TMPDIR=/run SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive)
     # Debian maintainer scripts expect the normal system umask.
     (umask 022; "${run[@]}" "${install_command[@]}") | tee "$w/result/install.log"
-    if [[ $layer == wifi-sae-update || $layer == camera-autofocus || $layer == platform-desktop-update ]]; then
+    if [[ $layer == wifi-sae-update ]] || "$deb_layer"; then
         verify_log=wifi-package-verify.log
+        if [[ $layer == tablet-desktop ]]; then verify_log=desktop-apps-verify.log; fi
         if [[ $layer == camera-autofocus ]]; then verify_log=camera-package-verify.log; fi
         if [[ $layer == platform-desktop-update ]]; then
             verify_log=platform-package-verify.log
@@ -193,12 +205,16 @@ if [[ -n $prior_inventory ]]; then
         install -m644 "$root/usr/lib/os-release" "$root/etc/os-release"
         printf '%s\n' 'IMAGE_ID=y700-prc-debian' 'IMAGE_VERSION=dev12.11' \
             'VARIANT="Lenovo Legion Y700 (2023) Xfce"' 'VARIANT_ID=y700_xfce' >> "$root/etc/os-release"
+    elif [[ $layer == tablet-desktop ]]; then
+        grep -Fxq IMAGE_VERSION=dev12.12 "$root/etc/os-release"
+        sed -i 's/^IMAGE_VERSION=dev12\.12$/IMAGE_VERSION=dev12.13/' "$root/etc/os-release"
+        [[ $(blkid -p -s UUID -o value "$raw") == 171a4adb-916b-4763-9e6f-722b4a99988f ]]
     elif [[ $layer == platform-desktop-update ]]; then
         grep -Fxq IMAGE_VERSION=dev12.11 "$root/etc/os-release"
         sed -i 's/^IMAGE_VERSION=dev12\.11$/IMAGE_VERSION=dev12.12/' "$root/etc/os-release"
         [[ $(blkid -p -s UUID -o value "$raw") == 171a4adb-916b-4763-9e6f-722b4a99988f ]]
     fi
-    if [[ $layer == camera-autofocus || $layer == platform-desktop-update ]]; then
+    if "$deb_layer"; then
         [[ $(chroot "$root" dpkg-divert --truename /etc/os-release) == /etc/os-release.debian ]]
         [[ $(readlink "$root/etc/systemd/system/graphical.target.wants/y700-firstboot.service") == /etc/systemd/system/y700-firstboot.service ]]
         grep -Fxq 'ConditionPathExists=!/etc/y700/user-configured' "$root/etc/systemd/system/y700-firstboot.service"
@@ -237,6 +253,10 @@ else
     rm -- "$root/.y700-disposable-build-root"
 fi
 chmod 644 "$root/var/lib/y700/build/packages.tsv"
+if [[ $layer == tablet-desktop ]]; then
+    cp "$record/packages.tsv" "$w/result/packages.tsv"
+    cp "$record/$layer.lock.json" "$w/result/$layer.lock.json"
+fi
 "${check[@]}" "${lock_args[@]}" | tee "$w/result/inventory.log"
 grep -Fxq "package_digest=$inventory_sha" "$w/result/inventory.log"
 if [[ $layer == blueman || $layer == platform ]]; then
@@ -253,7 +273,7 @@ done
 for path in "$root"/{etc/y700/maintenance*,etc/y700/bluetooth-address,etc/y700/user-configured,etc/ssh/ssh_host_*,home/y700/.ssh,root/.ssh,var/lib/y700-ssc/registry,var/lib/y700/ssh,var/lib/systemd/random-seed,var/lib/systemd/credential.secret}; do
     [[ ! -e $path && ! -L $path ]]
 done
-if [[ $layer == video-player-update || $layer == wifi-sae-update || $layer == camera-autofocus || $layer == platform-desktop-update ]]; then
+if [[ $layer == video-player-update || $layer == wifi-sae-update ]] || "$deb_layer"; then
     # Inspect the on-disk /run only after removing the installer staging tmpfs.
     umount "$root/run"
     [[ ! -L $root/etc/machine-id && $(readlink "$root/var/lib/dbus/machine-id") == /etc/machine-id ]]
