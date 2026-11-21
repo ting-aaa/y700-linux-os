@@ -46,6 +46,9 @@ if [[ $mode == candidate ]]; then
     echo 'PASS candidate_storage_identity'
     check release_option grep -Fqw y700.release=dev12.10 /proc/cmdline
     check file_option grep -Fqw y700.media=file /proc/cmdline
+    if grep -Fqw y700.recovery=journal /proc/cmdline; then
+        printf 'OBS boot_recovery=journal inner_efi_mode=%s\n' "$(findmnt -nro OPTIONS -M /boot | cut -d, -f1)"
+    fi
     check release_receipt hash_is /var/lib/y700/build/video-player-update.lock.json 39cd516bc47679ba3c7980dc3ed43a43c1bac80e40fba690c85d33d9794fd5eb
     check parole_binary hash_is /usr/bin/parole 76cb6ec197596e29ee5a720160b0b1683c38864b80f10dec6759a8fa5a49f2cb
     check iris_private_plugin hash_is /usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so a64bdb5bf9e4454f371638cf17c2564c3cbe3a3bc379ba5151de3c689f4a69f0
@@ -80,7 +83,13 @@ esp=$(findmnt -nro TARGET -S UUID=B6D4-FA81 | head -1)
 default=outer_esp_unmounted
 if [[ -n $esp && -r $esp/loader/loader.conf ]]; then
     pattern=$(awk 'tolower($1)=="default" {print $2}' "$esp/loader/loader.conf")
-    case $pattern in debian.conf) default=original_debian;; y700-file-12-10.conf) default=dev12.10_installed;; y700-installed-*) default=counted_trial;; *) default=other;; esac
+    case $pattern in
+        debian.conf) default=original_debian ;;
+        y700-file-12-10.conf) default=dev12.10_installed ;;
+        y700-recovery-12-10.conf) default=dev12.10_recovery ;;
+        y700-installed-*) default=counted_trial ;;
+        *) default=other ;;
+    esac
     check original_efi_entry test -s "$esp/loader/entries/debian.conf"
 fi
 echo "OBS outer_efi_default=$default"
