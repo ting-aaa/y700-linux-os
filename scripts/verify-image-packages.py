@@ -101,6 +101,23 @@ if browser_receipt.exists() or browser_receipt.is_symlink():
             or browser_receipt.read_bytes() != source.read_bytes()):
         raise SystemExit('Browser camera desktop requires its sealed receipt and dev12.13 parent')
     browser_lock = json.loads(source.read_bytes())
+native_lock = None
+native_receipt = build / 'native-desktop.lock.json'
+if native_receipt.exists() or native_receipt.is_symlink():
+    source = repo / 'config' / native_receipt.name
+    if (not browser_lock or native_receipt.is_symlink() or not native_receipt.is_file()
+            or native_receipt.read_bytes() != source.read_bytes()):
+        raise SystemExit('USB audio and desktop updates require their sealed receipt and dev12.14 parent')
+    native_lock = json.loads(source.read_bytes())
+    debian = repo / 'config/software-updates-debian.lock.json'
+    if hashlib.sha256(debian.read_bytes()).hexdigest() != native_lock['debian_lock_sha256']:
+        raise SystemExit('Debian updater input manifest differs from the sealed receipt')
+    signed = json.loads(debian.read_bytes())['packages']
+    pinned = {package_tuple(p): p for p in native_lock['packages']}
+    for p in signed:
+        release = pinned.get(package_tuple(p), {})
+        if (release.get('sha256'), release.get('size')) != (p['sha256'], p['size']):
+            raise SystemExit('Debian updater package differs from the signed manifest')
 if args.sealed_dev12_5:
     version = '0.1.0~dev12.5'
 elif (args.sealed_blueman_y7001 and not args.platform_version
@@ -207,6 +224,8 @@ if af_receipt.exists() or af_receipt.is_symlink():
         image_version = apps_lock['edition']
     if browser_lock:
         image_version = browser_lock['edition']
+    if native_lock:
+        image_version = native_lock['edition']
     edition = (f'IMAGE_ID=y700-prc-debian\nIMAGE_VERSION={image_version}\n'.encode() +
                b'VARIANT="Lenovo Legion Y700 (2023) Xfce"\nVARIANT_ID=y700_xfce\n')
     if (not original.is_symlink() or str(original.readlink()) != '../usr/lib/os-release'
@@ -223,7 +242,7 @@ if desktop_lock:
         file = args.root / name
         if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise SystemExit(f'Desktop platform file differs from the release: {name}')
-for app_layer in (apps_lock, browser_lock):
+for app_layer in (apps_lock, browser_lock, native_lock):
     if not app_layer:
         continue
     for original in replacements(app_layer):
@@ -277,6 +296,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
             ledger_digest = apps_lock['arm64_ledger_sha256']
         if browser_lock:
             ledger_digest = browser_lock['arm64_ledger_sha256']
+        if native_lock:
+            ledger_digest = native_lock['arm64_ledger_sha256']
         if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
             raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
         update = json.loads(update_lock.read_text())
@@ -295,7 +316,7 @@ if wanted != actual:
     raise SystemExit(f'Package mismatch: missing={sorted(wanted-actual)} extra={sorted(actual-wanted)}')
 records = ''.join('\t'.join(record) + '\n' for record in sorted(actual))
 digest = hashlib.sha256(records.encode()).hexdigest()
-final_desktop_lock = browser_lock or apps_lock or desktop_lock
+final_desktop_lock = native_lock or browser_lock or apps_lock or desktop_lock
 if final_desktop_lock and digest != final_desktop_lock['package_digest']:
     raise SystemExit('Desktop platform package inventory differs from the sealed release')
 print(f'package_count={len(actual)}')

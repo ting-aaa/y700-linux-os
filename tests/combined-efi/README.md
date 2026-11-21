@@ -45,6 +45,7 @@ For dev12.12, set `MEDIA_EDITION=dev12.12` and supply its unpacked root and EFI 
 For dev12.13, set `MEDIA_EDITION=dev12.13`, `COLD_BOOT=1` and use the root and EFI from the dev12.13 archive. The observer verifies all 1,241 package tuples and the desktop update receipt. After each login it locates the XDG-autostarted Quick Settings process on the enrolled user's session bus and checks its embedded X11 tray icon. The host touches the icon, switches auto-rotate on and off, and closes the panel. Both runs require the same process to survive closing the panel. The guest also exercises the inherited settings, qcam chooser and playback checks. [Release measurements](../../docs/DEV12.13-VERIFICATION.md)
 
 For dev12.14 use `MEDIA_EDITION=dev12.14` with the reconstructed root and EFI.
+For dev12.15 use `MEDIA_EDITION=dev12.15` with the reconstructed root and EFI. The observer also checks the native desktop receipt, USB audio and graphical updater packages, and the full 1,248-package inventory.
 The observer verifies the browser-camera package receipt and the new tuple digest.
 After touch enrollment and PAM login it launches the installed Chromium desktop
 browser using that ordinary user's Xfce environment and checks a sandboxed

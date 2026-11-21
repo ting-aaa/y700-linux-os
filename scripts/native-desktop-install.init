@@ -1,0 +1,58 @@
+#!/bin/busybox sh
+# Private initramfs of the offline image builder. The sole disk is its writable image copy.
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+finish() {
+    rc=$?
+    echo "Y700_NATIVE_INSTALL_EXIT=$rc"
+    sync
+    poweroff -f
+}
+trap finish EXIT
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+test "$(cat /sys/block/vda/ro)" = 0 && test ! -e /sys/block/vdb
+mount -t ext4 /dev/vda /guest
+for part in dev proc sys; do mount --bind "/$part" "/guest/$part"; done
+mount -t tmpfs tmpfs /guest/run
+mkdir /guest/run/native-build
+mount --bind /packages /guest/run/native-build
+mount -o remount,bind,ro /guest/run/native-build
+chroot /guest /usr/bin/env PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive SYSTEMD_OFFLINE=1 \
+    /bin/bash -seu <<'INSTALL'
+set -o pipefail
+export LC_ALL=C
+cd /run/native-build
+umask 022
+test "$(dpkg --print-architecture)" = arm64
+test "$(uname -r)" = 7.3.4-asphalt-prc
+test "$(sha256sum /sys/kernel/notes | cut -d' ' -f1)" = c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+echo 'Y700_NATIVE_KERNEL notes=primary machine=aarch64'
+grep -Fxq IMAGE_VERSION=dev12.14 /etc/os-release
+test "$(dpkg-query -W -f='${Version}' y700-camera-pipewire)" = 1.4.2-1+y700.5
+test ! -e /usr/sbin/policy-rc.d && test ! -L /usr/sbin/policy-rc.d
+printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+chmod 755 /usr/sbin/policy-rc.d
+trap 'rm -f /usr/sbin/policy-rc.d' EXIT
+sha256sum --strict -c DEBS.sha256
+dpkg --install ./*.deb
+apt-get check
+test -z "$(dpkg --audit)"
+for deb in ./*.deb; do
+    name=$(dpkg-deb -f "$deb" Package)
+    test "$(dpkg-query -W -f='${db:Status-Status}' "$name")" = installed
+    test -z "$(dpkg -V "$name")"
+done
+test "$(modinfo -n snd_usb_audio)" = /lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-usb-audio.ko.zst ||
+    test "$(modinfo -n snd_usb_audio)" = /usr/lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-usb-audio.ko.zst
+modprobe --show-depends snd_usb_audio | grep -F 'snd-usb-audio.ko.zst'
+install -m644 native-desktop.lock.json /var/lib/y700/build
+sed -i 's/^IMAGE_VERSION=dev12\.14$/IMAGE_VERSION=dev12.15/' /etc/os-release
+dpkg-query -W '-f=${binary:Package}\t${Version}\t${Architecture}\n' > /var/lib/y700/build/packages.tsv
+echo 'Y700_NATIVE_PACKAGES installed=7 dpkg_audit=clean dependencies=ok'
+INSTALL
+umount /guest/run/native-build /guest/run
+for part in sys proc dev; do umount "/guest/$part"; done
+umount /guest

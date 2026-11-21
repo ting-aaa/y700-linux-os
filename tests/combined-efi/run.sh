@@ -21,7 +21,7 @@ media=${MEDIA_DESKTOP:-0}
 [[ $media == 0 || ( $media == 1 && $blueman == 1 ) ]]
 if (( media )); then
     media_edition=${MEDIA_EDITION:-dev12.9}
-    case "$media_edition" in dev12.9|dev12.10|dev12.11|dev12.12|dev12.13|dev12.14) ;; *) exit 2 ;; esac
+    case "$media_edition" in dev12.9|dev12.10|dev12.11|dev12.12|dev12.13|dev12.14|dev12.15) ;; *) exit 2 ;; esac
     media_revision=${media_edition##*.}
     clip=$(realpath -e "${MEDIA_CLIP:?Provide the 24-second synthetic H.264 colour-pair MP4}")
     media_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the media witness}")
@@ -115,6 +115,9 @@ if (( media )); then
     fi
     if (( media_revision >= 14 )); then
         mcopy -i test-esp.fat "$here/../../config/browser-camera-desktop.lock.json" ::/
+    fi
+    if (( media_revision >= 15 )); then
+        mcopy -i test-esp.fat "$here/../../config/native-desktop.lock.json" ::/
     fi
     mcopy -i test-esp.fat "$clip" ::/media-clip.mp4
     mcopy -i test-esp.fat "$here/media-session.py" ::/media-session.py
@@ -231,6 +234,7 @@ if (( media )); then
             grep -Fxq 'COMBINED_QUICK autostart=1 controls=4 rotation_touch=on,off closed=1' "$report"
         fi
         if (( media_revision >= 14 )); then grep -Fxq 'COMBINED_BROWSER_CAMERA version=.5 ordinary=1 renderer=1' "$report"; fi
+        if (( media_revision >= 15 )); then grep -Fxq 'COMBINED_NATIVE_DESKTOP updates=0.1.0 usb_audio=7.3.4-1 files=verified' "$report"; fi
     done
 fi
 sha256sum --strict -c "$manifest" | tee "$out/after.log"

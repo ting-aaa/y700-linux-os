@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "edition": "dev12.15",
+  "parent_root_sha256": "32896d21a07a1c9529db3d007df788bb8ddcf4e5b6b0782527737ac7af1a3259",
+  "package_digest": "8a4aced66e2947b07082c4b9988358f01673d617ab642bf1152e1ea275b69646",
+  "arm64_ledger_sha256": "3caad1e7069f76ba4ceecb7cab46518d2649508b6c1159abb0babaaad4ad51d0",
+  "debian_lock_sha256": "6e8da5c0ab8c59c7a10253020660109fb5e4ddfb13bc6f7d90539fda27ef6c4b",
+  "packages": [
+    {
+      "package": "gir1.2-packagekitglib-1.0",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 27080,
+      "sha256": "378041bae6ed8ca97c3e7ba77465d02f977e24e1f61594e9f4691eb403b8eb00"
+    },
+    {
+      "package": "gnome-package-updater",
+      "version": "43.0-4",
+      "architecture": "arm64",
+      "size": 60176,
+      "sha256": "22133c8d6557bde95c38dabf5d947b616ef398fa9d6f59181c12eac6a2cef345"
+    },
+    {
+      "package": "gnome-packagekit-common",
+      "version": "43.0-4",
+      "architecture": "all",
+      "size": 900544,
+      "sha256": "b7a8e1b5bfb032e24f8e83a005af9edafd2d108daa3f9894fde0c366f5dce6d0"
+    },
+    {
+      "package": "libpackagekit-glib2-18",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 105152,
+      "sha256": "38edb33fc56cdfb8a1eb5db52eee0410514217d024f4073bb3906cd030c93b7f"
+    },
+    {
+      "package": "packagekit",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 628088,
+      "sha256": "91bbd203d2b713e634507b7a160595db5323a519fe338ccf61d80e3dd43934e2"
+    },
+    {
+      "package": "y700-software-updates",
+      "version": "0.1.0",
+      "architecture": "all",
+      "size": 3262,
+      "sha256": "547ea83736f209c8175e30047eed1a57e8afbe481115e0bf3d166017c2d3b2ae"
+    },
+    {
+      "package": "y700-usb-audio-modules",
+      "version": "7.3.4-1",
+      "architecture": "arm64",
+      "size": 211648,
+      "sha256": "87450f08290edab544d0ac104f4b5475cc17212bb8a1d6342b711bb60c03ab8d"
+    }
+  ],
+  "files": {
+    "usr/bin/gpk-update-viewer": "56b89bd45636b70be82e93a020f9e46c5e745d89190b7c4d37fb72441459ba6c",
+    "usr/bin/y700-software-updates": "73b36f2ee59bdb2bc2962b42c80a6c28cc7eb60260672b1f8c2a71a18b63db33",
+    "usr/lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-hwdep.ko.zst": "451e67582c1699cc17764ceb7e6cc3aefef2e4bc4fa4325b1e40e09c4ef942e4",
+    "usr/lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-rawmidi.ko.zst": "7ee55ffecc48f398284a0d8cbf87e484923bf780dd23d9f68b6ed3af7a61b8f8",
+    "usr/lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-usb-audio.ko.zst": "ac80f77c15aeb59efa997990140a0cddf35331b946b573872b12f5d55681d75c",
+    "usr/lib/modules/7.3.4-asphalt-prc/updates/y700-usb-audio-modules/snd-usbmidi-lib.ko.zst": "6abab9e4f66987408700e63033a722ae55b91edff922a6b97c36c015a09d8d36",
+    "usr/libexec/packagekitd": "e39e0ca1fc8bc00997c44adc87744335dcee52bab8648e71f934398bbe8d7d35",
+    "usr/share/applications/y700-software-updates.desktop": "cb07ae84e98655f69e37d6f7822bb88f4d491293b074b6c71b2b23cd92fb3edd",
+    "usr/share/doc/y700-software-updates/copyright": "c4242ed753277ae1d9e3aea374b70c9c8f25ceb3798b2f2f62beeb6798bbe8e7",
+    "usr/share/doc/y700-usb-audio-modules/copyright": "c5d43c5a1e1c62952f9fc04d4582457239c7f6f4e83ea5b50b31c60ff23882ba"
+  },
+  "file_modes": {
+    "usr/bin/gpk-update-viewer": "0755",
+    "usr/bin/y700-software-updates": "0755",
+    "usr/libexec/packagekitd": "0755"
+  },
+  "links": {}
+}

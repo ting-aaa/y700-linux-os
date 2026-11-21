@@ -106,10 +106,21 @@ if [[ $1 == setup ]]; then
                 count=1241
                 expected=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
                 if [[ -f /boot/browser-camera-desktop.lock.json ]]; then
-                    grep -Fxq IMAGE_VERSION=dev12.14 /etc/os-release
                     cmp /boot/browser-camera-desktop.lock.json /var/lib/y700/build/browser-camera-desktop.lock.json
                     [[ $(dpkg-query -W -f='${Version}' y700-camera-pipewire) == 1.4.2-1+y700.5 ]]
                     expected=a652f024df73eb7386043cf11fa3fde1a1eb81a9f78a572c7bce808b0f1979fb
+                    if [[ -f /boot/native-desktop.lock.json ]]; then
+                        grep -Fxq IMAGE_VERSION=dev12.15 /etc/os-release
+                        cmp /boot/native-desktop.lock.json /var/lib/y700/build/native-desktop.lock.json
+                        [[ $(dpkg-query -W -f='${Version}' y700-software-updates) == 0.1.0 ]]
+                        [[ $(dpkg-query -W -f='${Version}' y700-usb-audio-modules) == 7.3.4-1 ]]
+                        [[ -z $(dpkg -V y700-software-updates y700-usb-audio-modules packagekit gnome-package-updater) ]]
+                        count=1248
+                        expected=8a4aced66e2947b07082c4b9988358f01673d617ab642bf1152e1ea275b69646
+                        echo 'COMBINED_NATIVE_DESKTOP updates=0.1.0 usb_audio=7.3.4-1 files=verified'
+                    else
+                        grep -Fxq IMAGE_VERSION=dev12.14 /etc/os-release
+                    fi
                 else
                     grep -Fxq IMAGE_VERSION=dev12.13 /etc/os-release
                 fi
