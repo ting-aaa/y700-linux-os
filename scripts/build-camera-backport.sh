@@ -5,8 +5,15 @@ export LC_ALL=C
 umask 022
 
 component=runtime
-if [[ ${1:-} == --qcam ]]; then
+qcam_autofocus=false
+if [[ ${1:-} == --qcam || ${1:-} == --qcam-autofocus ]]; then
     component=qcam
+    if [[ $1 == --qcam-autofocus ]]; then qcam_autofocus=true; fi
+    shift
+fi
+autofocus=0
+if [[ $component == runtime && ${1:-} == --autofocus ]]; then
+    autofocus=1
     shift
 fi
 sdk_output=
@@ -18,7 +25,7 @@ if [[ -n ${CAMERA_SDK_OUTPUT:-} ]]; then
     sdk_output=$(realpath -m -- "$CAMERA_SDK_OUTPUT")
 fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-backport.sh [--qcam] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
+    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
@@ -56,6 +63,14 @@ for file in "$patch_dir/asphalt.patch" "$patch_dir"/000[1-6]-*.patch; do
     patch -p1 --batch --forward -d source < "$file"
 done
 
+if (( autofocus )); then
+    focus=$repo/packaging/camera-autofocus
+    patch -p1 --batch --fuzz=0 -d source < "$focus/simple-focus.patch"
+    install -m644 "$focus"/contrast_scan.{cpp,h} source/src/libcamera/pipeline/simple/
+    export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795257600}
+    export CFLAGS="${CFLAGS:+$CFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
+    export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
+fi
 prefix=/opt/y700-camera
 cam=enabled
 gstreamer=enabled
@@ -64,6 +79,10 @@ tests=true
 if [[ $component == qcam ]]; then
     patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/tablet-photo.patch"
     patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/lens-selector.patch"
+    if $qcam_autofocus; then
+        patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/autofocus-ui.patch"
+        cp "$repo/packaging/camera-qcam"/focus_button.{h,cpp} source/src/apps/qcam/
+    fi
     export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795143600}
     export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
     cam=disabled
@@ -80,6 +99,7 @@ meson setup obj source --prefix="$prefix" --libdir=lib \
 
 runtime_package=y700-camera-runtime
 runtime_version=0.7.2-1~bpo13+1.y7001
+if (( autofocus )); then runtime_version=0.7.2-1~bpo13+1.y7002; fi
 version=$runtime_version
 package=$runtime_package
 extra_dependencies=
@@ -89,6 +109,10 @@ if [[ $component == qcam ]]; then
     package=y700-camera-qcam
     version=0.7.2-1~bpo13+1.y7004
     extra_dependencies="$runtime_package (= $runtime_version), "
+    if $qcam_autofocus; then
+        version=0.7.2-1~bpo13+1.y7005
+        extra_dependencies="$runtime_package (= 0.7.2-1~bpo13+1.y7001) | $runtime_package (= 0.7.2-1~bpo13+1.y7002), "
+    fi
     summary='Qt desktop camera app for the Lenovo TB320FC'
     details=' Saves photos from the Qt viewfinder using the Y700 camera runtime and CPU software ISP.'
 fi
@@ -101,7 +125,15 @@ if [[ $component == qcam ]]; then
     install -Dm644 "$repo/packaging/camera-qcam/org.y700.Camera.desktop" "$stage/usr/share/applications/org.y700.Camera.desktop"
     library_paths=(-l"$build/obj/src/libcamera" -l"$build/obj/src/libcamera/base")
 else
-    meson compile -C obj -j "$jobs"
+    if (( autofocus )); then
+        # The enabled test suite also selects vimc. Install both IPA workers
+        # and build the geometry regression without compiling every device test.
+        ninja -C obj -j "$jobs" src/apps/cam/cam src/gstreamer/libgstlibcamera.so \
+            src/ipa/{simple/ipa_soft_simple,vimc/ipa_vimc}.so \
+            src/libcamera/proxy/worker/{soft,vimc}_ipa_proxy test/debayer-geometry
+    else
+        meson compile -C obj -j "$jobs"
+    fi
     meson test -C obj --no-rebuild --print-errorlogs debayer-geometry
     DESTDIR="$build/$stage" meson install -C obj --no-rebuild
     if [[ -n $sdk_output ]]; then

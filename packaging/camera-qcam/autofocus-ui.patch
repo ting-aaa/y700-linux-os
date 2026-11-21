@@ -1,0 +1,84 @@
+--- a/src/apps/qcam/main_window.h
++++ b/src/apps/qcam/main_window.h
+@@ -35,6 +35,7 @@
+ class QAction;
+ 
+ class CameraSelectorDialog;
++class FocusButton;
+ class Image;
+ class HotplugEvent;
+ 
+@@ -95,6 +96,7 @@
+ 	QAction *startStopAction_;
+ 	QPushButton *cameraSelectButton_;
+ 	QPushButton *shutter_;
++	FocusButton *focus_;
+ 	QThreadPool photoWorkers_;
+ 	bool savingPhoto_ = false;
+ 	QAction *saveRaw_;
+--- a/src/apps/qcam/main_window.cpp
++++ b/src/apps/qcam/main_window.cpp
+@@ -33,6 +33,7 @@
+ #include "../common/image.h"
+ 
+ #include "cam_select_dialog.h"
++#include "focus_button.h"
+ #include "photo_store.h"
+ #ifndef QT_NO_OPENGL
+ #include "viewfinder_gl.h"
+@@ -190,6 +191,9 @@
+ 	shutter_->setEnabled(false);
+ 	connect(shutter_, &QPushButton::clicked, this, &MainWindow::takePhoto);
+ 	statusBar()->setSizeGripEnabled(false);
++	focus_ = new FocusButton(statusBar());
++	statusBar()->addPermanentWidget(focus_);
++	focus_->stop();
+ 	statusBar()->addPermanentWidget(shutter_);
+ 
+ 	/* Quit action. */
+@@ -540,6 +544,7 @@
+ 	}
+ 
+ 	isCapturing_ = true;
++	focus_->start(camera_->controls());
+ 
+ 	return 0;
+ 
+@@ -571,6 +576,7 @@
+ 		return;
+ 
+ 	viewfinder_->stop();
++	focus_->stop();
+ 	shutter_->setEnabled(false);
+ 	if (saveRaw_)
+ 		saveRaw_->setEnabled(false);
+@@ -755,6 +761,8 @@
+ 		request = doneQueue_.dequeue();
+ 	}
+ 
++	focus_->completed(request->controls(), request->metadata());
++
+ 	/* Process buffers. */
+ 	if (request->buffers().count(vfStream_))
+ 		processViewfinder(request->buffers().at(vfStream_));
+@@ -826,5 +834,9 @@
+ 
+ int MainWindow::queueRequest(Request *request)
+ {
+-	return camera_->queueRequest(request);
++	focus_->prepare(request->controls());
++	int ret = camera_->queueRequest(request);
++	if (ret < 0)
++		focus_->queueFailed(request->controls());
++	return ret;
+ }
+--- a/src/apps/qcam/meson.build
++++ b/src/apps/qcam/meson.build
+@@ -16,6 +16,7 @@
+ 
+ qcam_sources = files([
+     'cam_select_dialog.cpp',
++    'focus_button.cpp',
+     'format_converter.cpp',
+     'main.cpp',
+     'main_window.cpp',

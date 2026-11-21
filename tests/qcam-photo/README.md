@@ -1,5 +1,7 @@
 # qcam photo QA
 
+With Qt 6 Widgets and the libcamera 0.7.2 development files installed, run `bash tests/qcam-photo/run-focus-button.sh` to exercise the production focus button at 200% scale. The test uses synthetic control lists in an offscreen Qt session. It checks the initial preview, one start or cancel per tap, late frames, focus and error feedback, a camera switch, and the Chinese labels. The three virtual cameras in the shutter test below also exercise the fixed-focus path in the full application.
+
 With the tablet photo patch applied to the libcamera 0.7.2 source, run the store test on Linux with a C++20 compiler, `pkg-config`, Qt6 Core and Gui development packages, and the Qt6 JPEG plugin.
 
 ```sh

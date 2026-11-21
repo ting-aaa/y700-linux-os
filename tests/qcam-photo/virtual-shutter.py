@@ -89,17 +89,18 @@ class CameraWindow:
             raise
 
     def click(self, node):
+        role, name = node.get_role_name(), node.get_name()
         rect = node.get_extents(Atspi.CoordType.SCREEN)
         assert rect.width > 0 and rect.height > 0, (rect.x, rect.y, rect.width, rect.height)
         x = round((rect.x + rect.width / 2) * self.scale)
         y = round((rect.y + rect.height / 2) * self.scale)
         assert 0 <= x < 1600 and 0 <= y < 2560, (x, y)
-        if self.modern or node.get_name() == self.shutter:
-            assert rect.height * self.scale >= 96, (node.get_name(), rect.height, self.scale)
-        if node.get_name() == self.shutter:
+        if self.modern or name == self.shutter:
+            assert rect.height * self.scale >= 96, (name, rect.height, self.scale)
+        if name == self.shutter:
             assert rect.width * self.scale >= 224
         run("xdotool", "mousemove", str(x), str(y), "click", "1")
-        print(f"QCAM_TAP {node.get_role_name()} {node.get_name()!r} x={x} y={y} "
+        print(f"QCAM_TAP {role} {name!r} x={x} y={y} "
               f"height={rect.height * self.scale}", flush=True)
 
     def choose(self, requested, current=None):
@@ -198,6 +199,12 @@ def main(pid, version, app_locale):
             window.find(Atspi.Role.PUSH_BUTTON, ui_label)
         before = log.stat().st_size
         wait_for(lambda: log.read_bytes()[before:].count(b"\nseq:") >= 3, "three live frames")
+        if version.endswith(".y7005"):
+            focus_label = "对焦" if chinese else "Focus"
+            assert not any(node.get_role() == Atspi.Role.PUSH_BUTTON
+                           and node.get_name() == focus_label
+                           and node.get_state_set().contains(Atspi.StateType.SHOWING)
+                           for node in walk(window.app)), "focus button on a fixed-focus source"
         window.click(window.find(Atspi.Role.PUSH_BUTTON, window.shutter))
         photo, = wait_for(lambda: set(pictures.glob("*.jpg")) - captured, "a newly published JPEG")
         check_photo(photo, lens)
