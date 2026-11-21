@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-only
+&cci0_i2c0 {
+	rear_vcm: lens@c {
+		compatible = "lenovo,tb320fc-gt9768";
+		reg = <0x0c>;
+		vaf-supply = <&vreg_bob>;
+	};
+};
+
+&hi1339 {
+	lens-focus = <&rear_vcm>;
+};

@@ -1,0 +1,23 @@
+/ {
+	test_vaf: regulator-lens {
+		compatible = "regulator-fixed";
+		regulator-name = "synthetic-lens";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+	test-bus {
+		compatible = "test,gt9768-adapter";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		camera@20 {
+			compatible = "test,hi1339", "hynix,hi1339";
+			reg = <0x20>;
+			lens-focus = <&actuator>;
+		};
+		actuator: lens@c {
+			compatible = "lenovo,tb320fc-gt9768";
+			reg = <12>;
+			vaf-supply = <&test_vaf>;
+		};
+	};
+};

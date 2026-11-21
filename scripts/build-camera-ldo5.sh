@@ -2,13 +2,16 @@
 # Build the optional CN350 slot-0 sensor supply change against the installed kernel.
 set -euo pipefail
 export LC_ALL=C
-[[ $# == 2 && $EUID == 0 ]] || { echo 'Usage as root: build-camera-ldo5.sh PREPARED_KERNEL NEW_OUTPUT' >&2; exit 2; }
+args=("$@")
+lens=false
+if [[ ${1:-} == --lens ]]; then lens=true; shift; fi
+[[ $# == 2 && $EUID == 0 ]] || { echo 'Usage as root: build-camera-ldo5.sh [--lens] PREPARED_KERNEL NEW_OUTPUT' >&2; exit 2; }
 src=$(realpath -e "$1")
 out=$(realpath -m "$2")
 project=$(cd "$(dirname "$0")/.." && pwd)
 [[ ! -e $out && ! -L $out && $out != "$src" && $out != "$src/"* ]]
 if [[ $(readlink /proc/self/ns/mnt) == "$(readlink /proc/1/ns/mnt)" || $(findmnt -nro PROPAGATION -T /) != private ]]; then
-    exec unshare --mount --propagation private bash "$0" "$src" "$out"
+    exec unshare --mount --propagation private bash "$0" "${args[@]}"
 fi
 dtb=arch/arm64/boot/dts/qcom/sm8475-lenovo-asphalt.dtb
 pins='4e23cb29a382da7d66f4476d72fd8ac3b11960749649875b00cd8453f4aa3bf1  arch/arm64/boot/Image
@@ -31,6 +34,12 @@ mkdir "$scratch"/{upper,work,tree}
 mount -t overlay overlay -o "lowerdir=$src,upperdir=$scratch/upper,workdir=$scratch/work" "$scratch/tree"
 cd "$scratch/tree"
 patch --batch --fuzz=0 -p1 <"$project/tests/camera-focus-ldo5.patch"
+if $lens; then
+    [[ ! -e drivers/media/i2c/asphalt-gt9768.c ]]
+    install -m644 "$project/config/kernel/asphalt-gt9768.c" drivers/media/i2c/
+    echo 'obj-$(CONFIG_VIDEO_ASPHALT_SENSORS) += asphalt-gt9768.o' >> drivers/media/i2c/Makefile
+    cat "$project/config/kernel/asphalt-gt9768.dtsi" >> "${dtb%.dtb}.dts"
+fi
 export KBUILD_BUILD_USER=y700 KBUILD_BUILD_HOST=builder KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP='2026-11-18 00:00:00 UTC'
 make -j"${JOBS:-4}" ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- Image qcom/sm8475-lenovo-asphalt.dtb
@@ -53,6 +62,18 @@ cp "$board/sm8475-lenovo-asphalt.dts" "$scratch/reference.dts"
 independent_dtb "$scratch/reference.dts" "$scratch/reference.dtb"
 cmp "$scratch/reference.dtb" "$src/$dtb"
 printf '\n&{%s} { aux-supply = <&{%s}>; };\n' "$base" "$rail" >>"$scratch/reference.dts"
+if $lens; then
+    cat >>"$scratch/reference.dts" <<'DTS'
+&cci0_i2c0 {
+    expected_actuator: lens@c {
+        compatible = "lenovo,tb320fc-gt9768";
+        reg = <12>;
+        vaf-supply = <&vreg_bob>;
+    };
+};
+&{/soc@0/cci@ac15000/i2c-bus@0/camera@20} { lens-focus = <&expected_actuator>; };
+DTS
+fi
 independent_dtb "$scratch/reference.dts" "$scratch/expected.dtb"
 dtc -q -s -I dtb -O dts "$scratch/expected.dtb" >"$scratch/expected.dts"
 dtc -q -s -I dtb -O dts "$dtb" | cmp - "$scratch/expected.dts"
