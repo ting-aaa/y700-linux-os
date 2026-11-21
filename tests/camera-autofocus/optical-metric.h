@@ -14,6 +14,7 @@ namespace optical {
 constexpr unsigned width = 640, height = 480, groupSize = 8;
 struct Sample {
 	double sharpness = 0, mean = 0, clipped = 0;
+	double exposureUs = 0, gain = 0;
 	std::array<double, 16> tiles{};
 };
 
@@ -60,16 +61,31 @@ inline double sceneChange(const Sample &a, const Sample &b)
 struct Summary {
 	Sample average;
 	double median, drift;
+	double minExposure, maxExposure, minGain, maxGain;
 	bool stable;
 };
+
+inline bool sameExposure(const Summary &a, const Summary &b)
+{
+	const double time = std::min(a.minExposure, b.minExposure);
+	const double gain = std::min(a.minGain, b.minGain);
+	return time > 0 && gain > 0 && std::max(a.maxExposure, b.maxExposure) <= 1.02 * time &&
+	       std::max(a.maxGain, b.maxGain) <= 1.02 * gain;
+}
 
 inline Summary summarize(const Window &frames)
 {
 	Summary out{};
+	out.minExposure = frames.front().exposureUs;
+	out.minGain = frames.front().gain;
 	std::array<double, groupSize> scores{};
 	for (size_t i = 0; i < frames.size(); ++i) {
 		const auto &f = frames[i];
 		scores[i] = f.sharpness;
+		out.minExposure = std::min(out.minExposure, f.exposureUs);
+		out.maxExposure = std::max(out.maxExposure, f.exposureUs);
+		out.minGain = std::min(out.minGain, f.gain);
+		out.maxGain = std::max(out.maxGain, f.gain);
 		out.average.mean += f.mean / frames.size();
 		out.average.clipped += f.clipped / frames.size();
 		for (size_t k = 0; k < f.tiles.size(); ++k)
@@ -78,7 +94,7 @@ inline Summary summarize(const Window &frames)
 	std::sort(scores.begin(), scores.end());
 	out.median = (scores[3] + scores[4]) / 2;
 	out.drift = scores.back() - scores.front();
-	out.stable = out.drift <= std::max(0.006, out.median * .20);
+	out.stable = sameExposure(out, out) && out.drift <= std::max(0.006, out.median * .20);
 	for (const auto &f : frames)
 		out.stable &= f.mean >= 20 && f.mean <= 235 && f.clipped <= .15 &&
 			      std::abs(f.mean - out.average.mean) <= .08 * out.average.mean &&
@@ -90,7 +106,7 @@ inline const char *verdict(const Summary &a, const Summary &b, bool focused)
 {
 	if (!focused)
 		return "af_failed";
-	if (!a.stable || !b.stable || std::abs(a.average.mean - b.average.mean) > .12 * a.average.mean ||
+	if (!a.stable || !b.stable || !sameExposure(a, b) || std::abs(a.average.mean - b.average.mean) > .12 * a.average.mean ||
 	    sceneChange(a.average, b.average) > .08 || b.median < .012)
 		return "inconclusive";
 	const double threshold = std::max({ .006, .15 * a.median, 2 * a.drift, 2 * b.drift });

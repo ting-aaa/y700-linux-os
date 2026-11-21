@@ -2,6 +2,8 @@
 
 On the PRC tablet the [board runner](../camera-lens-graph/measure-board.sh) uses a transient ordinary-user service with a private network and a 70-second limit. Pass `--self-test` to run synthetic cases with camera devices hidden. The separately selected `--rear-af` mode measures a real scene; use it for a consented, attended trial with a suitable target. In both modes the runner checks that the rear sensor has returned to runtime suspend before exiting.
 
+For a USB session, stage the runner as `measure-board.sh` and the executable in a new root-owned `mktemp -d /run/y700-af-optical.XXXXXXXX` on tmpfs. Give the directory and executable ordinary-user traversal and execution permissions. Invoke the staged runner with `--detached-rear-af EXECUTABLE`. It returns the transient service name and a private `receipt.log` path. After the service exits, read the receipt and look for both the terminal result and `AF_CLEANUP`. The log survives a USB disconnect within that boot. A reboot discards it. Both real-camera modes check root mount flags and hold a sleep inhibitor while the measurement runs.
+
 Use a stationary, well-lit, textured target with visible fine edges near the centre of the preview. Keep the tablet and target still throughout the measurement. Each invocation of `--rear-af` opens the rear HI1339 for one 640×480 ABGR8888 viewfinder stream using the packaged CPU ISP. The sole actuator command is the normal libcamera `AfModeAuto` and `AfTriggerStart` pair in one request. The program neither creates a window nor encodes or saves images. The ordinary account running the measurement needs the same camera and dma-buf access as qcam.
 
 ```sh
@@ -13,7 +15,7 @@ timeout -k 3s 70s ./y700-af-measure --rear-af
 
 `--self-test` exercises padded RGB planes, textured and uniform targets, changing light, framing changes, an unstable preview and terminal AF states in memory. It exits before starting a CameraManager. The last line is `AF_RESULT self_test=pass synthetic=1 camera_access=0`. The existing [stream test](stream.cpp) separately runs the production search against a GStreamer stream with simulated lens blur. Run it through [run.sh](run.sh) on an ARM64 build system.
 
-The physical measurement discards 12 warmup frames and aggregates eight idle frames. It waits for scanning and a terminal AF state, then discards three settling frames and aggregates eight more. It accepts at most 400 returned requests and checks a 60-second monotonic capture deadline. The outer timeout also bounds enumeration, start and stop. The timestamps of accepted frames must increase. A busy rear camera, missing controls, bad buffers, interrupted sequence or timeout produces `AF_ERROR` and a nonzero exit.
+The physical measurement discards 24 warmup frames. It compares consecutive, non-overlapping groups of eight idle frames. Both groups must have stable sharpness and lighting. The applied exposure time and analogue gain must each stay within 2% across all 16 frames. The runner withholds the trigger if this baseline is missing by frame 664. After scanning reaches a terminal AF state it discards three settling frames and measures eight more. It accepts at most 944 returned requests within a 60-second monotonic capture deadline. The outer timeout also bounds enumeration, start and stop. Accepted timestamps must increase. A busy rear camera, missing controls, bad buffers, interrupted sequence or timeout produces `AF_ERROR` and a nonzero exit.
 
 | Output | Interpretation |
 | --- | --- |

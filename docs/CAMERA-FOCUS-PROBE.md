@@ -98,6 +98,22 @@ The installed dev12.11 kernel links HI1339 to GT9768 through the V4L2 media grap
 
 Physical qualification covers whether the visible scene gets sharper after an explicit autofocus request and whether the sensor suspends again after the client releases it. The native supply sequence enables LDO5 with reset asserted before MCLK and releases it after stopping MCLK on power-down. [Sensor power patch](../tests/camera-focus-ldo5.patch) · [Single-shot algorithm and synthetic results](../packaging/camera-autofocus/README.md)
 
+### Rear-camera trials on dev12.11, 21 November
+
+On a stationary subject the first normal single-shot trigger yielded 113 scanning frames and a terminal `AfStateFailed`. The sensor then suspended. Preview brightness or coarse framing changed on 101 scanning frames, so the result establishes the reported state but cannot quantify lens travel or sharpness improvement. The complete numerical receipt has SHA-256 `e6b945790a683d7163c338e63306dcfbb24a2486bb6401aa0ff181be98ec9350`.
+
+The next trial waited for two steady eight-frame image windows and triggered after frame 40. Actual sensor metadata between frames 24 and 144 showed a constant 33,280 µs exposure and analogue gain rising from 4.0 to 9.9375. The USB connection dropped and the service exceeded its 70-second limit. The final AF state is unknown. The partial receipt has SHA-256 `809d85624e1e6066bffc3e894664cab4958e2ec0ae2afa872e82765328fb4745`. Both trials computed numbers in RAM. The updated [measurement](../tests/camera-autofocus/optical.md) also waits for stable applied exposure and gain. A synthetic constant-image, rising-gain case verifies this guard.
+
+After USB returned in the same boot the sensor was suspended. The table uses the start of the second camera service as time zero. Kernel call traces showed the Wi-Fi driver in two DMA unmap paths waiting for an ARM SMMU TLB synchronization. Their shared cause and any dependency on the camera power sequence remain open. Device health takes priority over another optical trial. [Qualcomm ARM SMMU driver](https://github.com/torvalds/linux/blob/master/drivers/iommu/arm/arm-smmu/arm-smmu-qcom.c)
+
+| Time after service start | Observation |
+| --- | --- |
+| 12.5 s | The Qualcomm battery manager reported its first property timeout of this boot. |
+| 26.9 s | The ath11k PCI driver reported a Wi-Fi firmware crash (`MHI_CB_EE_RDDM`). |
+| 31.0–37.2 s | RCU stall followed by a watchdog soft lockup. Stack samples included the ath11k copy-engine and monitor-ring paths. |
+| 70.2 s | systemd reached the camera service time limit. The measurement process initially remained present after SIGKILL. |
+| 671.1 s | UFS Hibern8 exit timed out. PHY recalibration and host reset failed, the outer `sdb17` and nested `loop0` ext4 journals aborted and both filesystems switched to emergency read-only. |
+
 ## Reproducing the bounded read
 
 Use the [board probe](../tests/camera-focus-probe.py) in a maintenance shell on the supported tablet. Running it without arguments checks the board, adapter, driver, free lens address and already-enabled supplies. The device node is selected from its firmware path.

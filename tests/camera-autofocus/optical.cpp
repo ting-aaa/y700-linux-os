@@ -90,26 +90,45 @@ struct Trial {
 	Summary before{};
 	unsigned frames = 0, scans = 0, terminalFrames = 0, scanDrift = 0;
 	int terminal = -1;
-	static constexpr unsigned warmup = 12, settle = 3;
+	bool baselineReady = false;
+	static constexpr unsigned warmup = 24, settle = 3, maxPreview = warmup + 80 * groupSize;
+	static constexpr unsigned frameLimit = maxPreview + 280;
 	Action observe(int state, const Sample &value)
 	{
-		require(++frames <= 400, "frame_limit");
-		if (frames <= warmup + groupSize) {
+		require(++frames <= frameLimit, "frame_limit");
+		if (!baselineReady) {
 			require(state == controls::AfStateIdle, "preview_af_not_idle");
-			if (frames > warmup)
-				initial[frames - warmup - 1] = value;
-			if (frames < warmup + groupSize)
+			if (frames <= warmup)
 				return Action::Preview;
-			before = summarize(initial);
-			std::cout << "AF_PREVIEW frames=" << groupSize << " warmup=" << warmup
-				  << " stable=" << before.stable << " sharpness=" << before.median << std::endl;
+			const auto sample = (frames - warmup - 1) % groupSize;
+			initial[sample] = value;
+			if (sample + 1 != groupSize)
+				return Action::Preview;
+			const Summary window = summarize(initial);
+			baselineReady = before.stable && window.stable && sameExposure(before, window) &&
+				sceneChange(before.average, window.average) <= .06 &&
+				std::abs(before.average.mean - window.average.mean) <= .08 * window.average.mean &&
+				std::abs(before.median - window.median) <= std::max(.006, .15 * window.median);
+			before = window;
+			std::cout << "AF_PREVIEW frames=" << frames << " ready=" << baselineReady
+				  << " stable=" << before.stable << " sharpness=" << before.median
+				  << " brightness=" << before.average.mean << " clipped=" << before.average.clipped
+				  << " spread=" << before.drift << " gain_min=" << before.minGain
+				  << " gain_max=" << before.maxGain << " time_min_us=" << before.minExposure
+				  << " time_max_us=" << before.maxExposure << std::endl;
+			if (!baselineReady) {
+				require(frames < maxPreview, "preview_did_not_stabilize_no_trigger");
+				return Action::Preview;
+			}
 			return Action::TriggerOnce;
 		}
 		if (state == controls::AfStateIdle && !scans && terminal == -1)
 			return Action::Preview; // Requests queued before the single trigger.
 		if (state == controls::AfStateScanning && terminal == -1) {
 			++scans;
-			if (sceneChange(value, before.average) > .12 ||
+			if (value.gain < before.maxGain / 1.02 || value.gain > before.minGain * 1.02 ||
+			    value.exposureUs < before.maxExposure / 1.02 || value.exposureUs > before.minExposure * 1.02 ||
+			    sceneChange(value, before.average) > .12 ||
 			    std::abs(value.mean - before.average.mean) > .20 * before.average.mean)
 				++scanDrift;
 			return Action::Preview;
@@ -177,7 +196,7 @@ static void capture(Camera &camera)
 		uint64_t lastTimestamp = 0;
 		unsigned attempts = 0;
 		for (;;) {
-			require(++attempts <= 400 && Clock::now() < deadline, "capture_limit");
+			require(++attempts <= Trial::frameLimit && Clock::now() < deadline, "capture_limit");
 			Request *req = complete.next(deadline);
 			require(req->status() == Request::RequestComplete, "capture_cancelled");
 			const auto &buffer = *req->buffers().at(stream);
@@ -189,7 +208,13 @@ static void capture(Camera &camera)
 				lastTimestamp = buffer.metadata().timestamp;
 				auto state = req->metadata().get(controls::AfState);
 				require(state.has_value(), "missing_af_metadata");
-				action = trial.observe(*state, measureBuffer(buffer, cfg.stride));
+				auto value = measureBuffer(buffer, cfg.stride);
+				value.exposureUs = req->metadata().get(controls::ExposureTime).value_or(0);
+				value.gain = req->metadata().get(controls::AnalogueGain).value_or(0);
+				if ((trial.frames + 1) % 24 == 0)
+					std::cout << "AF_EXPOSURE frame=" << trial.frames + 1
+						  << " time_us=" << value.exposureUs << " analogue_gain=" << value.gain << std::endl;
+				action = trial.observe(*state, value);
 			}
 			if (action == Action::Finish) {
 				trial.report();
@@ -223,7 +248,10 @@ static Sample chart(int fine, int lighting = 0, bool shift = false)
 			rgb[y * stride + x * 4 + 1] = 128 + lighting + (shift ? -coarse : coarse) + edge;
 		}
 	}
-	return measure(rgb.data(), rgb.size(), stride);
+	Sample result = measure(rgb.data(), rgb.size(), stride);
+	result.exposureUs = 12000;
+	result.gain = 3;
+	return result;
 }
 
 static void selfTest()
@@ -231,7 +259,7 @@ static void selfTest()
 	auto simulate = [](Sample initial, Sample final, int state, const char *expected) {
 		Trial trial;
 		unsigned starts = 0;
-		for (unsigned i = 0; i < Trial::warmup + groupSize; ++i)
+		for (unsigned i = 0; i < Trial::warmup + 2 * groupSize; ++i)
 			starts += trial.observe(controls::AfStateIdle, initial) == Action::TriggerOnce;
 		require(starts == 1, "selftest_trigger_count");
 		for (int i = 0; i < 5; ++i)
@@ -248,11 +276,36 @@ static void selfTest()
 	simulate(soft, chart(23, 0, true), controls::AfStateFocused, "inconclusive");
 	std::vector<uint8_t> flat(width * height * 4, 128);
 	Sample uniform = measure(flat.data(), flat.size(), width * 4);
+	uniform.exposureUs = soft.exposureUs;
+	uniform.gain = soft.gain;
 	simulate(uniform, uniform, controls::AfStateFocused, "inconclusive");
 	simulate(uniform, uniform, controls::AfStateFailed, "af_failed");
 	Window unstable;
 	for (unsigned i = 0; i < groupSize; ++i) unstable[i] = i % 2 ? soft : sharp;
 	require(!summarize(unstable).stable, "selftest_unstable_preview");
+	Trial adjusting;
+	for (unsigned i = 0; i < Trial::warmup + 3 * groupSize; ++i)
+		require(adjusting.observe(controls::AfStateIdle, i % 2 ? soft : sharp) == Action::Preview,
+			"selftest_triggered_unstable");
+	for (unsigned i = 0; i < 2 * groupSize; ++i)
+		require((adjusting.observe(controls::AfStateIdle, soft) == Action::TriggerOnce) ==
+			(i + 1 == 2 * groupSize), "selftest_wait_for_stability");
+	Trial gaining;
+	Sample dim = soft;
+	for (unsigned i = 0; i < Trial::warmup + 4 * groupSize; ++i) {
+		dim.gain = 4 + i * .0625;
+		require(gaining.observe(controls::AfStateIdle, dim) == Action::Preview, "selftest_triggered_during_gain_ramp");
+	}
+	for (unsigned i = 0; i < 2 * groupSize; ++i)
+		require((gaining.observe(controls::AfStateIdle, dim) == Action::TriggerOnce) ==
+			(i + 1 == 2 * groupSize), "selftest_settled_gain");
+	Window missing;
+	missing.fill(soft);
+	missing.back().gain = 0;
+	require(!summarize(missing).stable, "selftest_missing_gain");
+	Sample otherGain = sharp;
+	otherGain.gain *= 1.5;
+	simulate(soft, otherGain, controls::AfStateFocused, "inconclusive");
 	std::cout << "AF_RESULT self_test=pass synthetic=1 camera_access=0" << std::endl;
 }
 
@@ -281,6 +334,7 @@ try {
 		throw;
 	}
 	require(camera->release() == 0, "release_failed");
+	camera.reset();
 	manager.stop();
 	return 0;
 } catch (const std::runtime_error &error) {
