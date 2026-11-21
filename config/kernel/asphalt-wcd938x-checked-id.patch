@@ -1,0 +1,59 @@
+--- a/sound/soc/codecs/wcd938x.c
++++ b/sound/soc/codecs/wcd938x.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+ // Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ 
++#include <linux/bitfield.h>
+ #include <linux/cleanup.h>
+ #include <linux/module.h>
+ #include <linux/slab.h>
+@@ -3009,12 +3010,30 @@
+ 					&wcd->irq_chip);
+ }
+ 
++static int wcd938x_read_variant(struct regmap *map)
++{
++	unsigned int raw;
++	int ret;
++
++	ret = regmap_read(map, WCD938X_DIGITAL_EFUSE_REG_0, &raw);
++	if (ret)
++		return ret;
++
++	switch (FIELD_GET(WCD938X_ID_MASK, raw)) {
++	case CHIPID_WCD9380:
++		return CHIPID_WCD9380;
++	case CHIPID_WCD9385:
++		return CHIPID_WCD9385;
++	default:
++		return -ENODEV;
++	}
++}
++
+ static int wcd938x_soc_codec_probe(struct snd_soc_component *component)
+ {
+ 	struct wcd938x_priv *wcd938x = snd_soc_component_get_drvdata(component);
+ 	struct device *dev = component->dev;
+-	unsigned int variant;
+-	int ret, i;
++	int variant, ret, i;
+ 
+ 	ret = sdw_slave_wait_for_init(wcd938x->tx_sdw_dev, 2000);
+ 	if (ret)
+@@ -3026,9 +3045,12 @@
+ 	if (ret < 0)
+ 		return ret;
+ 
+-	variant = snd_soc_component_read_field(component,
+-					       WCD938X_DIGITAL_EFUSE_REG_0,
+-					       WCD938X_ID_MASK);
++	variant = wcd938x_read_variant(wcd938x->regmap);
++	if (variant < 0) {
++		pm_runtime_put(dev);
++		return dev_err_probe(dev, variant, "Failed to identify WCD938x silicon\n");
++	}
++	dev_info(dev, "Detected WCD938%d from the codec eFuse\n", variant);
+ 
+ 	wcd938x->clsh_info = wcd_clsh_ctrl_alloc(component, WCD938X);
+ 	if (IS_ERR(wcd938x->clsh_info)) {
