@@ -40,7 +40,7 @@ install -m644 "$3" "$root/qa/stock.deb"
 install -m755 "$4" "$root/qa/Xvfb"
 install -m755 "$5" "$root/qa/uv"
 install -m644 "$6" "$root/qa/clip.mp4"
-install -m644 "$here/geometry.py" "$here/../video-codec/parole-transport.py" "$root/qa/"
+install -m644 "$here/geometry.py" "$here/scrub.py" "$here/../video-codec/parole-transport.py" "$root/qa/"
 install -m755 "$here/session.sh" "$root/qa/"
 chroot "$root" /usr/bin/env PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -eu <<'SESSION'
 set -o pipefail
@@ -51,8 +51,10 @@ sha256sum /usr/local/bin/y700-parole /usr/local/share/applications/org.xfce.Paro
 for phase in stock candidate; do
     if [[ $phase == candidate ]]; then
         dpkg -i /qa/candidate.deb
-        [[ $(dpkg-query -W -f='${Version}' parole) == 4.18.2-1+y7001 ]]
-        sed $'s/^parole\t4\\.18\\.2-1$/parole\t4.18.2-1+y7001/' /qa/packages.stock > /qa/packages.expected
+        version=$(dpkg-deb -f /qa/candidate.deb Version)
+        case $version in 4.18.2-1+y7001|4.18.2-1+y7002) ;; *) exit 1 ;; esac
+        [[ $(dpkg-query -W -f='${Version}' parole) == "$version" ]]
+        awk -F '\t' -v v="$version" 'BEGIN{OFS=FS} $1=="parole" {$2=v} {print}' /qa/packages.stock > /qa/packages.expected
         dpkg-query -W -f='${binary:Package}\t${Version}\n' | cmp /qa/packages.expected -
         sha256sum --check /qa/launcher.sha256
     fi

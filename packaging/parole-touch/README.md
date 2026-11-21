@@ -38,3 +38,20 @@ sudo bash tests/parole-touch/overlay.sh "$DEV12_9_ROOT" "$CANDIDATE_DEB" "$STOCK
 | 200% | 72 × 68 px | 96 × 96 px | 852 × 68 px | 708 × 96 px |
 
 The six wider buttons used 144 pixels of horizontal space at 200%. The File menu measured 54 × 27 logical pixels throughout. A separate 200% run selected HighContrast through Xfce and produced the same control sizes and working pause/resume. Set `Y700_PAROLE_TEST_THEME=HighContrast` in the overlay runner's environment to exercise that preference. Local receipts are `out/parole-touch/geometry.log` and `out/parole-touch/highcontrast-2x.log`.
+
+## Seek on release at HiDPI
+
+Revision `4.18.2-1+y7002` keeps the 48-logical-pixel playback controls. During a primary pointer or touch drag at 2×, GTK updates the thumb and elapsed-time label. Releasing commits the displayed position through Parole's existing whole-second, key-unit GStreamer seek. A cancelled touch, broken grab, stopped stream or unmapped slider clears the preview. Keyboard and accessibility value changes outside a drag still seek immediately. At 1× the slider retains Debian's continuous seeking.
+
+Build using the same pinned Debian sources. Close Parole and reopen the file after installing or restoring the package. The original y7001 builder and all three Debian source digests remain available above.
+
+The arm64 `parole_4.18.2-1+y7002_arm64.deb` is 359,232 bytes with SHA-256 `f49b70eece107e02a69c67dee445500a182cfe19138e76bf7ed8e18e3eee1968`.
+
+```sh
+bash packaging/parole-touch/seek/build.sh sources out/parole-touch-y7002
+sudo env Y700_PAROLE_TEST_SCRUB=1 bash tests/parole-touch/overlay.sh "$DEV12_9_ROOT" \
+    out/parole-touch-y7002/parole_4.18.2-1+y7002_arm64.deb "$STOCK_DEB" \
+    "$ARM64_XVFB" "$ARM64_UV" out/video-seek/clips/h264.mp4
+```
+
+The optional test sends X11 pointer presses, motion and releases to the mapped GTK window. While dragging, it reads the accessible thumb, elapsed label and paused video pixels. It counts actual TIME seek events in GStreamer and checks the displayed colour after release. The clip has a keyframe each second and a different colour every four seconds. The same test checks a single click, a focused Right key, an accessibility value change, and resumed playback. The PC run uses software video decoding.

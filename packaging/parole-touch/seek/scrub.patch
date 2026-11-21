@@ -1,0 +1,106 @@
+--- a/src/parole-player.c
++++ b/src/parole-player.c
+@@ -459,6 +459,9 @@
+     ParoleState         state;
+     gboolean            user_seeking;
+     gboolean            internal_range_change;
++    gboolean            scrub_active;
++    gboolean            scrub_changed;
++    GdkEventSequence   *scrub_sequence;
+     gboolean            buffering;
+     gboolean            wait_for_gst_disc_info;
+ 
+@@ -593,7 +596,15 @@
+ }
+ 
+ static void
++parole_player_end_scrub(ParolePlayer *player) {
++    player->priv->scrub_active = FALSE;
++    player->priv->scrub_changed = FALSE;
++    player->priv->scrub_sequence = NULL;
++}
++
++static void
+ parole_player_reset(ParolePlayer *player) {
++    parole_player_end_scrub(player);
+     parole_gst_stop(PAROLE_GST(player->priv->gst));
+     player->priv->update_languages = TRUE;
+     gtk_window_set_title(GTK_WINDOW(player->priv->window), _("Parole Media Player"));
+@@ -1250,7 +1261,7 @@
+     g_return_if_fail(value > 0);
+ #endif
+ 
+-    if (!player->priv->user_seeking) {
++    if (!player->priv->user_seeking && !player->priv->scrub_active) {
+         parole_player_change_range_value(player, value);
+     }
+ }
+@@ -1427,6 +1438,7 @@
+     GdkPixbuf *logo;
+     gchar dur_text[128];
+     TRACE("Player stopped");
++    parole_player_end_scrub(player);
+ 
+     g_simple_action_set_enabled(player->priv->media_playpause_action,
+                               parole_media_list_is_selected_row(player->priv->list) ||
+@@ -1707,12 +1719,50 @@
+     return FALSE;
+ }
+ 
++/* Observe the GtkRange's native input without claiming its gesture.  A
++ * release is handled after GTK has applied the final thumb position. */
++static gboolean
++parole_player_scrub_event(GtkWidget *widget, GdkEvent *event, ParolePlayer *player) {
++    if (event->type == GDK_GRAB_BROKEN ||
++        (event->type == GDK_TOUCH_CANCEL &&
++         event->touch.sequence == player->priv->scrub_sequence)) {
++        parole_player_end_scrub(player);
++    } else if (!player->priv->scrub_active && gtk_widget_get_scale_factor(widget) >= 2 &&
++               ((event->type == GDK_BUTTON_PRESS && event->button.button == GDK_BUTTON_PRIMARY) ||
++                event->type == GDK_TOUCH_BEGIN)) {
++        player->priv->scrub_active = TRUE;
++        player->priv->scrub_sequence = gdk_event_get_event_sequence(event);
++    }
++    return FALSE;
++}
++
++static void
++parole_player_scrub_after(GtkWidget *widget, GdkEvent *event, ParolePlayer *player) {
++    if (!player->priv->scrub_active ||
++        gdk_event_get_event_sequence(event) != player->priv->scrub_sequence)
++        return;
++    if (event->type == GDK_TOUCH_END ||
++        (event->type == GDK_BUTTON_RELEASE && event->button.button == GDK_BUTTON_PRIMARY)) {
++        gboolean changed = player->priv->scrub_changed;
++        parole_player_end_scrub(player);
++        if (changed && gtk_widget_is_sensitive(widget))
++            parole_gst_seek(PAROLE_GST(player->priv->gst), gtk_range_get_value(GTK_RANGE(widget)));
++    }
++}
++
+ void
+ parole_player_range_value_changed(GtkRange *range, ParolePlayer *player) {
+     gdouble value;
+ 
+     if ( !player->priv->internal_range_change ) {
+         value = gtk_range_get_value(GTK_RANGE(range));
++        if (player->priv->scrub_active) {
++            gchar text[128];
++            get_time_string(text, value);
++            gtk_label_set_text(GTK_LABEL(player->priv->label_elapsed), text);
++            player->priv->scrub_changed = TRUE;
++            return;
++        }
+         player->priv->user_seeking = TRUE;
+         TRACE("Sending a seek request with value :%e", value);
+         parole_gst_seek(PAROLE_GST(player->priv->gst), value);
+@@ -3548,6 +3598,9 @@
+     /* Time Slider */
+     player->priv->range = GTK_WIDGET(gtk_builder_get_object(builder, "media_progress_slider"));
+     gtk_widget_set_name(player->priv->range, "ParoleScale");
++    g_signal_connect(player->priv->range, "event", G_CALLBACK(parole_player_scrub_event), player);
++    g_signal_connect(player->priv->range, "event-after", G_CALLBACK(parole_player_scrub_after), player);
++    g_signal_connect_swapped(player->priv->range, "unmap", G_CALLBACK(parole_player_end_scrub), player);
+ 
+     /* Buffering Progressbar */
+     player->priv->progressbar_buffering = GTK_WIDGET(gtk_builder_get_object(builder, "media_buffering_progressbar"));

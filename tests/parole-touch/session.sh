@@ -28,4 +28,7 @@ runuser -u y700 -- env HOME=/home/y700 XDG_CACHE_HOME="$XDG_RUNTIME_DIR/cache" U
             xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s "$Y700_PAROLE_TEST_THEME"
         fi
     fi
+    if [[ -n ${Y700_PAROLE_TEST_SCRUB:-} ]]; then
+        export GST_DEBUG=GST_EVENT:6 GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="$XDG_RUNTIME_DIR/gst.log"
+    fi
     /qa/uv run --offline --no-project --python /usr/bin/python3 python -B /qa/geometry.py /qa/clip.mp4'

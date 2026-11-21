@@ -8,6 +8,7 @@ import sys
 import gi
 
 gi.require_version("Atspi", "2.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Atspi, Gdk, Gio, GLib, Gtk
 
@@ -19,6 +20,7 @@ def main():
     version = subprocess.check_output(["dpkg-query", "-W", "-f=${Version}", "parole"], text=True)
     Gtk.init([])
     Atspi.init()
+    Atspi.set_timeout(6000, 12000)
     assert os.getuid() != 0 and Gdk.get_default_root_window().get_scale_factor() == scale
     clip = Path(sys.argv[1]).resolve(strict=True)
     bus = Gio.bus_get_sync(Gio.BusType.SESSION)
@@ -55,9 +57,15 @@ def main():
         assert theme == os.environ["Y700_PAROLE_TEST_THEME"], theme
     assert menu.width > 0 and menu.height > 0
     tap(playback["PLAY"])
+    scrub_test = os.environ.get("Y700_PAROLE_TEST_SCRUB")
+    if scrub_test:
+        test = runpy.run_path(str(Path(__file__).with_name("scrub.py")))
+        test["check"](playback, widgets, box, scale, scale >= 2 and version.endswith("+y7002"))
     tap(playback["PAUSE"])
+    if scrub_test:
+        until(lambda: widgets[2].get_current_value() >= 3, 8, "Playing position did not advance after scrubbing")
     assert player_pid() == pid
-    if version.endswith("+y7001") and scale == 2:
+    if "+y700" in version and scale == 2:
         assert min(*button, slider[1]) >= 96, (button, slider)
     print(f"PAROLE_SIZE version={version} scale={scale} button={button[0]}x{button[1]} "
           f"slider={slider[0]}x{slider[1]} menu_atk={menu.width}x{menu.height} theme={theme} "
