@@ -37,3 +37,24 @@ uv run --offline --no-project --python /usr/bin/python3 python tests/tablet-boot
 ```
 
 The first boot selects the trial. The kernel panics on its deliberately absent root, waits three seconds, and resets. The second firmware boot selects the original entry. Both reads of the same FAT contain `trial+0-1.conf`. This harness checks firmware selection, and does not exercise a physical reset or the candidate desktop.
+
+## Recovery entry on an installed dev12.10 system
+
+Install the four checked recovery EFI files on the outer ESP using `manage-file-trial-entry.sh --dev12.10-recovery add`. With the standard dev12.10 file entry running as the permanent default, arm one boot using a fresh run ID.
+
+```sh
+run=recovery-01
+entry_sha=21b05d85897a5047834766a5ae1629203d6fad6fd43d0aa614c110b1f3bfa834
+sudo bash arm-installed-trial.sh --recovery arm "$run" "$entry_sha"
+```
+
+The script checks the installed file-root pair and the effective deadline units on the running system. It opens the outer ESP in a private mount namespace and verifies both entry manifests. The fallback uses the working `y700-file-12-10.conf` payload. The original `debian.conf` remains available. After this counted boot, run the desktop acceptance checks while the four-minute deadline is active. Confirm and promote in the same boot after those checks pass.
+
+```sh
+sudo bash arm-installed-trial.sh --recovery confirm "$run" "$entry_sha"
+sudo bash arm-installed-trial.sh --recovery promote "$run" "$entry_sha"
+```
+
+For rollback, run `sudo bash arm-installed-trial.sh --recovery restore "$run" "$entry_sha"`. This restores the exact saved loader configuration. Each recovery run has a separate `recovery-control-RUN_ID` directory on the outer ext4.
+
+Run `bash tests/installed-trial/recovery-arm.sh RELEASE_ENTRY RECOVERY_ENTRY GENERIC_ESP NEW_WORK` as root on a Linux PC. Use a new work directory under `/var/tmp/y700-recovery-menu.*`. The test installs the checked files on a new FAT, exercises tampered payloads and wrong boot identities, and preserves the armed BLS entries for the optional firmware test. Run `bash tests/installed-trial/recovery-firmware.sh NEW_WORK VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD` to exercise two boot-manager selections. The firmware fixture uses a virtual-machine DTB, the matching kernel module and a small observer initramfs to read the actual EFI selected-entry variable and to reset after the first selection.
