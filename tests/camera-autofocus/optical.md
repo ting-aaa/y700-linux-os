@@ -1,5 +1,7 @@
 # Rear autofocus measurement
 
+To locate a weak signal in the rear-camera pipeline, the separate `--rear-signal` mode compares RAW10 with ABGR8888 from one exposure. Its ARM64 replay, ROI, interpretation and physical validation status are documented in [HI1339 rear-camera signal](../../docs/CAMERA-SIGNAL.md).
+
 On the PRC tablet the [board runner](../camera-lens-graph/measure-board.sh) uses a transient ordinary-user service with a private network and a 70-second limit. Pass `--self-test` to run synthetic cases with camera devices hidden. The separately selected `--rear-af` mode measures a real scene; use it for a consented, attended trial with a suitable target. In both modes the runner checks that the rear sensor has returned to runtime suspend before exiting.
 
 For a USB session, stage the runner as `measure-board.sh` and the executable in a new root-owned `mktemp -d /run/y700-af-optical.XXXXXXXX` on tmpfs. Give the directory and executable ordinary-user traversal and execution permissions. Invoke the staged runner with `--detached-rear-af EXECUTABLE`. It returns the transient service name and a private `receipt.log` path. After the service exits, read the receipt and look for both the terminal result and `AF_CLEANUP`. The log survives a USB disconnect within that boot. A reboot discards it. Both real-camera modes check root mount flags and hold a sleep inhibitor while the measurement runs.

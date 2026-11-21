@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #include "optical-metric.h"
 #include "optical-config-resources.h"
+#include "signal-metric.h"
 #include <libcamera/camera.h>
 #include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
@@ -39,27 +40,36 @@ static bool syncRead(int fd, uint64_t stage)
 	return rc == 0;
 }
 
-static Sample measureBuffer(const FrameBuffer &buffer, unsigned stride)
+template<typename Measure>
+static auto readPlane(const FrameBuffer &buffer, Measure inspect)
 {
 	const auto &metadata = buffer.metadata();
 	require(buffer.planes().size() == 1 && metadata.planes().size() == 1, "unexpected_planes");
 	const auto &plane = buffer.planes()[0];
 	const size_t used = metadata.planes()[0].bytesused;
-	require(plane.offset != FrameBuffer::Plane::kInvalidOffset && used <= plane.length &&
-		used >= size_t(stride) * height, "incomplete_rgb_frame");
+	require(plane.offset != FrameBuffer::Plane::kInvalidOffset && used > 0 && used <= plane.length,
+		"invalid_frame_plane");
 	// Linux dma-buf mmap offsets must be page aligned, even on a 64 KiB kernel.
 	const size_t delta = plane.offset % sysconf(_SC_PAGESIZE);
 	const size_t length = delta + used;
 	const int fd = plane.fd.get();
 	void *map = mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, plane.offset - delta);
 	require(map != MAP_FAILED, "map_failed");
-	bool synced = syncRead(fd, DMA_BUF_SYNC_START);
-	Sample value;
-	if (synced) {
-		value = measure(static_cast<const uint8_t *>(map) + delta, used, stride);
-		synced = syncRead(fd, DMA_BUF_SYNC_END);
+	if (!syncRead(fd, DMA_BUF_SYNC_START)) {
+		munmap(map, length);
+		throw std::runtime_error("dma_read_sync_failed");
 	}
-	const int unmap = munmap(map, length);
+	auto value = [&] {
+		try {
+			return inspect(static_cast<const uint8_t *>(map) + delta, used);
+		} catch (...) {
+			syncRead(fd, DMA_BUF_SYNC_END);
+			munmap(map, length);
+			throw;
+		}
+	}();
+	bool synced = syncRead(fd, DMA_BUF_SYNC_END);
+	int unmap = munmap(map, length);
 	require(synced && unmap == 0, "dma_read_sync_failed");
 	return value;
 }
@@ -178,16 +188,23 @@ static void reportStream(const char *step, const StreamConfiguration &cfg)
 		  << " stride=" << cfg.stride << std::endl;
 }
 
-static std::unique_ptr<CameraConfiguration> configureRear(Camera &camera)
+static std::unique_ptr<CameraConfiguration> configureRear(Camera &camera, bool signalOnly)
 {
-	auto config = camera.generateConfiguration({StreamRole::Viewfinder});
+	std::vector<StreamRole> roles{StreamRole::Viewfinder};
+	if (signalOnly)
+		roles.push_back(StreamRole::Raw);
+	auto config = camera.generateConfiguration(roles);
 	std::cout << "AF_CONFIG step=generate streams=" << (config ? config->size() : 0)
 		  << " available=" << static_cast<bool>(config) << std::endl;
-	requireBeforeConfigure(config && config->size() == 1, "no_viewfinder");
+	requireBeforeConfigure(config && config->size() == roles.size(), "missing_stream");
 	auto &cfg = config->at(0);
 	reportStream("generated", cfg);
 	cfg.size = {width, height};
 	cfg.pixelFormat = formats::ABGR8888;
+	if (signalOnly) {
+		config->at(1).size = {rawWidth, rawHeight};
+		config->at(1).pixelFormat = formats::SGBRG10_CSI2P;
+	}
 	reportStream("requested", cfg);
 
 	const auto status = config->validate();
@@ -197,9 +214,13 @@ static std::unique_ptr<CameraConfiguration> configureRear(Camera &camera)
 	std::cout << "AF_CONFIG step=validate status=" << name << " streams=" << config->size() << std::endl;
 	if (!config->empty())
 		reportStream("validated", config->at(0));
-	requireBeforeConfigure(status != CameraConfiguration::Invalid && config->size() == 1 &&
-			       config->at(0).size == Size(width, height) &&
-			       config->at(0).pixelFormat == formats::ABGR8888, "no_cpu_rgb_mode");
+	auto modesMatch = [&] {
+		return config->size() == roles.size() && config->at(0).size == Size(width, height) &&
+		       config->at(0).pixelFormat == formats::ABGR8888 &&
+		       (!signalOnly || (config->at(1).size == Size(rawWidth, rawHeight) &&
+					config->at(1).pixelFormat == formats::SGBRG10_CSI2P));
+	};
+	requireBeforeConfigure(status != CameraConfiguration::Invalid && modesMatch(), "no_cpu_rgb_mode");
 
 	const int rc = camera.configure(config.get());
 	std::cout << "AF_CONFIG step=configure called=1 rc=" << rc << " errno=" << (rc < 0 ? -rc : 0)
@@ -207,23 +228,68 @@ static std::unique_ptr<CameraConfiguration> configureRear(Camera &camera)
 	if (!config->empty())
 		reportStream(rc == 0 ? "configured" : "after_configure_error", config->at(0));
 	require(rc == 0, "configure_failed");
-	require(config->size() == 1 && config->at(0).size == Size(width, height) &&
-		config->at(0).pixelFormat == formats::ABGR8888, "configured_stream_changed");
+	require(modesMatch(), "configured_stream_changed");
+	if (signalOnly)
+		reportStream("configured_raw", config->at(1));
 	return config;
 }
 
-static void capture(Camera &camera, const StreamConfiguration &cfg)
+static void reportPair(const Request &req, const FrameBuffer &rgb, unsigned rgbStride,
+		       const FrameBuffer &raw, unsigned rawStride)
 {
-	require(cfg.stride >= width * 4 && camera.controls().count(&controls::AfMode) &&
-		camera.controls().count(&controls::AfTrigger) && camera.controls().count(&controls::AfState),
-		"no_rear_isp_af_controls");
+	const auto &a = rgb.metadata();
+	const auto &b = raw.metadata();
+	require(b.status == FrameMetadata::FrameSuccess && a.timestamp && a.timestamp == b.timestamp &&
+		a.sequence == b.sequence, "raw_rgb_frame_mismatch");
+	const auto levels = req.metadata().get(controls::SensorBlackLevels);
+	const auto time = req.metadata().get(controls::ExposureTime);
+	const auto gain = req.metadata().get(controls::AnalogueGain);
+	require(levels && time && *time > 0 && gain && *gain > 0, "signal_metadata_missing");
+	std::array<unsigned, 4> pedestal{};
+	for (unsigned i = 0; i < pedestal.size(); ++i) {
+		require((*levels)[i] >= 0 && (*levels)[i] <= 65535, "invalid_black_level");
+		pedestal[i] = (*levels)[i] / 64;
+	}
+	const auto cfa = readPlane(raw, [&](auto p, auto size) { return measureRaw(p, size, rawStride, pedestal); });
+	const auto output = readPlane(rgb, [&](auto p, auto size) { return measureRgb(p, size, rgbStride); });
+	const char *sites[] = { "R", "Gr", "Gb", "B" };
+	const char *colors[] = { "R", "G", "B" };
+	std::cout << "SIGNAL_PAIR sequence=" << a.sequence << " time_us=" << *time << " analogue_gain=" << *gain
+		  << " crop_x=" << cropX << " crop_y=" << cropY << std::endl;
+	for (unsigned i = 0; i < cfa.size(); ++i) {
+		const auto &c = cfa[i];
+		std::cout << "SIGNAL_RAW site=" << sites[i] << " n=" << c.count << " mean10=" << c.mean()
+			  << " pedestal10=" << pedestal[i] << " at_or_below_pedestal=" << double(c.dark) / c.count
+			  << " near_white=" << double(c.bright) / c.count << std::endl;
+	}
+	for (unsigned i = 0; i < output.size(); ++i) {
+		const auto &c = output[i];
+		std::cout << "SIGNAL_RGB channel=" << colors[i] << " n=" << c.count << " mean8=" << c.mean()
+			  << " near_black=" << double(c.dark) / c.count << " near_white=" << double(c.bright) / c.count
+			  << std::endl;
+	}
+}
+
+static void capture(Camera &camera, const CameraConfiguration &config, bool signalOnly)
+{
+	const auto &cfg = config.at(0);
+	require(cfg.stride >= width * 4, "invalid_rgb_stride");
+	if (!signalOnly)
+		require(camera.controls().count(&controls::AfMode) && camera.controls().count(&controls::AfTrigger) &&
+			camera.controls().count(&controls::AfState), "no_rear_isp_af_controls");
 	FrameBufferAllocator allocator(camera.shared_from_this());
 	Stream *stream = cfg.stream();
 	require(allocator.allocate(stream) > 0, "buffer_allocation");
+	Stream *raw = signalOnly ? config.at(1).stream() : nullptr;
+	if (raw)
+		require(allocator.allocate(raw) > 0 && allocator.buffers(raw).size() == allocator.buffers(stream).size(),
+			"raw_buffer_allocation");
 	std::vector<std::unique_ptr<Request>> requests;
 	for (const auto &buffer : allocator.buffers(stream)) {
 		auto req = camera.createRequest();
 		require(req && req->addBuffer(stream, buffer.get()) == 0, "make_request");
+		if (raw)
+			require(req->addBuffer(raw, allocator.buffers(raw)[requests.size()].get()) == 0, "add_raw_buffer");
 		requests.push_back(std::move(req));
 	}
 	Completions complete;
@@ -250,9 +316,18 @@ static void capture(Camera &camera, const StreamConfiguration &cfg)
 				require(status == FrameMetadata::FrameSuccess, "bad_frame");
 				require(buffer.metadata().timestamp > lastTimestamp, "stale_frame");
 				lastTimestamp = buffer.metadata().timestamp;
+				if (raw) {
+					if (++trial.frames == Trial::warmup + 1) {
+						reportPair(*req, buffer, cfg.stride, *req->buffers().at(raw), config.at(1).stride);
+						break;
+					}
+					req->reuse(Request::ReuseBuffers);
+					require(camera.queueRequest(req) == 0, "requeue_failed");
+					continue;
+				}
 				auto state = req->metadata().get(controls::AfState);
 				require(state.has_value(), "missing_af_metadata");
-				auto value = measureBuffer(buffer, cfg.stride);
+				auto value = readPlane(buffer, [&](auto p, auto size) { return measure(p, size, cfg.stride); });
 				value.exposureUs = req->metadata().get(controls::ExposureTime).value_or(0);
 				value.gain = req->metadata().get(controls::AnalogueGain).value_or(0);
 				if ((trial.frames + 1) % 24 == 0)
@@ -386,7 +461,8 @@ try {
 		return 0;
 	}
 	const bool configOnly = mode == "--check-rear-config";
-	require(configOnly || mode == "--rear-af", "unknown_mode");
+	const bool signalOnly = mode == "--rear-signal";
+	require(configOnly || signalOnly || mode == "--rear-af", "unknown_mode");
 	const rlimit noCore{0, 0};
 	requireBeforeConfigure(setrlimit(RLIMIT_CORE, &noCore) == 0, "core_dump_limit");
 	requireBeforeConfigure(setenv("LIBCAMERA_SOFTISP_MODE", "cpu", 1) == 0, "cpu_isp_environment");
@@ -407,9 +483,9 @@ try {
 		return rc;
 	};
 	try {
-		auto config = configureRear(*camera);
+		auto config = configureRear(*camera, signalOnly);
 		if (!configOnly)
-			capture(*camera, config->at(0));
+			capture(*camera, *config, signalOnly);
 	} catch (...) {
 		release();
 		throw;
@@ -420,6 +496,8 @@ try {
 	if (configOnly)
 		std::cout << "AF_CONFIG_ONLY result=pass allocated=0 started=0 queued=0 af_triggered=0 pixels_read=0"
 			  << std::endl;
+	if (signalOnly)
+		std::cout << "SIGNAL_DONE pairs=1 measured_after_warmup=24 af_commands=0" << std::endl;
 	return 0;
 } catch (const std::runtime_error &error) {
 	std::cerr << "AF_ERROR reason=" << error.what() << std::endl;
