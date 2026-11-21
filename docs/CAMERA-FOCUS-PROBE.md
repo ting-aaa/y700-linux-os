@@ -28,6 +28,8 @@ A second counted boot used the original 19.2 MHz CCI clock and the original spli
 
 After each powered request LDO1, LDO4 and LDO5 returned to zero users and disabled. The per-unit bytes stayed on the tablet. The experiment identifies a missing supply in the native main-camera power sequence. The physical connection from LDO5 to each component has not been traced. Motor motion, optical focus, flash and application control require separate evidence.
 
+The separately built camera-supply EFI image pairs this kernel and device tree with the original dev12.10 root. After returning to the permanent desktop, a media-controller-only topology query found the HI1339 sensor and zero lens entities. Its runtime-active time stayed unchanged. Exposing the GT9768 as a V4L2 lens is the next step before the camera application can control it. [Candidate EFI image and boot checks](CAMERA-SUPPLY-ESP.md) · [Media graph check](../tests/camera-lens-graph/README.md)
+
 Both trial entries were removed after returning to the permanent dev12.10 kernel. Its physical outer EFI partition again had the original 29 files. All hashes matched before and after each trial apart from the boot manager’s random seed. The graphical login, touchscreen, Bluetooth service and both Wi-Fi gateway checks passed on return. The board log manifest is `out/cci0-dev12.10-board/BOARD-SHA256SUMS`, SHA-256 `1ff5cec1ac476438b36c5652db73989e865f112d38bd87756d521315eafbf1ef`.
 
 ### Earlier observations on the original installation
