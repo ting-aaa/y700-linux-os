@@ -85,7 +85,10 @@ class Provider(fixture.Provider):
 
 
 def write(directory, name, value):
-    (directory / name).write_text(str(value) + "\n")
+    # A sysfs reader always receives a whole attribute value, even as a write completes.
+    pending = directory / (name + ".new")
+    pending.write_text(str(value) + "\n")
+    pending.replace(directory / name)
 
 
 def until(condition, label, timeout=4):
