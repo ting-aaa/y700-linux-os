@@ -7,7 +7,7 @@ import sys
 import time
 
 bios, role, mode = sys.argv[1:]
-assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768", "dev1211", "panel60", "display-option")
+assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768", "dev1211", "panel60", "display-option", "dev1212-generic")
 assert role in ("trial", "base")
 command = [os.getenv("QEMU_SYSTEM_AARCH64", "qemu-system-aarch64")]
 if env_dir := os.getenv("QEMU_DATA"):
@@ -34,6 +34,9 @@ if mode == "panel60":
 if mode == "display-option":
     name = "display" if role == "trial" else "file"
     marker = f"DISPLAY_OPTION_EFI selected=y700-{name}-12-11.conf notes="
+if mode == "dev1212-generic":
+    name = "debian-120" if role == "trial" else "debian"
+    marker = f"GENERIC_1212_EFI selected={name}.conf notes="
 with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as vm:
     try:
         buffer = b""
@@ -56,7 +59,7 @@ with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, st
                     vm.stdin.write(b"virtio scan; fatload virtio 0:1 ${kernel_addr_r} /EFI/BOOT/BOOTAA64.EFI; bootefi ${kernel_addr_r}\r")
                     vm.stdin.flush()
                     phase = 2
-                if mode == "display-option" and role == "trial" and phase == 2 and b"60 / 120 Hz display" in buffer:
+                if mode in ("display-option", "dev1212-generic") and role == "trial" and phase == 2 and b"60 / 120 Hz display" in buffer:
                     vm.stdin.write(b"\x1b[B")
                     vm.stdin.flush()
                     time.sleep(.2)
