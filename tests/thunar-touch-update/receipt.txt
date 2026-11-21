@@ -1,0 +1,16 @@
+2026-11-22 ARM64 Thunar offline package check
+TAR 778240 bytes sha256 d5a041232cbe03ae4c5ca8965eff5887340f15a7774bea03979c9cca1482566c
+Original thunar 4.20.2-1+deb13u1 arm64 sha256 f390240509b742d58c35a50bad12d31e9168e557ddb6dcf708e26724c4a33ea7
+Updated thunar 4.20.2-1+deb13u1+y7001 arm64 sha256 f0ecf50c5fbbd36acdeaab07efc3787bdef7be853fc06a4e94747b4aa67b9dee
+Only changed data file /usr/bin/thunar sha256 02caf12619717678c5b615a1c06c89ff21390966c2b348c07cf4a05216342b8d
+ELF replaced; 41 archive members with equal paths/type/mode/owner/link target, 0 conffiles, Installed-Size 1342 KiB.
+Reproducible TAR from simultaneous builds; different pre-existing output preserved.
+Real ARM64 dpkg inside a network-isolated, read-only dev12.13 root with an ephemeral overlay
+  lower root SHA256 6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c
+  1241 tuples before 5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+  1241 tuples after  a67b2ec4624e651f4d8a288200a70488685073b89cd2790b978045e5ca6d0de3
+  1241 tuples after rollback identical to before
+Install, idempotent install/check/rollback, explicit reinstall, both interrupted unpack directions passed.
+Busy dpkg frontend, edited program, tampered archive, later Debian version refused.
+System and user Thunar configuration preserved, apt-get check and dpkg --audit passed.
+Full local receipt out/thunar-touch/final-package-lifecycle.log SHA256 188d91d8ced2d73715697ce3a3d4021b9afc734d6edccf48bbc32452e91932ea
