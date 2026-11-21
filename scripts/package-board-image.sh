@@ -10,6 +10,10 @@ fi
 version=$1
 shift
 guide=DEV${version#dev}-IMAGE.md
+notes_sha=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+player_esp=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
+player_ledger=5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce
+has_player=false
 case $version in
     dev12.5)
         package_count=1112
@@ -29,12 +33,22 @@ case $version in
         guide=ADAPTIVE-BRIGHTNESS-IMAGE.md
         ;;
     dev12.9)
+        has_player=true
         package_count=1240
         package_sha=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
         ;;
     dev12.10)
+        has_player=true
         package_count=1240
         package_sha=ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3
+        ;;
+    dev12.11)
+        has_player=true
+        package_count=1240
+        package_sha=be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+        player_esp=92d47c14c4606d106ebad21ece8f5e23f244bd5aecea0c377bbe8966f8261b36
+        player_ledger=17473ab98cdf1190d573276bba00ceca7e0cee05688b8b496de37df8fc600d82
+        notes_sha=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
         ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
@@ -60,27 +74,41 @@ base=$bundle/base
 mkdir -- "$bundle" "$base" "$work/db" "$work/result"
 cd "$work/db"
 debugfs -R 'dump /var/lib/dpkg/status status' "$root" >/dev/null 2>&1
-if [[ $version == dev12.8 || $version == dev12.9 || $version == dev12.10 ]]; then
+if [[ $version == dev12.8 ]] || $has_player; then
     debugfs -R 'dump /var/lib/y700/build/platform.lock.json platform.lock.json' "$root" >/dev/null 2>&1
     cmp "$repo/config/platform.lock.json" platform.lock.json
 fi
-if [[ $version == dev12.9 || $version == dev12.10 ]]; then
-    [[ $4 == 495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6 ]]
+if $has_player; then
+    [[ $4 == "$player_esp" ]]
     original_lock=video-player.lock.json
-    if [[ $version == dev12.10 ]]; then original_lock=video-player-dev12.9.lock.json; fi
+    if [[ $version != dev12.9 ]]; then original_lock=video-player-dev12.9.lock.json; fi
     debugfs -R "dump /var/lib/y700/build/$original_lock media.lock" "$root" >/dev/null 2>&1
     debugfs -R 'dump /var/lib/y700/build/video-player-debian.lock.json media-packages.lock' "$root" >/dev/null 2>&1
     cmp "$repo/config/video-player.lock.json" media.lock
     cmp "$repo/tests/video-player/debian.lock.json" media-packages.lock
     media_locks=(media.lock)
-    if [[ $version == dev12.10 ]]; then
+    if [[ $version != dev12.9 ]]; then
         debugfs -R 'dump /var/lib/y700/build/video-player-update.lock.json media-update.lock' "$root" >/dev/null 2>&1
         cmp "$repo/config/video-player-update.lock.json" media-update.lock
         debugfs -R 'dump /var/lib/y700/build/video-player.lock.json media-active.lock' "$root" >/dev/null 2>&1
         cmp media-update.lock media-active.lock
         media_locks+=(media-update.lock)
         debugfs -R 'dump /var/lib/y700/build/packages.tsv recorded-packages.tsv' "$root" >/dev/null 2>&1
-        printf '%s  recorded-packages.tsv\n' 5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce | sha256sum --strict -c -
+        printf '%s  recorded-packages.tsv\n' "$player_ledger" | sha256sum --strict -c -
+    fi
+    if [[ $version == dev12.11 ]]; then
+        for layer in camera-autofocus wifi-sae-update; do
+            debugfs -R "dump /var/lib/y700/build/$layer.lock.json $layer.lock" "$root" >/dev/null 2>&1
+            cmp "$repo/config/$layer.lock.json" "$layer.lock"
+        done
+        debugfs -R 'dump /etc/os-release image-os-release' "$root" >/dev/null 2>&1
+        grep -Fxq IMAGE_VERSION=dev12.11 image-os-release
+        grep -Fxq IMAGE_ID=y700-prc-debian image-os-release
+        media_locks+=(camera-autofocus.lock)
+        jq -r '.links | to_entries[] | [.key, .value] | @tsv' camera-autofocus.lock > camera-links.tsv
+        while IFS=$'\t' read -r path target; do
+            debugfs -R "stat /$path" "$root" 2>/dev/null | grep -Fx "Fast link dest: \"$target\"" >/dev/null
+        done < camera-links.tsv
     fi
     # The update replaces the player's private plugin while the Debian plugin,
     # desktop entry, launcher and license files retain their original locks.
@@ -94,7 +122,7 @@ dpkg-query --admindir=. -W '-f=${db:Status-Status}\t${Package}\t${Version}\t${Ar
     sed -n 's/^installed\t//p' | sort > packages.tsv
 [[ $(wc -l < packages.tsv) == "$package_count" ]]
 printf '%s  packages.tsv\n' "$package_sha" | sha256sum --strict -c -
-if [[ $version == dev12.10 ]]; then
+if [[ -f recorded-packages.tsv ]]; then
     # binary:Package in the guest ledger qualifies Multi-Arch:same packages.
     # The independent status query uses Package and an explicit architecture.
     sed -E 's/^([^[:space:]:]+):[^[:space:]]+\t/\1\t/' recorded-packages.tsv | sort | cmp packages.tsv -
@@ -113,7 +141,7 @@ image_id=y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f
 root_uuid=171a4adb-916b-4763-9e6f-722b4a99988f
 package_count=$package_count
 package_digest=$package_sha
-kernel_notes_sha256=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+kernel_notes_sha256=$notes_sha
 fbdev_emulation=0
 EOF
 cd "$base"
@@ -141,7 +169,7 @@ cd "$work/result"
 tar --sort=name --format=gnu --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
     -cf "$name.tar" -C "$work" "$name"
 sha256sum "$name.tar" > SHA256SUMS
-if [[ $version == dev12.9 || $version == dev12.10 ]]; then
+if $has_player; then
     install -m644 "$work/db/packages.tsv" packages.tsv
     sha256sum packages.tsv >> SHA256SUMS
 fi

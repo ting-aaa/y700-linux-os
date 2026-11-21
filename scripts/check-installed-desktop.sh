@@ -5,8 +5,20 @@ set -uo pipefail
 export LC_ALL=C
 shopt -s nullglob
 mode=candidate
-if [[ ${1:-} == --baseline ]]; then mode=baseline; shift; fi
-[[ $# == 0 && $EUID == 0 ]] || { echo 'Usage as root: check-installed-desktop.sh [--baseline]' >&2; exit 2; }
+edition=dev12.10
+inner_uuid=171a4adb-916b-4763-9e6f-722b4a99988f
+inner_fat=171A-4ADB
+notes=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+case ${1:-} in
+    --baseline) mode=baseline; shift ;;
+    --dev12.11)
+        edition=dev12.11
+        inner_uuid=c0e447e4-82db-59ee-91d6-0e1ec9d5f45e
+        inner_fat=31EC-3084
+        notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+        shift ;;
+esac
+[[ $# == 0 && $EUID == 0 ]] || { echo 'Usage as root: check-installed-desktop.sh [--baseline|--dev12.11]' >&2; exit 2; }
 failed=0
 check() {
     local name=$1; shift
@@ -22,12 +34,12 @@ board() {
 }
 if ! board 2>/dev/null; then echo 'FAIL unexpected_board_or_kernel'; exit 1; fi
 echo "BOARD_DESKTOP_CHECK mode=$mode"
-check kernel_notes hash_is /sys/kernel/notes c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+check kernel_notes hash_is /sys/kernel/notes "$notes"
 check systemd_pid1 test "$(cat /proc/1/comm)" = systemd
 outer_uuid=ef306764-2315-4235-8796-69e2c9b61946
 origin=/run/initramfs/backing
 loop_is() {
-    local loop image=$origin/var/lib/y700-trial/dev12.10/$2
+    local loop image=$origin/var/lib/y700-trial/$edition/$2
     loop=$(findmnt -nro SOURCE -M "$1") || return 1
     [[ $loop =~ ^/dev/loop[0-9]+$ && -f $image && ! -L $image &&
        $(stat -c '%u:%g:%a:%h:%s' "$image") == "0:0:600:1:$3" &&
@@ -38,13 +50,13 @@ loop_is() {
 if [[ $mode == candidate ]]; then
     # Refuse to inspect personal baseline files if storage identity is unexpected.
     if ! [[ $(findmnt -nro UUID -M "$origin") == "$outer_uuid" &&
-            $(findmnt -nro UUID -M /) == 171a4adb-916b-4763-9e6f-722b4a99988f &&
-            $(findmnt -nro UUID -M /boot) == 171A-4ADB ]] ||
+            $(findmnt -nro UUID -M /) == "$inner_uuid" &&
+            $(findmnt -nro UUID -M /boot) == "$inner_fat" ]] ||
        ! loop_is / root.ext4 34359738368 || ! loop_is /boot linux-boot.fat 1073741824; then
         echo 'FAIL candidate_storage_identity'; exit 1
     fi
     echo 'PASS candidate_storage_identity'
-    check release_option grep -Fqw y700.release=dev12.10 /proc/cmdline
+    check release_option grep -Fqw "y700.release=$edition" /proc/cmdline
     check file_option grep -Fqw y700.media=file /proc/cmdline
     if grep -Fqw y700.recovery=journal /proc/cmdline; then
         printf 'OBS boot_recovery=journal inner_efi_mode=%s\n' "$(findmnt -nro OPTIONS -M /boot | cut -d, -f1)"
@@ -55,16 +67,23 @@ if [[ $mode == candidate ]]; then
     records=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
         sed -n 's/^installed\t//p' | sort)
     check installed_packages_1240 test "$(printf '%s\n' "$records" | wc -l)" = 1240
-    case $(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1) in
-        ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3)
-            echo 'PASS installed_versions dev12.10' ;;
-        2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8)
-            echo 'PASS installed_versions dev12.10 with Wi-Fi SAE update' ;;
-        be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
-            echo 'PASS installed_versions dev12.10 with Wi-Fi SAE and camera updates' ;;
-        *) check installed_versions false ;;
-    esac
-    check migration_receipt grep -Fxq 'dev12.10 personal files verified, USB identity retained' "$origin/var/lib/y700-trial/dev12.10/installed.ok"
+    package_sha=$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)
+    if [[ $edition == dev12.11 ]]; then
+        check installed_versions test "$package_sha" = be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+        check camera_receipt hash_is /var/lib/y700/build/camera-autofocus.lock.json 411490734a965ca1405ca33e3b9a1fcb79a1fbad196d947cf3736cb66b1b41b1
+        check image_version grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
+    else
+        case $package_sha in
+            ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3)
+                echo 'PASS installed_versions dev12.10' ;;
+            2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8)
+                echo 'PASS installed_versions dev12.10 with Wi-Fi SAE update' ;;
+            be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
+                echo 'PASS installed_versions dev12.10 with Wi-Fi SAE and camera updates' ;;
+            *) check installed_versions false ;;
+        esac
+    fi
+    check migration_receipt grep -Fxq "$edition personal files verified, USB identity retained" "$origin/var/lib/y700-trial/$edition/installed.ok"
     check machine_identity_retained cmp -s /etc/machine-id "$origin/etc/machine-id"
     check bluetooth_identity_retained cmp -s /etc/y700/bluetooth-address "$origin/etc/y700/bluetooth-address"
     check ssh_public_identity_retained cmp -s /etc/ssh/ssh_host_ed25519_key.pub "$origin/etc/ssh/ssh_host_ed25519_key.pub"
@@ -89,6 +108,7 @@ if [[ -n $esp && -r $esp/loader/loader.conf ]]; then
         debian.conf) default=original_debian ;;
         y700-file-12-10.conf) default=dev12.10_installed ;;
         y700-recovery-12-10.conf) default=dev12.10_recovery ;;
+        y700-file-12-11.conf) default=dev12.11_installed ;;
         y700-installed-*) default=counted_trial ;;
         *) default=other ;;
     esac
