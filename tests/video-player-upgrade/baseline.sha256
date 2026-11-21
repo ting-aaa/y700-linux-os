@@ -1,0 +1,6 @@
+53af27bad43ac64b97bc626cd9fe52976b59b173a0778a79b0829408faa459cc  /var/lib/y700/build/video-player.lock.json
+2829a8394a01b8f73cf60dcbb6774a6ac644416ebed4d472faf8846680a4e15e  /var/lib/y700/build/video-player-debian.lock.json
+d68be3ab1b2ae6ded237e0f875e75d12a5fdd44126a617e94f8429e173be1d82  /usr/local/bin/y700-parole
+73054627fbd85f218a2213583368a9007c5e98f7049d5525b2b13f2ba417f4c4  /usr/local/share/applications/org.xfce.Parole.desktop
+04583897047fbd73626013b99297721f366f5f3b2ecd87dc657cf58eb6c56f04  /usr/share/applications/org.xfce.Parole.desktop
+844986bb49db504a7e5611af2496b4f80f85af74fdc6ce068f0d259fa9c1c93f  /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideo4linux2.so
