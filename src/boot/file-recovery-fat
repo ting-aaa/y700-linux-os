@@ -1,0 +1,102 @@
+# Sourced by the dev12.10 BusyBox init. The caller owns both mounts and supplies
+# hex(), private_image(), fail(), and the validated private images directory.
+fat_checker() {
+    LC_ALL=C GCONV_PATH=/y700-fat-tools/gconv timeout -k 2 25 \
+        /y700-fat-tools/ld-linux-aarch64.so.1 --inhibit-cache --library-path /y700-fat-tools \
+        /y700-fat-tools/fsck.fat "$@"
+}
+fat_clean_report() (
+    # dosfstools can return 0 after warning about e.g. backup boot differences.
+    # Validate the complete report and the process exit without logging filenames.
+    set -o pipefail
+    fat_checker -n "$1" 2>&1 | awk -v name="$1: " '
+        NR==1 && $0=="fsck.fat 4.2 (2021-01-31)" {next}
+        NR==2 && index($0,name)==1 && substr($0,length(name)+1) ~ /^[0-9]+ files, [0-9]+\/261600 clusters$/ {next}
+        {bad=1; exit} END {exit bad || NR!=2}'
+)
+fat_count_valid() {
+    local value
+    value=$(od -An -tu4 -N4 "$1") || return 1
+    set -- $value
+    [ "$#" = 1 ] && { [ "$1" -le 261600 ] || [ "$1" = 4294967295 ]; }
+}
+fat_compare_copy() {
+    local source=$1 tmp=$2 sample=$2/checked.fat rc=0
+    timeout -k 2 60 cp "$source" "$sample" || return 1
+    [ "$(stat -c %s "$sample")" = 1073741824 ] || return 1
+    dd if="$sample" of="$tmp/old-count" bs=1 skip=4584 count=4 status=none || return 1
+    [ "$(stat -c %s "$tmp/old-count")" = 4 ] && fat_count_valid "$tmp/old-count" || return 1
+    printf '\000' | dd of="$sample" bs=1 seek=65 count=1 conv=notrunc status=none || return 1
+    fat_checker -a "$sample" >/dev/null 2>&1 || rc=$?
+    [ "$rc" = 0 ] || [ "$rc" = 1 ] || return 1
+    fat_clean_report "$sample" || return 1
+    dd if="$sample" of="$tmp/new-count" bs=1 skip=4584 count=4 status=none || return 1
+    [ "$(stat -c %s "$tmp/new-count")" = 4 ] && fat_count_valid "$tmp/new-count" || return 1
+    # Undo exactly the fields permitted to differ, then compare every byte.
+    dd if="$tmp/old-count" of="$sample" bs=1 seek=4584 count=4 conv=notrunc status=none || return 1
+    printf '\001' | dd of="$sample" bs=1 seek=65 count=1 conv=notrunc status=none || return 1
+    timeout -k 2 60 cmp -s "$source" "$sample"
+}
+fat_commit_copy() {
+    local source=$1 tmp=$2
+    # Persist the primary FSInfo advisory count before publishing clean state.
+    if ! cmp -s "$tmp/old-count" "$tmp/new-count"; then
+        dd if="$tmp/new-count" of="$source" bs=1 seek=4584 count=4 conv=notrunc,fsync status=none || return 1
+        [ "$(hex "$source" 4584 4)" = "$(hex "$tmp/new-count" 0 4)" ] || return 1
+    fi
+    printf '\000' | dd of="$source" bs=1 seek=65 count=1 conv=notrunc,fsync status=none || return 1
+    [ "$(hex "$source" 65 1)" = 00 ] && fat_clean_report "$source"
+}
+recover_boot_fat() {
+    local file=$1 replay=$2 dirty backing prefix offset tmp rc
+    fat_access=ro
+    case "$replay" in 0|1) ;; *) fail 'invalid FAT recovery context';; esac
+    [ "$file" = "$images/linux-boot.fat" ] && private_image "$file" 1073741824 ||
+        fail 'unexpected inner FAT file'
+    for backing in /sys/class/block/loop*/loop/backing_file; do
+        [ -r "$backing" ] || continue
+        case "$(cat "$backing")" in */var/lib/y700-trial/dev12.10/linux-boot.fat) fail 'inner FAT already attached';; esac
+    done
+    # Sealed BPB: 4096-byte sectors, 1 sector/cluster, 32 reserved, two 256-sector
+    # FATs, FSInfo at sector 1 and the backup boot sector at 6. Neither the backup
+    # FSInfo count nor its allocation hint is synchronized by Linux.
+    prefix=00100120000200000000f8000020000800000000000000040000010000000000000200000001000600
+    [ "$(hex "$file" 11 41)" = "$prefix" ] && [ "$(hex "$file" 67 4)" = db4a1a17 ] &&
+        [ "$(hex "$file" 82 8)" = 4641543332202020 ] && [ "$(hex "$file" 510 2)" = 55aa ] ||
+        fail 'unexpected inner FAT geometry'
+    for offset in 4096 28672; do
+        [ "$(hex "$file" "$offset" 4)" = 52526141 ] &&
+            [ "$(hex "$file" "$((offset+484))" 4)" = 72724161 ] &&
+            [ "$(hex "$file" "$((offset+508))" 4)" = 000055aa ] || fail 'invalid inner FAT FSInfo'
+    done
+    for offset in 131072 1179648; do
+        [ "$(hex "$file" "$offset" 8)" = f8ffff0fffffff0f ] ||
+            { echo 'y700-file-trial: FAT status or media flags require offline check; read-only'; return 0; }
+    done
+    dirty=$(hex "$file" 65 1)
+    case "$dirty" in
+        00)
+            if [ "$replay" = 0 ] || fat_clean_report "$file"; then fat_access=rw
+            else echo 'y700-file-trial: FAT needs offline check after ext4 recovery; read-only'; fi
+            return 0 ;;
+        01) ;;
+        *) echo 'y700-file-trial: unknown FAT state; read-only'; return 0 ;;
+    esac
+    if ! awk '/^MemAvailable:/ {available=$2} END {exit available<1310720}' /proc/meminfo; then
+        echo 'y700-file-trial: insufficient RAM to verify dirty FAT; read-only'; return 0
+    fi
+    tmp=$(mktemp -d /run/y700-fat.XXXXXX) || { echo 'y700-file-trial: FAT scratch unavailable; read-only'; return 0; }
+    if ! mount -t tmpfs -o size=1080m,mode=0700,nosuid,nodev,noexec tmpfs "$tmp"; then
+        rmdir "$tmp"; echo 'y700-file-trial: FAT scratch unavailable; read-only'; return 0
+    fi
+    rc=0
+    if fat_compare_copy "$file" "$tmp"; then
+        fat_commit_copy "$file" "$tmp" || rc=2
+    else rc=1; fi
+    umount "$tmp" && rmdir "$tmp" || fail 'cannot release FAT scratch'
+    case "$rc" in
+        0) fat_access=rw; echo 'y700-file-trial: verified FAT dirty state and primary free count; read-write' ;;
+        1) echo 'y700-file-trial: FAT needs offline check; original untouched, read-only' ;;
+        *) fail 'failed to persist or verify FAT recovery' ;;
+    esac
+}
