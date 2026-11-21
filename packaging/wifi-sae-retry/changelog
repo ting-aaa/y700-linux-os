@@ -1,0 +1,8 @@
+network-manager (1.52.1-1+0y7001) trixie; urgency=medium
+
+  * Ask the existing secret agent after an explicit SAE password rejection.
+  * Offer password re-entry when the same user reselects the same visible
+    access point and profile shortly after a legacy SAE authentication
+    rejection followed by an association timeout.
+
+ -- Y700 Linux OS Contributors <y700@localhost>  Sat, 21 Nov 2026 04:00:00 +0000

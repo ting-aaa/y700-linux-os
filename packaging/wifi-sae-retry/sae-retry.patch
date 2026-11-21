@@ -1,0 +1,306 @@
+Origin: upstream, https://github.com/NetworkManager/NetworkManager/commit/bcb96a1b19dae7306be0b373f0cf76660499ac61
+Author: Mitchell Augustin <mitchell.augustin@canonical.com>
+Description: Request a new password after an explicit SAE rejection.
+ Retarget to Debian 1.52.1 without the unrelated PSK backport. Require an
+ empty signal body and the active SAE setting before opening the existing agent.
+ For legacy unspecified rejections, allow re-entry only after a failed
+ association and explicit same-profile, same-AP selection by the same user.
+
+diff --git a/src/core/devices/wifi/nm-device-wifi.c b/src/core/devices/wifi/nm-device-wifi.c
+index 06eee14..ea9d8df 100644
+--- a/src/core/devices/wifi/nm-device-wifi.c
++++ b/src/core/devices/wifi/nm-device-wifi.c
+@@ -17,6 +17,7 @@
+ #include "nm-device-wifi-p2p.h"
+ #include "nm-wifi-ap.h"
+ #include "libnm-core-aux-intern/nm-common-macros.h"
++#include "libnm-core-aux-intern/nm-auth-subject.h"
+ #include "libnm-core-aux-intern/nm-libnm-core-utils.h"
+ #include "devices/nm-device.h"
+ #include "devices/nm-device-private.h"
+@@ -90,6 +91,11 @@ typedef struct {
+ 
+     NMWifiAP *current_ap;
+ 
++    char  *sae_retry_ap;
++    char  *sae_retry_uuid;
++    gulong sae_retry_uid;
++    gint64 sae_retry_until_msec;
++
+     GHashTable *scan_request_ssids_hash;
+     CList       scan_request_ssids_lst_head;
+ 
+@@ -191,6 +197,12 @@ static void supplicant_iface_notify_p2p_available(NMSupplicantInterface *iface,
+                                                   GParamSpec            *pspec,
+                                                   NMDeviceWifi          *self);
+ 
++static void supplicant_iface_notify_wpa_sae_mismatch_cb(NMSupplicantInterface *iface,
++                                                        NMDeviceWifi          *self);
++
++static void supplicant_iface_auth_reject_unspecified(NMSupplicantInterface *iface,
++                                                     NMDeviceWifi          *self);
++
+ static void periodic_update(NMDeviceWifi *self);
+ 
+ static void ap_add_remove(NMDeviceWifi *self,
+@@ -623,6 +635,14 @@ supplicant_interface_acquire_cb(NMSupplicantManager         *supplicant_manager,
+                      "notify::" NM_SUPPLICANT_INTERFACE_P2P_AVAILABLE,
+                      G_CALLBACK(supplicant_iface_notify_p2p_available),
+                      self);
++    g_signal_connect(priv->sup_iface,
++                     NM_SUPPLICANT_INTERFACE_SAE_MISMATCH,
++                     G_CALLBACK(supplicant_iface_notify_wpa_sae_mismatch_cb),
++                     self);
++    g_signal_connect(priv->sup_iface,
++                     NM_SUPPLICANT_INTERFACE_AUTH_REJECT_UNSPECIFIED,
++                     G_CALLBACK(supplicant_iface_auth_reject_unspecified),
++                     self);
+ 
+     _scan_notify_is_scanning(self);
+ 
+@@ -2830,6 +2850,124 @@ handle_auth_or_fail(NMDeviceWifi *self, NMActRequest *req, gboolean new_secrets)
+     return TRUE;
+ }
+ 
++static gboolean
++is_sae_request(NMActRequest *req)
++{
++    NMSettingWirelessSecurity *security;
++
++    security =
++        nm_connection_get_setting_wireless_security(nm_act_request_get_applied_connection(req));
++    return security && nm_streq0(nm_setting_wireless_security_get_key_mgmt(security), "sae");
++}
++
++static void
++request_new_sae_password(NMDeviceWifi *self, NMActRequest *req, NMDeviceStateReason reason)
++{
++    /* Only clear the in-memory applied connection. Persistence and Cancel remain
++     * the responsibility of the normal NetworkManager secret-agent machinery. */
++    nm_act_request_clear_secrets(req);
++    nm_device_state_changed(NM_DEVICE(self), NM_DEVICE_STATE_NEED_AUTH, reason);
++    wifi_secrets_get_secrets(self,
++                             NM_SETTING_WIRELESS_SECURITY_SETTING_NAME,
++                             NM_SECRET_AGENT_GET_SECRETS_FLAG_ALLOW_INTERACTION
++                                 | NM_SECRET_AGENT_GET_SECRETS_FLAG_REQUEST_NEW);
++}
++
++static void
++supplicant_iface_notify_wpa_sae_mismatch_cb(NMSupplicantInterface *iface, NMDeviceWifi *self)
++{
++    NMDevice     *device = NM_DEVICE(self);
++    NMActRequest *req    = nm_device_get_act_request(device);
++
++    if (nm_device_get_state(device) != NM_DEVICE_STATE_CONFIG || !req || !is_sae_request(req))
++        return;
++
++    _LOGI(LOGD_DEVICE | LOGD_WIFI,
++          "Activation: (wifi) SAE password mismatch reported by supplicant, asking for new key");
++    cleanup_association_attempt(self, TRUE);
++    request_new_sae_password(self, req, NM_DEVICE_STATE_REASON_SUPPLICANT_DISCONNECT);
++}
++
++/* A legacy AP may reject an SAE confirmation with status 1 (unspecified).
++ * This alone says nothing about the password. Remember only the live attempt. */
++static void
++supplicant_iface_auth_reject_unspecified(NMSupplicantInterface *iface, NMDeviceWifi *self)
++{
++    NMDevice     *device = NM_DEVICE(self);
++    NMActRequest *req    = nm_device_get_act_request(device);
++    const char   *selected;
++
++    if (nm_device_get_state(device) != NM_DEVICE_STATE_CONFIG || !req || !is_sae_request(req))
++        return;
++    selected = g_object_get_data(G_OBJECT(req), "wifi-explicit-ap");
++    if (selected && selected[0])
++        g_object_set_data(G_OBJECT(req), "wifi-sae-rejected", GINT_TO_POINTER(TRUE));
++}
++
++static void
++clear_sae_retry(NMDeviceWifiPrivate *priv)
++{
++    g_clear_pointer(&priv->sae_retry_ap, g_free);
++    g_clear_pointer(&priv->sae_retry_uuid, g_free);
++    priv->sae_retry_until_msec = 0;
++}
++
++static void
++remember_failed_sae_selection(NMDeviceWifi *self, NMActRequest *req)
++{
++    NMDeviceWifiPrivate *priv = NM_DEVICE_WIFI_GET_PRIVATE(self);
++    const char          *path = g_object_get_data(G_OBJECT(req), "wifi-explicit-ap");
++    NMWifiAP            *ap;
++
++    if (!path || !path[0] || !g_object_get_data(G_OBJECT(req), "wifi-sae-rejected"))
++        return;
++    ap = nm_wifi_ap_lookup_for_device(NM_DEVICE(self), path);
++    if (!ap || nm_wifi_ap_get_fake(ap))
++        return;
++
++    nm_strdup_reset(&priv->sae_retry_ap, path);
++    nm_strdup_reset(&priv->sae_retry_uuid,
++                    nm_connection_get_uuid(nm_act_request_get_applied_connection(req)));
++    priv->sae_retry_uid = nm_auth_subject_get_unix_process_uid(
++        nm_active_connection_get_subject(NM_ACTIVE_CONNECTION(req)));
++    priv->sae_retry_until_msec =
++        nm_utils_get_monotonic_timestamp_msec() + 180 * NM_UTILS_MSEC_PER_SEC;
++    _LOGD(LOGD_WIFI, "legacy SAE authentication rejection followed by association timeout");
++}
++
++static void
++check_sae_reselection(NMDeviceWifi *self, NMActRequest *req, NMWifiAP *selected)
++{
++    NMDeviceWifiPrivate *priv   = NM_DEVICE_WIFI_GET_PRIVATE(self);
++    NMActiveConnection  *active = NM_ACTIVE_CONNECTION(req);
++    const char          *path;
++
++    if (nm_active_connection_get_activation_reason(active) != NM_ACTIVATION_REASON_USER_REQUEST
++        || !nm_active_connection_get_user_requested(active)
++        || g_object_get_data(G_OBJECT(req), "wifi-explicit-ap"))
++        return;
++
++    /* Capture the caller's specific object before stage 1 may choose a compatible
++     * or synthetic AP. A later stage 1 on the same request must not replace it. */
++    path = selected && !nm_wifi_ap_get_fake(selected)
++               ? nm_dbus_object_get_path(NM_DBUS_OBJECT(selected))
++               : "";
++    g_object_set_data_full(G_OBJECT(req), "wifi-explicit-ap", g_strdup(path), g_free);
++    if (!priv->sae_retry_ap)
++        return;
++
++    if (path[0] && is_sae_request(req)
++        && nm_utils_get_monotonic_timestamp_msec() <= priv->sae_retry_until_msec
++        && priv->sae_retry_uid
++               == nm_auth_subject_get_unix_process_uid(nm_active_connection_get_subject(active))
++        && nm_streq(path, priv->sae_retry_ap)
++        && nm_streq(nm_connection_get_uuid(nm_act_request_get_applied_connection(req)),
++                    priv->sae_retry_uuid))
++        g_object_set_data(G_OBJECT(req), "wifi-sae-reenter", GINT_TO_POINTER(TRUE));
++
++    clear_sae_retry(priv);
++}
++
+ /*
+  * supplicant_connection_timeout_cb
+  *
+@@ -2904,6 +3042,7 @@ supplicant_connection_timeout_cb(gpointer user_data)
+                                     NM_DEVICE_STATE_REASON_NO_SECRETS);
+         }
+     } else {
++        remember_failed_sae_selection(self, req);
+         _LOGW(LOGD_DEVICE | LOGD_WIFI,
+               "Activation: (wifi) association took too long, failing activation");
+         nm_device_state_changed(device,
+@@ -3137,6 +3276,7 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
+         ap_path = nm_active_connection_get_specific_object(NM_ACTIVE_CONNECTION(req));
+         ap      = ap_path ? nm_wifi_ap_lookup_for_device(NM_DEVICE(self), ap_path) : NULL;
+     }
++    check_sae_reselection(self, req, ap);
+     if (!ap)
+         ap = nm_wifi_aps_find_first_compatible(&priv->aps_lst_head, connection);
+ 
+@@ -3319,6 +3459,14 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
+     s_wireless = nm_connection_get_setting_wireless(connection);
+     nm_assert(s_wireless);
+ 
++    if (g_object_steal_data(G_OBJECT(req), "wifi-sae-reenter")) {
++        _LOGI(LOGD_DEVICE | LOGD_WIFI,
++              "Activation: (wifi) selected the failed SAE access point again, requesting credentials");
++        request_new_sae_password(self, req, NM_DEVICE_STATE_REASON_NONE);
++        return NM_ACT_STAGE_RETURN_POSTPONE;
++    }
++    g_object_set_data(G_OBJECT(req), "wifi-sae-rejected", NULL);
++
+     /* If we need secrets, get them */
+     setting_name = nm_connection_need_secrets(connection, NULL);
+     if (setting_name) {
+@@ -3554,6 +3702,7 @@ device_state_changed(NMDevice           *device,
+         _indicate_addressing_running_reset(self);
+         break;
+     case NM_DEVICE_STATE_ACTIVATED:
++        clear_sae_retry(priv);
+         activation_success_handler(device);
+         break;
+     case NM_DEVICE_STATE_FAILED:
+@@ -3828,6 +3977,7 @@ finalize(GObject *object)
+     nm_assert(c_list_is_empty(&priv->aps_lst_head));
+     nm_assert(g_hash_table_size(priv->aps_idx_by_supplicant_path) == 0);
+ 
++    clear_sae_retry(priv);
+     g_hash_table_unref(priv->aps_idx_by_supplicant_path);
+ 
+     G_OBJECT_CLASS(nm_device_wifi_parent_class)->finalize(object);
+diff --git a/src/core/supplicant/nm-supplicant-interface.c b/src/core/supplicant/nm-supplicant-interface.c
+index d5f56dc..012a828 100644
+--- a/src/core/supplicant/nm-supplicant-interface.c
++++ b/src/core/supplicant/nm-supplicant-interface.c
+@@ -65,6 +65,8 @@ enum {
+     WPS_CREDENTIALS, /* WPS credentials received */
+     GROUP_STARTED,   /* a new Group (interface) was created */
+     GROUP_FINISHED,  /* a Group (interface) has been finished */
++    SAE_MISMATCH,    /* supplicant reported incorrect SAE password */
++    AUTH_REJECT_UNSPECIFIED,
+     LAST_SIGNAL
+ };
+ 
+@@ -2912,8 +2914,15 @@ _properties_changed(NMSupplicantInterface *self,
+     priv->starting_pending_count++;
+ 
+     if (is_main) {
++        gint32 auth_status;
++
+         priv->is_ready_main = TRUE;
+         _properties_changed_main(self, properties);
++        /* The initial GetAll may contain a previous attempt's status. Act only
++         * on a live change from the subscribed supplicant interface. */
++        if (!initial && nm_g_variant_lookup(properties, "AuthStatusCode", "i", &auth_status)
++            && auth_status == 1)
++            g_signal_emit(self, signals[AUTH_REJECT_UNSPECIFIED], 0);
+     } else {
+         priv->is_ready_p2p_device = TRUE;
+         _properties_changed_p2p_device(self, properties);
+@@ -3077,6 +3086,12 @@ _signal_handle(NMSupplicantInterface *self,
+             return;
+         }
+ 
++        if (nm_streq(signal_name, "SaePasswordMismatch")) {
++            if (g_variant_is_of_type(parameters, G_VARIANT_TYPE_UNIT))
++                g_signal_emit(self, signals[SAE_MISMATCH], 0);
++            return;
++        }
++
+         if (nm_streq(signal_name, "EAP")) {
+             NMSupplicantAuthState auth_state = NM_SUPPLICANT_AUTH_STATE_UNKNOWN;
+             const char           *status;
+@@ -3737,4 +3752,18 @@ nm_supplicant_interface_class_init(NMSupplicantInterfaceClass *klass)
+                                            G_TYPE_NONE,
+                                            1,
+                                            G_TYPE_STRING);
++
++    signals[AUTH_REJECT_UNSPECIFIED] = g_signal_new(NM_SUPPLICANT_INTERFACE_AUTH_REJECT_UNSPECIFIED,
++                                                    G_OBJECT_CLASS_TYPE(object_class),
++                                                    G_SIGNAL_RUN_LAST,
++                                                    0, NULL, NULL, NULL, G_TYPE_NONE, 0);
++    signals[SAE_MISMATCH] = g_signal_new(NM_SUPPLICANT_INTERFACE_SAE_MISMATCH,
++                                         G_OBJECT_CLASS_TYPE(object_class),
++                                         G_SIGNAL_RUN_LAST,
++                                         0,
++                                         NULL,
++                                         NULL,
++                                         NULL,
++                                         G_TYPE_NONE,
++                                         0);
+ }
+diff --git a/src/core/supplicant/nm-supplicant-interface.h b/src/core/supplicant/nm-supplicant-interface.h
+index b8d9b01..6c177bd 100644
+--- a/src/core/supplicant/nm-supplicant-interface.h
++++ b/src/core/supplicant/nm-supplicant-interface.h
+@@ -86,6 +86,8 @@ typedef enum {
+ #define NM_SUPPLICANT_INTERFACE_WPS_CREDENTIALS "wps-credentials"
+ #define NM_SUPPLICANT_INTERFACE_GROUP_STARTED   "group-started"
+ #define NM_SUPPLICANT_INTERFACE_GROUP_FINISHED  "group-finished"
++#define NM_SUPPLICANT_INTERFACE_SAE_MISMATCH    "wpa-sae-password-mismatch"
++#define NM_SUPPLICANT_INTERFACE_AUTH_REJECT_UNSPECIFIED "auth-reject-unspecified"
+ 
+ typedef struct _NMSupplicantInterfaceClass NMSupplicantInterfaceClass;
+ 
