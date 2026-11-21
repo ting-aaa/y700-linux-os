@@ -93,6 +93,14 @@ if apps_receipt.exists() or apps_receipt.is_symlink():
             or apps_receipt.read_bytes() != source.read_bytes()):
         raise SystemExit('Tablet desktop apps require their sealed receipt and dev12.12 parent')
     apps_lock = json.loads(source.read_bytes())
+browser_lock = None
+browser_receipt = build / 'browser-camera-desktop.lock.json'
+if browser_receipt.exists() or browser_receipt.is_symlink():
+    source = repo / 'config' / browser_receipt.name
+    if (not apps_lock or browser_receipt.is_symlink() or not browser_receipt.is_file()
+            or browser_receipt.read_bytes() != source.read_bytes()):
+        raise SystemExit('Browser camera desktop requires its sealed receipt and dev12.13 parent')
+    browser_lock = json.loads(source.read_bytes())
 if args.sealed_dev12_5:
     version = '0.1.0~dev12.5'
 elif (args.sealed_blueman_y7001 and not args.platform_version
@@ -182,6 +190,8 @@ if af_receipt.exists() or af_receipt.is_symlink():
         # qcam is also present in the newer desktop applications layer.
         if apps_lock:
             digest = apps_lock['files'].get(name, digest)
+        if browser_lock:
+            digest = browser_lock['files'].get(name, digest)
         file = args.root / name
         if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise SystemExit(f'Autofocus package file differs from the release: {name}')
@@ -195,6 +205,8 @@ if af_receipt.exists() or af_receipt.is_symlink():
     image_version = desktop_lock['edition'] if desktop_lock else af_lock['edition']
     if apps_lock:
         image_version = apps_lock['edition']
+    if browser_lock:
+        image_version = browser_lock['edition']
     edition = (f'IMAGE_ID=y700-prc-debian\nIMAGE_VERSION={image_version}\n'.encode() +
                b'VARIANT="Lenovo Legion Y700 (2023) Xfce"\nVARIANT_ID=y700_xfce\n')
     if (not original.is_symlink() or str(original.readlink()) != '../usr/lib/os-release'
@@ -211,21 +223,23 @@ if desktop_lock:
         file = args.root / name
         if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise SystemExit(f'Desktop platform file differs from the release: {name}')
-if apps_lock:
-    for original in replacements(apps_lock):
+for app_layer in (apps_lock, browser_lock):
+    if not app_layer:
+        continue
+    for original in replacements(app_layer):
         if original not in wanted:
             raise SystemExit(f'Tablet desktop parent differs from the sealed inventory: {original}')
         wanted.remove(original)
-    wanted.update(map(package_tuple, apps_lock['packages']))
-    for name, digest in apps_lock['files'].items():
+    wanted.update(map(package_tuple, app_layer['packages']))
+    for name, digest in app_layer['files'].items():
         file = args.root / name
         if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise SystemExit(f'Tablet desktop file differs from the release: {name}')
         meta = file.stat()
         if (meta.st_uid != 0 or meta.st_gid != 0
-                or stat.S_IMODE(meta.st_mode) != int(apps_lock['file_modes'].get(name, '0644'), 8)):
+                or stat.S_IMODE(meta.st_mode) != int(app_layer['file_modes'].get(name, '0644'), 8)):
             raise SystemExit(f'Tablet desktop file owner or mode differs from the release: {name}')
-    for name, target in apps_lock['links'].items():
+    for name, target in app_layer['links'].items():
         link = args.root / name
         if not link.is_symlink() or str(link.readlink()) != target or (link.lstat().st_uid, link.lstat().st_gid) != (0, 0):
             raise SystemExit(f'Tablet desktop symlink differs from the release: {name}')
@@ -261,6 +275,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
             ledger_digest = desktop_lock['arm64_ledger_sha256']
         if apps_lock:
             ledger_digest = apps_lock['arm64_ledger_sha256']
+        if browser_lock:
+            ledger_digest = browser_lock['arm64_ledger_sha256']
         if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
             raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
         update = json.loads(update_lock.read_text())
@@ -279,7 +295,7 @@ if wanted != actual:
     raise SystemExit(f'Package mismatch: missing={sorted(wanted-actual)} extra={sorted(actual-wanted)}')
 records = ''.join('\t'.join(record) + '\n' for record in sorted(actual))
 digest = hashlib.sha256(records.encode()).hexdigest()
-final_desktop_lock = apps_lock or desktop_lock
+final_desktop_lock = browser_lock or apps_lock or desktop_lock
 if final_desktop_lock and digest != final_desktop_lock['package_digest']:
     raise SystemExit('Desktop platform package inventory differs from the sealed release')
 print(f'package_count={len(actual)}')

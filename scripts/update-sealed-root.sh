@@ -2,7 +2,7 @@
 # Apply one locked layer to a copy of its sealed generic predecessor.
 set -euo pipefail
 if (( EUID != 0 || $# != 4 )); then
-    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update|camera-autofocus|platform-desktop-update|tablet-desktop SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
+    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update|camera-autofocus|platform-desktop-update|tablet-desktop|browser-camera-desktop SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
     exit 2
 fi
 if [[ ${Y700_POWER_PRIVATE:-} != 1 ]]; then
@@ -71,10 +71,17 @@ case $layer in
         prior_args=(--platform-version '0.1.0~dev12.8+gpu1.2')
         lock_args=("${prior_args[@]}")
         ;;
+    browser-camera-desktop)
+        parent_sha=6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c
+        prior_inventory=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+        inventory_sha=a652f024df73eb7386043cf11fa3fde1a1eb81a9f78a572c7bce808b0f1979fb
+        prior_args=(--platform-version '0.1.0~dev12.8+gpu1.2')
+        lock_args=("${prior_args[@]}")
+        ;;
     *) echo "Unsupported image layer: $layer" >&2; exit 2 ;;
 esac
 deb_layer=false
-case $layer in camera-autofocus|platform-desktop-update|tablet-desktop) deb_layer=true ;; esac
+case $layer in camera-autofocus|platform-desktop-update|tablet-desktop|browser-camera-desktop) deb_layer=true ;; esac
 [[ $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
 umask 077
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -156,6 +163,8 @@ if [[ -n $prior_inventory ]]; then
             [[ ${#install_command[@]} == 5 ]]
         elif [[ $layer == tablet-desktop ]]; then
             [[ ${#install_command[@]} == 6 && ! -e $root/etc/xdg/autostart/ibus.desktop && ! -L $root/etc/xdg/autostart/ibus.desktop ]]
+        elif [[ $layer == browser-camera-desktop ]]; then
+            [[ ${#install_command[@]} == 3 && ${verify_command[2]} == y700-camera-pipewire ]]
         else
             [[ ${#install_command[@]} == 3 && ${verify_command[2]} == y700-platform ]]
             dpkg-deb -x "$stage/$deb" "$stage/payload"
@@ -185,6 +194,7 @@ if [[ -n $prior_inventory ]]; then
     if [[ $layer == wifi-sae-update ]] || "$deb_layer"; then
         verify_log=wifi-package-verify.log
         if [[ $layer == tablet-desktop ]]; then verify_log=desktop-apps-verify.log; fi
+        if [[ $layer == browser-camera-desktop ]]; then verify_log=browser-camera-verify.log; fi
         if [[ $layer == camera-autofocus ]]; then verify_log=camera-package-verify.log; fi
         if [[ $layer == platform-desktop-update ]]; then
             verify_log=platform-package-verify.log
@@ -206,6 +216,10 @@ if [[ -n $prior_inventory ]]; then
         install -m644 "$root/usr/lib/os-release" "$root/etc/os-release"
         printf '%s\n' 'IMAGE_ID=y700-prc-debian' 'IMAGE_VERSION=dev12.11' \
             'VARIANT="Lenovo Legion Y700 (2023) Xfce"' 'VARIANT_ID=y700_xfce' >> "$root/etc/os-release"
+    elif [[ $layer == browser-camera-desktop ]]; then
+        grep -Fxq IMAGE_VERSION=dev12.13 "$root/etc/os-release"
+        sed -i 's/^IMAGE_VERSION=dev12\.13$/IMAGE_VERSION=dev12.14/' "$root/etc/os-release"
+        [[ $(blkid -p -s UUID -o value "$raw") == 171a4adb-916b-4763-9e6f-722b4a99988f ]]
     elif [[ $layer == tablet-desktop ]]; then
         grep -Fxq IMAGE_VERSION=dev12.12 "$root/etc/os-release"
         sed -i 's/^IMAGE_VERSION=dev12\.12$/IMAGE_VERSION=dev12.13/' "$root/etc/os-release"
@@ -254,7 +268,7 @@ else
     rm -- "$root/.y700-disposable-build-root"
 fi
 chmod 644 "$root/var/lib/y700/build/packages.tsv"
-if [[ $layer == tablet-desktop ]]; then
+if [[ $layer == tablet-desktop || $layer == browser-camera-desktop ]]; then
     cp "$record/packages.tsv" "$w/result/packages.tsv"
     cp "$record/$layer.lock.json" "$w/result/$layer.lock.json"
 fi

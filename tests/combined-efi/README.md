@@ -44,6 +44,13 @@ For dev12.12, set `MEDIA_EDITION=dev12.12` and supply its unpacked root and EFI 
 
 For dev12.13, set `MEDIA_EDITION=dev12.13`, `COLD_BOOT=1` and use the root and EFI from the dev12.13 archive. The observer verifies all 1,241 package tuples and the desktop update receipt. After each login it locates the XDG-autostarted Quick Settings process on the enrolled user's session bus and checks its embedded X11 tray icon. The host touches the icon, switches auto-rotate on and off, and closes the panel. Both runs require the same process to survive closing the panel. The guest also exercises the inherited settings, qcam chooser and playback checks. [Release measurements](../../docs/DEV12.13-VERIFICATION.md)
 
+For dev12.14 use `MEDIA_EDITION=dev12.14` with the reconstructed root and EFI.
+The observer verifies the browser-camera package receipt and the new tuple digest.
+After touch enrollment and PAM login it launches the installed Chromium desktop
+browser using that ordinary user's Xfce environment and checks a sandboxed
+renderer. A separate DSI-1 camera VM checks the four actual video orientations.
+[Fresh-install validation](../../docs/DEV12.14-VERIFICATION.md)
+
 The dev12.11 TAR `217bb183be85bebe4508f28954fec2566fb29456e58468cdf53d493ceac25c8d` booted twice. Both boots enrolled and logged in through touch. On the first boot the installed player opened, but the observer saw none of the expected frames. On the second boot the 246-unit camera chooser measured 492 pixels wide, and a touch on its 96-pixel-high Cancel button closed the application. The ordinary user's Parole then displayed all three colour pairs using `libgstlibav.so`. The guest powered off and the source hashes matched. The reduced receipts are `out/dev12.11-efi-verified/desktop-first.txt` and `desktop.txt`. The latter has SHA-256 `bb5c374e8d388a232626c50a0e5596e8d3e2c26b6182a5f9e7e87b1796e18d33`.
 
 The sealed root `e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb` passed this test with boot FAT `495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6`. The running inventory digest was `89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d`. The clip `a45468cdbd00837f2edfe136338471071083686de9dcb2d3c2654312202c3ee6` displayed red/green, green/blue and blue/red on the 1024 × 768 desktop at 1× scale. Parole loaded `libgstlibav.so`. Its private registry indexed the customized V4L2 plugin, and both V4L2 plugin copies stayed unloaded on this VM. The guest powered off and the source hashes matched again. The reduced receipt is `out/dev12.9-board-verified/efi-boot.log`, SHA-256 `3ee359aa6673fb50d65eeb2459a0051f98f2a3920a7825d12913d653ce49ea26`. [Physical Iris playback evidence](../../docs/VIDEO-PLAYER-INTEGRATION.md)

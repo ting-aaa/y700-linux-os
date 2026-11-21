@@ -11,6 +11,12 @@ if [[ -f ./pipewire.deb ]]; then
     sha256sum ./pipewire.deb /usr/libexec/y700-camera-orientation
 else
     dpkg-query -W y700-camera-pipewire
+    if [[ -f ./installed-browser-camera ]]; then
+        grep -Fxq IMAGE_VERSION=dev12.14 /etc/os-release
+        [[ $(dpkg-query -W -f='${Version}' y700-camera-pipewire) == 1.4.2-1+y700.5 ]]
+        [[ -z $(dpkg -V y700-camera-pipewire) && ! -e /etc/y700/user-configured ]]
+        [[ $(/usr/libexec/y700-firstboot-drm/enroll --state) == new ]]
+    fi
 fi
 sha256sum /usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so
 # Debian's virtual libcamera pipeline has no backing dev_t. WirePlumber

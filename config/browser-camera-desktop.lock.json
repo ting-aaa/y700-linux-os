@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "edition": "dev12.14",
+  "parent_root_sha256": "6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c",
+  "package_digest": "a652f024df73eb7386043cf11fa3fde1a1eb81a9f78a572c7bce808b0f1979fb",
+  "arm64_ledger_sha256": "f1689b582a6065355a63313745b8eded6ba190153eec081ee93cc6a78610f831",
+  "replaces": [{"package":"y700-camera-pipewire","version":"1.4.2-1+y700.4","architecture":"arm64"}],
+  "packages": [{
+    "package": "y700-camera-pipewire",
+    "version": "1.4.2-1+y700.5",
+    "architecture": "arm64",
+    "size": 56448,
+    "sha256": "73cfdd2a0b1dad67f02aef3efbbb54b9129fb6a918bddc33b0574a08cd343cfc"
+  }],
+  "files": {
+    "etc/chromium.d/zz-y700-camera": "045ec9dc6dbb44b1396860e5281daf99cc4d152e27a5adfd02caade4566ac643",
+    "etc/xdg/autostart/y700-camera-orientation.desktop": "182ed10efb22af8230800dc2571a1d4dbde2b94fc33009c8037652e1414c0276",
+    "opt/y700-camera/etc/libcamera/configuration.yaml": "5bff056cbde180ae56e77b1a8fbb7de14fe08568fbeb9f37487084b35477f2e5",
+    "usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so": "a7eab16363e28fd191944dd75e2aa6b37e0520ba2c05a47699b800ac83ae28d0",
+    "usr/libexec/y700-camera-orientation": "b5f91317174fbd744f7009b27a937eaec83a0da7ccdbd07b05a7cb0d6ab913b5",
+    "usr/share/doc/y700-camera-pipewire/copyright": "37d79c7152551eb1d04f69534d26b48257a6162443f7924a8896052d6f393932",
+    "usr/share/wireplumber/wireplumber.conf.d/65-y700-camera.conf": "d591665ee4446f06d34bc7a40e3e3634c1c8d1f110ecb8610105d320ffa0b23d"
+  },
+  "file_modes": {
+    "usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so": "0755",
+    "usr/libexec/y700-camera-orientation": "0755"
+  },
+  "links": {}
+}

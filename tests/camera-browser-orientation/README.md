@@ -35,6 +35,20 @@ bash tests/camera-browser-orientation/run-vm.sh \
 
 Set `QEMU_SYSTEM_AARCH64` and `QEMU_DATA_DIR` if using a private QEMU build. The fixture requires a new log path and checks the expected mismatch count. `BROWSER_ORIENTATION_DONE` and `PANEL_CI_EXIT=0` mark a complete run.
 
+For the fresh dev12.14 installation, pass its reconstructed raw root and use
+`installed` in both package positions. The guest checks the shipped versions and
+files, verifies the installed qcam binary, and checks the SHA-256 and mapped inode of
+WirePlumber's camera SPA. The ordinary Chromium user then runs the four chart
+checks with a fresh private home. No replacement qcam or PipeWire package is in
+the VM payload. [Installation and recorded checks](../../docs/DEV12.14-VERIFICATION.md)
+
+```sh
+bash tests/camera-browser-orientation/run-vm.sh \
+    "$DEV1214_ROOT" "$KERNEL" installed "$VIRTUAL_DEBS_DIR" \
+    "$X11_DEBS_DIR" "$VKMS_KO" "$BUSYBOX_ARM64" "$UV_ARM64" \
+    "$VIRTUAL_LIBS_DIR" installed "$NEW_LOG"
+```
+
 To check the eight-byte user-session state on a Linux host, create a fresh temporary directory and run the native test.
 
 ```sh

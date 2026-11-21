@@ -12,10 +12,15 @@ fi
 for deb in x11/*.deb; do dpkg-deb -x "$deb" /; done
 for deb in runtime/*.deb; do dpkg-deb -x "$deb" /opt/qcam-virtual/runtime-root; done
 test "$(dpkg-deb -f runtime/libcamera0.7_*.deb Version)" = 0.7.2-1
-dpkg-deb -f ./qcam.deb Package Version Architecture
-test "$(dpkg-deb -f ./qcam.deb Package)" = y700-camera-qcam
-test "$(dpkg-deb -f ./qcam.deb Architecture)" = arm64
-dpkg-deb -x ./qcam.deb /
+if [[ -f ./installed-browser-camera ]]; then
+    [[ ! -e ./qcam.deb && ! -e ./pipewire.deb ]]
+    [[ $(dpkg-query -W -f='${Version}' y700-camera-qcam) == '0.7.2-1~bpo13+1.y7008' ]]
+else
+    dpkg-deb -f ./qcam.deb Package Version Architecture
+    test "$(dpkg-deb -f ./qcam.deb Package)" = y700-camera-qcam
+    test "$(dpkg-deb -f ./qcam.deb Architecture)" = arm64
+    dpkg-deb -x ./qcam.deb /
+fi
 printf 'QCAM_VIRTUAL_ELF '; sha256sum /opt/y700-camera/bin/qcam
 runtime=/opt/qcam-virtual/runtime-root/usr/lib/aarch64-linux-gnu
 if [[ -d ./virtual-libs ]]; then

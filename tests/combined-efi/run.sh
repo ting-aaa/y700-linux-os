@@ -21,7 +21,8 @@ media=${MEDIA_DESKTOP:-0}
 [[ $media == 0 || ( $media == 1 && $blueman == 1 ) ]]
 if (( media )); then
     media_edition=${MEDIA_EDITION:-dev12.9}
-    case "$media_edition" in dev12.9|dev12.10|dev12.11|dev12.12|dev12.13) ;; *) exit 2 ;; esac
+    case "$media_edition" in dev12.9|dev12.10|dev12.11|dev12.12|dev12.13|dev12.14) ;; *) exit 2 ;; esac
+    media_revision=${media_edition##*.}
     clip=$(realpath -e "${MEDIA_CLIP:?Provide the 24-second synthetic H.264 colour-pair MP4}")
     media_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the media witness}")
 fi
@@ -102,15 +103,18 @@ if (( media )); then
     if [[ $media_edition != dev12.9 ]]; then
         mcopy -i test-esp.fat "$here/../../config/video-player-update.lock.json" ::/media-update-tested.lock
     fi
-    if [[ $media_edition == dev12.11 || $media_edition == dev12.12 || $media_edition == dev12.13 ]]; then
+    if (( media_revision >= 11 )); then
         mcopy -i test-esp.fat "$here/camera-session.py" "$here/../../config/"{camera-autofocus,wifi-sae-update}.lock.json ::/
     fi
-    if [[ $media_edition == dev12.12 || $media_edition == dev12.13 ]]; then
+    if (( media_revision >= 12 )); then
         mcopy -i test-esp.fat "$here/desktop-settings.py" "$here/../brightness/probe.py" \
             "$here/../../config/platform-desktop-update.lock.json" ::/
     fi
-    if [[ $media_edition == dev12.13 ]]; then
+    if (( media_revision >= 13 )); then
         mcopy -i test-esp.fat "$here/quick-session.py" "$here/../../config/tablet-desktop.lock.json" ::/
+    fi
+    if (( media_revision >= 14 )); then
+        mcopy -i test-esp.fat "$here/../../config/browser-camera-desktop.lock.json" ::/
     fi
     mcopy -i test-esp.fat "$clip" ::/media-clip.mp4
     mcopy -i test-esp.fat "$here/media-session.py" ::/media-session.py
@@ -217,15 +221,16 @@ if (( media )); then
             grep -Fxq 'COMBINED_MEDIA_UPDATE edition=dev12.10 parole=4.18.2-1+y7002 package_files=verified' "$report"
             grep -Eq '^COMBINED_MEDIA_PROCESS installed_elf=verified pid=[0-9]+$' "$report"
         fi
-        if [[ $media_edition == dev12.11 || $media_edition == dev12.12 || $media_edition == dev12.13 ]]; then
+        if (( media_revision >= 11 )); then
             grep -Fxq 'COMBINED_CAMERA_TOUCH ordinary=1 qt_scale=2 chooser_cancelled=1' "$report"
         fi
-        if [[ $media_edition == dev12.12 || $media_edition == dev12.13 ]]; then
+        if (( media_revision >= 12 )); then
             grep -Fxq 'COMBINED_SETTINGS brightness_slider=5..100 gpu_toggle=off,on,off gtk_scale=2 ordinary=1' "$report"
         fi
-        if [[ $media_edition == dev12.13 ]]; then
+        if (( media_revision >= 13 )); then
             grep -Fxq 'COMBINED_QUICK autostart=1 controls=4 rotation_touch=on,off closed=1' "$report"
         fi
+        if (( media_revision >= 14 )); then grep -Fxq 'COMBINED_BROWSER_CAMERA version=.5 ordinary=1 renderer=1' "$report"; fi
     done
 fi
 sha256sum --strict -c "$manifest" | tee "$out/after.log"

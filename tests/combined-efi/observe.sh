@@ -102,10 +102,17 @@ if [[ $1 == setup ]]; then
             cmp /boot/platform-desktop-update.lock.json /var/lib/y700/build/platform-desktop-update.lock.json
             platform='0.1.0~dev12.8+gpu1.2'
             if [[ -f /boot/tablet-desktop.lock.json ]]; then
-                grep -Fxq IMAGE_VERSION=dev12.13 /etc/os-release
                 cmp /boot/tablet-desktop.lock.json /var/lib/y700/build/tablet-desktop.lock.json
                 count=1241
                 expected=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+                if [[ -f /boot/browser-camera-desktop.lock.json ]]; then
+                    grep -Fxq IMAGE_VERSION=dev12.14 /etc/os-release
+                    cmp /boot/browser-camera-desktop.lock.json /var/lib/y700/build/browser-camera-desktop.lock.json
+                    [[ $(dpkg-query -W -f='${Version}' y700-camera-pipewire) == 1.4.2-1+y700.5 ]]
+                    expected=a652f024df73eb7386043cf11fa3fde1a1eb81a9f78a572c7bce808b0f1979fb
+                else
+                    grep -Fxq IMAGE_VERSION=dev12.13 /etc/os-release
+                fi
                 camera='0.7.2-1~bpo13+1.y7008'
                 [[ $(dpkg-query -W -f='${Version}' y700-quick-settings) == 0.1.0 ]]
                 [[ $(dpkg-query -W -f='${Version}' ibus) == '1.5.32-2+0y7001' ]]
@@ -280,6 +287,22 @@ if [[ -f /boot/media-tested.lock ]]; then
     setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
         UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 160 "$media/uv" run --offline --no-project \
         --python /usr/bin/python3 python -B "$media/media-session.py" "$media/media-clip.mp4" "$media_edition"
+fi
+if [[ -f /boot/browser-camera-desktop.lock.json ]]; then
+    # This witness inherits the enrolled LightDM/Xfce user's live session.
+    setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
+        chromium --user-data-dir="/run/user/$uid/first-browser-profile" --no-first-run \
+        --disable-background-networking about:blank >/run/y700-first-browser.log 2>&1 &
+    browser_job=$!
+    renderer() { pgrep -u "$uid" -f '^/usr/lib/chromium/chromium .*--type=renderer' | head -n1; }
+    wait_for 90 chromium-renderer renderer >/dev/null
+    renderer_pid=$(renderer)
+    [[ $(readlink -f "/proc/$renderer_pid/exe") == /usr/lib/chromium/chromium ]]
+    grep -Eq '^Seccomp:[[:blank:]]+2$' "/proc/$renderer_pid/status"
+    grep -Eq '^NoNewPrivs:[[:blank:]]+1$' "/proc/$renderer_pid/status"
+    kill -TERM "$browser_job"
+    wait "$browser_job" || :
+    echo 'COMBINED_BROWSER_CAMERA version=.5 ordinary=1 renderer=1'
 fi
 echo COMBINED_PASS
 systemctl --no-block poweroff

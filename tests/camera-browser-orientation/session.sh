@@ -12,7 +12,7 @@ dbus-update-activation-environment DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SE
 py=(./uv run --offline --no-project --python /usr/bin/python3 python -B)
 "${py[@]}" ./orient-vm-check.py --generate
 ./orientation-probe
-if [[ -f ./pipewire.deb ]]; then
+if [[ -f ./pipewire.deb || -f ./installed-browser-camera ]]; then
     helper=$(sed -n 's/^Exec=//p' /etc/xdg/autostart/y700-camera-orientation.desktop)
     [[ $helper == /usr/libexec/y700-camera-orientation ]]
     "$helper" &
@@ -28,6 +28,13 @@ for _ in {1..120}; do [[ ! -S $XDG_RUNTIME_DIR/pipewire-0 ]] || break; sleep .1;
 wireplumber --profile=video-only >"$work/wp.log" 2>&1 & wp=$!
 for _ in {1..80}; do if pw-dump > "$work/nodes" && grep -q '"node.name": "y700_camera_front"' "$work/nodes"; then break; fi; sleep .2; done
 grep '"node.name": "y700_camera_' "$work/nodes"
+if [[ -f ./installed-browser-camera ]]; then
+    plugin=/usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so
+    [[ $(id -u) == 1000 ]]
+    echo "a7eab16363e28fd191944dd75e2aa6b37e0520ba2c05a47699b800ac83ae28d0  $plugin" | sha256sum --strict -c -
+    mawk -v name="$plugin" -v ino="$(stat -c %i "$plugin")" '$6==name && $5==ino && NF==6 {seen=1} END {exit !seen}' "/proc/$wp/maps"
+    echo 'FRESH_BROWSER_USER uid=1000 camera_package=.5 mapped_spa=verified'
+fi
 gdbus call --session --timeout 80 --dest org.freedesktop.portal.Desktop \
     --object-path /org/freedesktop/portal/desktop --method org.freedesktop.DBus.Properties.Get \
     org.freedesktop.portal.Camera version
