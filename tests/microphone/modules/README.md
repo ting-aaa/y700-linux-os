@@ -25,7 +25,7 @@ The virtual board provides module registration and lifetime coverage. Physical p
 
 ## dev12.12
 
-Use the sealed dev12.12 root and EFI image from the same release. The builder selects all three candidate patches from the root digest. Its WCD938x module uses the checked eFuse read. The runner pins the raw ELF manifest (`091e21b852b20a4c0f85ac4204cdf82fccb897ff8e302a92c81099d8c407f28d`) and the compressed module tree manifest (`f1b578a728d058be00c037fb3b20abb60506e5f96fb108dc6af75d1f31c24eee`) for both boot entries.
+Use the sealed dev12.12 root and EFI image from the same release. The builder selects four candidate patches from the root digest, including the WCD938x eFuse and SoundWire channel-count fixes. The runner pins the raw ELF manifest (`8ff66ced4eb44ffeedc0396bd46c71b4fe69aebe3bb99f5ce40df6d24ea8adf9`) and the compressed module tree manifest (`ca40cb5239c13c1cc669c118ab2dd4e87ce1e93fc1162c4d332ec569f275a64d`) for both boot entries.
 
 ```sh
 sudo bash scripts/build-microphone-modules.sh "$kernel_build" "$root_ext4" "$module_build"
@@ -36,4 +36,12 @@ for suffix in '' -120; do
 done
 ```
 
-The local combined receipt is `out/microphone/dev12.12-checked/receipt.txt`, SHA-256 `b05dd1da7c45811060e06f38cd781ce9e9b87b0042dc9e85b5237e0c318e25ea`. The modules loaded with Debian kmod from the sealed root. The QEMU virtual board has no physical TB320FC audio hardware.
+The local combined receipt is `out/microphone/dev12.12-soundwire/receipt.txt`, SHA-256 `d5829ac5eac6cd602a48a2e584e82f317ac6adfa503826e2b790cd4ee44a0af5`. The modules loaded with Debian kmod from the sealed root. The QEMU virtual board has no physical TB320FC audio hardware.
+
+To repeat the stream-count comparison, use the original SoundWire transport from the frozen dev12.9 module build and the newly built dev12.12 stage. The guest configures a fresh in-memory SoundWire stream for each case. The same harness loads the two real module binaries in turn.
+
+```sh
+bash tests/microphone/soundwire/run.sh "$kernel_build" ./kernel.efi \
+    "$dev129_build/modules/sound/soc/codecs/snd-soc-wcd938x-sdw.ko" \
+    "$module_build" "$arm64_static_busybox" ./stream-counts
+```

@@ -21,7 +21,7 @@ patches=(config/kernel/asphalt-lpass-tx-stereo.patch config/kernel/asphalt-tx3-d
 case $root_hash in
     e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb) ;; # Frozen dev12.9 build.
     5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3)
-        patches+=(config/kernel/asphalt-wcd938x-checked-id.patch) ;; # dev12.12
+        patches+=(config/kernel/asphalt-wcd938x-checked-id.patch config/kernel/asphalt-wcd938x-stream-channels.patch) ;; # dev12.12
     *) echo 'Expected the sealed dev12.9 or dev12.12 root' >&2; exit 2 ;;
 esac
 umask 022
@@ -55,6 +55,7 @@ bdcb10cbce42c563d2b4f8563779d3be62c8de7dca135470efc21a664d8a0957  vmlinux.o
 4626edf0d6fc948d3ae91160b0497ce3f394d47bcbefc34f607e87559f015fef  sound/soc/qcom/sc8280xp.c
 37ad9373051ca515d2b33e3e38c3506f10dac003a71b8c82fcb7f81f2048a58b  sound/soc/codecs/lpass-tx-macro.c
 c6d1fe48ee9f9c00e6b311277bf58bab711b84a08add74f4e69563eab0920ee1  sound/soc/codecs/wcd938x.c
+0c3b35a67fe57f7e1536919bee79fcd58ad5129b74b568179cc878a917aaf548  sound/soc/codecs/wcd938x-sdw.c
 HASH
 sha256sum --strict -c "$result/kernel-inputs.sha256"
 release=$(cat include/config/kernel.release)

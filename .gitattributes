@@ -14,3 +14,4 @@ tests/video-vp9/iris-seek.patch whitespace=-blank-at-eol
 config/kernel/asphalt-lpass-tx-stereo.patch whitespace=-blank-at-eol,-space-before-tab
 config/kernel/asphalt-tx3-dma-map.patch whitespace=-blank-at-eol,-space-before-tab
 config/kernel/asphalt-wcd938x-checked-id.patch whitespace=-blank-at-eol,-space-before-tab
+config/kernel/asphalt-wcd938x-stream-channels.patch whitespace=-blank-at-eol,-space-before-tab

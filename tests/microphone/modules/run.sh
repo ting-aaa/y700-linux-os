@@ -16,8 +16,8 @@ elif [[ ${1:-} == --dev12.12 || ${1:-} == --dev12.12-120 ]]; then
     mode=${1#--}
     shift
     root_hash=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
-    elf_manifest=091e21b852b20a4c0f85ac4204cdf82fccb897ff8e302a92c81099d8c407f28d
-    stage_manifest=f1b578a728d058be00c037fb3b20abb60506e5f96fb108dc6af75d1f31c24eee
+    elf_manifest=8ff66ced4eb44ffeedc0396bd46c71b4fe69aebe3bb99f5ce40df6d24ea8adf9
+    stage_manifest=ca40cb5239c13c1cc669c118ab2dd4e87ce1e93fc1162c4d332ec569f275a64d
     if [[ $mode == dev12.12 ]]; then
         image_hash=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
         notes=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063

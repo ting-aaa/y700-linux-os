@@ -1,0 +1,26 @@
+--- a/sound/soc/codecs/wcd938x-sdw.c
++++ b/sound/soc/codecs/wcd938x-sdw.c
+@@ -87,10 +87,10 @@
+ 			  struct snd_soc_dai *dai)
+ {
+ 	struct sdw_port_config port_config[WCD938X_MAX_SWR_PORTS];
+-	unsigned long ch_mask;
+-	int i, j;
++	unsigned int ch_mask;
++	int i;
+ 
+-	wcd->sconfig.ch_count = 1;
++	wcd->sconfig.ch_count = 0;
+ 	wcd->active_ports = 0;
+ 	for (i = 0; i < WCD938X_MAX_SWR_PORTS; i++) {
+ 		ch_mask = wcd->port_config[i].ch_mask;
+@@ -98,8 +98,7 @@
+ 		if (!ch_mask)
+ 			continue;
+ 
+-		for_each_set_bit(j, &ch_mask, 4)
+-			wcd->sconfig.ch_count++;
++		wcd->sconfig.ch_count += hweight32(ch_mask);
+ 
+ 		port_config[wcd->active_ports] = wcd->port_config[i];
+ 		wcd->active_ports++;
