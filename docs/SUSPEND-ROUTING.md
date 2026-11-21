@@ -1,6 +1,6 @@
 # Y700 二代的电源键与 RTC 唤醒路径
 
-TB320FC_PRC 的正式 dev12.11 已启用 PMK8350 RTC。平板在同次启动内两次进入 `s2idle`，分别约 19 秒和 89 秒，均由该 RTC 的 IRQ 247 唤醒。醒后实测覆盖 GLES、Vulkan、1080p H.264 硬解和七路传感器。日常默认是 `s2idle`。`deep` 是额外的可选平台模式，手动电源键唤醒和断开 USB 后的待机耗电也各有独立的验收项目。[正式启动和恢复记录](DEV12.11-VERIFICATION.md)
+TB320FC_PRC 的正式 dev12.11 已启用 PMK8350 RTC。在同一次实机启动内，两次 `s2idle` 分别睡眠约 19 秒和 89 秒，一次 `deep` 睡眠 17.956 秒，三次均由 RTC 的 IRQ 247 唤醒。深度挂起时，内核记录到 `machine_suspend[3]` 的开始和结束，以及中间的 `psci_system_suspend_enter`。试验结束后恢复日常默认 `s2idle`。手动电源键唤醒和断开 USB 后的待机耗电仍待实测。[正式启动和恢复记录](DEV12.11-VERIFICATION.md)
 
 ## 从硬件到 Linux
 

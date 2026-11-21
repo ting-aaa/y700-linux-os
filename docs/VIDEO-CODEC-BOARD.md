@@ -99,3 +99,5 @@ IRIS_V4L2_PLUGIN="$vp9_plugin" IRIS_V4L2_SHA256="$vp9_sha256" \
 ```bash
 bash tests/video-codec/run-tablet.sh "$usb_ssh" "$gst_tools_arm64_deb" out/iris-clips-1080 h264-after-wake
 ```
+
+同次启动后来通过 PMK8350 从 `deep` 唤醒。保持上述命令的样片和工具，将最后一个参数设为 `h264-after-deep`，控制程序核对最近一次完整的内核深睡与唤醒事件后才开放解码器。实机的 24 帧 1080p H.264 与软件参考全部一致，到达 EOS。解码器恢复挂起，本次未观察到运行时挂起、恢复失败或电源折叠重试。[深度休眠实机记录](DEV12.11-VERIFICATION.md)
