@@ -24,3 +24,21 @@ sudo bash check.sh after /var/tmp/y700-gpu-cycle-01 /run/y700-gpu-tools/gpu-offs
 ```
 
 The wrapper reads the kernel journal as root and launches the bounded render process as UID 1000 with its ordinary groups and an empty display environment. A hardware receipt includes three positive MSM accounting deltas. The second pass also requires the same boot ID and executable hash, paired suspend-entry/exit records, and at least 100 ms growth in the difference between Linux boot time and monotonic time. Both stages report new GPU, GMU or display fault matches. The wrapper never initiates sleep. A successful pair covers these rendering operations and the observed sleep interval. Display scanout, Vulkan, long-running stability and which platform power rails actually switched off require separate evidence.
+
+## Offscreen Vulkan graphics queue
+
+The Vulkan 1.2 probe uses a 64 × 32 optimal-tiled RGBA8 integer color attachment. Each of four graphics-queue submissions clears the framebuffer at render-pass load, clears a moving interior rectangle, and copies the image to a buffer. A transfer-to-host barrier, a three-second fence wait and mapped-memory invalidation precede each CPU check of all four channels. This exercises render-pass attachment writes, image layout transitions, transfers and synchronized host readback. Shader drawing, compute dispatch and window presentation require their own tests. [Attachment clears](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdClearAttachments.html) · [Image-to-buffer copies](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdCopyImageToBuffer.html) · [Host visibility](https://docs.vulkan.org/refpages/latest/refpages/source/vkInvalidateMappedMemoryRanges.html)
+
+Build with Debian ARM64 `libvulkan-dev` and `libvulkan1` extracted in the SDK. The verified build used package version `1.4.309.0-1` and GCC 15.2.0. The two builds produced SHA-256 `11e97a2a06219df3374af797fc563fcd43f0b5ef3c10c1b4a9b7eb5c73f68540`. In the sealed dev12.11 image (root SHA-256 `33ce23e8…`), UID 65534 with the lavapipe ICD passed all 8,192 pixels. Hardware mode rejected the same software device. The logs are in `out/gpu-offscreen/vulkan-dev12.11-control/`.
+
+```sh
+bash tests/gpu-resume/vulkan-build.sh "$DEBIAN_ARM64_SDK" "$NEW_ELF"
+sudo bash tests/gpu-resume/software-control.sh --vulkan-dev12.11 "$GENERIC_DEV12_11_ROOT" "$NEW_ELF" "$NEW_RESULTS"
+```
+
+Run as the ordinary desktop user on each side of a separately managed sleep and retain both outputs. Hardware mode requires the integrated device named `Turnip Adreno (TM) 730` and driver ID `VK_DRIVER_ID_MESA_TURNIP`.
+
+```sh
+timeout -k 2 20 env VK_DRIVER_FILES=/usr/share/vulkan/icd.d/freedreno_icd.json \
+    MESA_SHADER_CACHE_DISABLE=true /run/y700-gpu-tools/vulkan-offscreen.arm64
+```
