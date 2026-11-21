@@ -1,0 +1,15 @@
+#!/bin/busybox sh
+set -eu
+b=/bin/busybox
+trap 'rc=$?; echo "MIC_MODULES_EXIT=$rc"; $b poweroff -f' EXIT
+$b mount -t proc proc /proc
+$b mount -t sysfs sysfs /sys
+$b mount -t devtmpfs devtmpfs /dev
+test "$($b cat /sys/block/vda/ro)" = 1
+$b mount -t ext4 -o ro,noload /dev/vda /guest
+for dir in proc sys dev; do $b mount --bind "/$dir" "/guest/$dir"; done
+$b mount --bind /modules /guest/usr/lib/modules
+$b mount -o remount,bind,ro /guest/usr/lib/modules
+$b mount -t tmpfs tmpfs /guest/run
+$b cp /qa/* /guest/run/
+$b chroot /guest /bin/bash /run/guest.sh
