@@ -32,4 +32,6 @@
 
 dev12.13 可以从封存 EFI 和根镜像构建禁用 UFS、SD 的 RAM 启动包，再拆出小 initrd 与独立的 SquashFS 载荷。对焦附件检查系统版本和包清单，保留单轮授权、只传聚合测量值和正常重启的期限。版本专用附件 SHA-256 为 `b95ffa6ee14db058903c38a7c1bf892883dff150bb1dbed7e4638136f0db21d2`。五文件清单 SHA-256 为 `c7e5c6a5cfc795c25bd54940b8f4f1fea0e457cafb02f6e17ca3dc6914fc608f`。[RAM 构建器](../scripts/build-ram-trial.sh) · [接收器构建器](../scripts/build-ram-receiver.sh) · [版本专用附件](../tests/ram-af-acm/dev12.13-attachment.sh)
 
-ARM64 虚拟机从小 initrd 实收 1,353,732,096 字节，核对载荷 SHA-256 `1e8d32f9db603ff91c13b4666e78ce2d8af3355cf7e8fa2426339b4e13743ef2`。进入 RAM 根后，诊断进程报告无持久盘、无交换区，完成了一次合成图像的测量、断线重取收据和清理。实体平板尝试在正常重启时接管串口，在板型确认前发生超时。dev12.13 的物理冷启动和后摄实景对焦仍待验证。[主机接管及恢复步骤](../tests/uboot-ram-stage/README.md#dev1213-正常重启时接管串口)
+ARM64 虚拟机从小 initrd 实收 1,353,732,096 字节，核对载荷 SHA-256 `1e8d32f9db603ff91c13b4666e78ce2d8af3355cf7e8fa2426339b4e13743ef2`。进入 RAM 根后，诊断进程报告无持久盘、无交换区，完成了一次合成图像的测量、断线重取收据和清理。[主机接管及恢复步骤](../tests/uboot-ram-stage/README.md#dev1213-正常重启时接管串口)
+
+实体国行平板首次串口接管超时。延长等待窗口后，主机在正常重启时接管了 U-Boot，退出 EFI 菜单并通过三处 RAM 校验。UFS 和 SD 控制器均已禁用。平板经 USB 收到及核对了同一份载荷，从 dev12.13 内核与 RAM 根启动。后置主摄取得 664 帧，预览中央亮度接近黑色，未达到触发对焦的条件。平板已正常回到内置 dev12.11，两层 ext4 的写入、同步与直接读回均通过。此次进入的是板端诊断服务；实体屏首次图形登录仍待验证。[后摄测量与复机记录](CAMERA-FOCUS-PROBE.md#dev1213-physical-preview-before-autofocus)

@@ -177,6 +177,12 @@ The raw numeric receipts are under `out/camera-optical-qa/`.
 
 To investigate the original stall, compare an idle run and the same AF workload on the diskless system. A separate DT with PCIe0 disabled can test whether the WCN6855 host path is needed to reproduce it. The AF service's private network namespace leaves that host path active. Keep the kernel and display mode fixed across runs. The dev12.12 diskless bundle uses the dual-refresh kernel `0c92b63a…`, while the original failure used dev12.11 kernel `b103d0fc…`. [Kernel identities](PANEL-REFRESH.md)
 
+### Dev12.13 physical preview before autofocus
+
+The tablet booted the dev12.13 kernel and root from RAM with UFS and SD disabled. The configuration-only check selected 640×480 ABGR8888, then released the camera with zero frames and zero additional sensor-active milliseconds. The next run received 664 physical rear-camera frames. At frames 656 and 664, central green-channel means were 1.7086 and 1.7162 on a 0–255 scale. In the final window 91.25% of the sampled values were near one of the two clipping limits. Applied exposure was 33.28 ms and analogue gain was 16×. The signal stayed near black and never met the preview criteria. The probe ended before issuing a focus command. This run supplies no measurement of lens response or change in optical sharpness.
+
+The rear sensor suspended after 25,117 ms of activity, the temporary allocator access was released, and the host acknowledged the numeric receipt. After returning to internal dev12.11, both ext4 filesystems passed a synced 4 KiB write and direct readback with zero recorded errors. The 1,241-package inventory and the four core services matched the pre-trial checks. The six host receipts are in `out/dev12.13-ram-verified/nov22-reacquire/`. [Kernel and root verification](DEV12.13-VERIFICATION.md)
+
 ## Reproducing the bounded read
 
 Use the [board probe](../tests/camera-focus-probe.py) in a maintenance shell on the supported tablet. Running it without arguments checks the board, adapter, driver, free lens address and already-enabled supplies. The device node is selected from its firmware path.

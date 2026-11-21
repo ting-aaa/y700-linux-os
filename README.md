@@ -8,6 +8,8 @@
 
 ## 已确认的基线
 
+国行 dev12.14 全新安装复用 dev12.13 基包，另加 490 KiB 的增量包。新版预装浏览器相机方向修复。从这两个包重建的镜像已在 ARM64 虚拟机完成触屏首次设密、登录 Xfce 和启动 Chromium。平板日用系统已单独装好同版相机组件。[全新安装说明](docs/DEV12.14-IMAGE.md) · [验收记录](docs/DEV12.14-VERIFICATION.md) · [日用系统更新](docs/BROWSER-CAMERA-UPDATE.md)
+
 国行 dev12.13 安装镜像预装统一快捷设置、随内屏转向的相机、触屏蓝牙管理器和中文输入修复。机主在日用平板上确认后置主摄的实时预览方向已经正确。整个新根也已在同一台平板的 RAM 中校验并运行 200% Xfce 桌面。[镜像解包](docs/DEV12.13-IMAGE.md) · [镜像、试用卡与验收结果](docs/DEV12.13-VERIFICATION.md) · [相机实测](docs/CAMERA-ORIENTATION.md)
 
 国行 dev12.12 已生成完整开发镜像和配套 microSD 试用包。新装的 Xfce 带 5–100% 触屏亮度滑杆、按账户切换的 Chromium 图形加速，默认内核支持 60/120 Hz，保留 120 Hz 兼容入口。整套新用户空间已在平板 RAM 中按 200% 缩放运行；机主日常使用的内置系统为 dev12.11。[dev12.12 解包](docs/DEV12.12-IMAGE.md) · [验证记录与卡镜像校验值](docs/DEV12.12-VERIFICATION.md) · [各设备的校准与蓝牙地址](docs/DEV12.12-PER-UNIT.md)
