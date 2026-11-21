@@ -1,4 +1,4 @@
-"""Run the installed EFI loader against a private writable FAT disk across three resets."""
+"""Read the selected kernel command line and on-disk counter after each firmware boot."""
 
 import argparse
 import os
@@ -10,6 +10,7 @@ from pathlib import Path
 p = argparse.ArgumentParser()
 for arg in ("board", "qemu", "work"):
     p.add_argument(arg, type=Path)
+p.add_argument("--attempts", type=int, choices=(1, 2), default=2)
 args = p.parse_args()
 board, qemu, work = (x.resolve() for x in (args.board, args.qemu, args.work))
 work.mkdir(mode=0o700)
@@ -49,10 +50,11 @@ def put(name, content):
     run("mcopy", "-i", fat, src, "::/" + name)
 
 
-put("loader/loader.conf", "default y700-lab-*.conf\ntimeout 0\n")
-for role, filename, order in [("trial", "trial+2", "00"), ("return", "base", "99")]:
+prefix = "y700-installed-qemu" if args.attempts == 1 else "y700-lab"
+put("loader/loader.conf", f"default {prefix}-*.conf\ntimeout 0\n")
+for role, filename, order in [("trial", f"trial+{args.attempts}", "00"), ("return", "base", "99")]:
     put(
-        "loader/entries/y700-lab-" + filename + ".conf",
+        "loader/entries/" + prefix + "-" + filename + ".conf",
         f"title {role}\nsort-key {order}-y700\nlinux /EFI/debian/kernel.efi\n"
         f"devicetree /EFI/debian/board.dtb\noptions console=ttyAMA0 root=/dev/vda2 panic=3 y700.lab_vm={role}\n",
     )
@@ -67,7 +69,7 @@ run(
 )
 libs = qemu / "usr/lib/x86_64-linux-gnu"
 env = dict(os.environ, LD_LIBRARY_PATH=str(libs), QEMU_MODULE_DIR=str(libs / "qemu"))
-for boot, role in enumerate(("trial", "trial", "return"), 1):
+for boot, role in enumerate(["trial"] * args.attempts + ["return"], 1):
     command = [
         qemu / "usr/bin/qemu-system-aarch64",
         "-L",
@@ -156,6 +158,7 @@ for boot, role in enumerate(("trial", "trial", "return"), 1):
     entries = subprocess.check_output(
         ["mdir", "-b", "-i", str(disk) + "@@1048576", "::/loader/entries/"]
     )
-    counted = ("trial+1-1.conf" if boot == 1 else "trial+0-2.conf").encode()
+    consumed = min(boot, args.attempts)
+    counted = f"{prefix}-trial+{args.attempts - consumed}-{consumed}.conf".encode()
     assert counted in entries, entries
     print(f"boot {boot}: {role}, counter {counted.decode()}", flush=True)
