@@ -58,6 +58,14 @@ case $version in
         player_ledger=5fa586a125d52580771c923bec05985e32906be36acf1b88dec29e5791b89ccd
         notes_sha=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
         ;;
+    dev12.13)
+        has_player=true
+        package_count=1241
+        package_sha=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+        player_esp=cdd0e35bf0d0cd859f521bf74fafa594388ea3093c33ea81c189da56cb3dea0d
+        player_ledger=3d77058cde509e6f3256f332d4a2469d9448490ce6628001defdadd08711b5b8
+        notes_sha=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+        ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
 epoch=${SOURCE_DATE_EPOCH:-1795132800}
@@ -104,7 +112,7 @@ if $has_player; then
         debugfs -R 'dump /var/lib/y700/build/packages.tsv recorded-packages.tsv' "$root" >/dev/null 2>&1
         printf '%s  recorded-packages.tsv\n' "$player_ledger" | sha256sum --strict -c -
     fi
-    if [[ $version == dev12.11 || $version == dev12.12 ]]; then
+    if [[ $version == dev12.11 || $version == dev12.12 || $version == dev12.13 ]]; then
         for layer in camera-autofocus wifi-sae-update; do
             debugfs -R "dump /var/lib/y700/build/$layer.lock.json $layer.lock" "$root" >/dev/null 2>&1
             cmp "$repo/config/$layer.lock.json" "$layer.lock"
@@ -113,16 +121,21 @@ if $has_player; then
         grep -Fxq "IMAGE_VERSION=$version" image-os-release
         grep -Fxq IMAGE_ID=y700-prc-debian image-os-release
         media_locks+=(camera-autofocus.lock)
-        jq -r '.links | to_entries[] | [.key, .value] | @tsv' camera-autofocus.lock > camera-links.tsv
-        while IFS=$'\t' read -r path target; do
-            debugfs -R "stat /$path" "$root" 2>/dev/null | grep -Fx "Fast link dest: \"$target\"" >/dev/null
-        done < camera-links.tsv
     fi
-    if [[ $version == dev12.12 ]]; then
+    if [[ $version == dev12.12 || $version == dev12.13 ]]; then
         debugfs -R 'dump /var/lib/y700/build/platform-desktop-update.lock.json desktop-update.lock' "$root" >/dev/null 2>&1
         cmp "$repo/config/platform-desktop-update.lock.json" desktop-update.lock
         media_locks+=(desktop-update.lock)
     fi
+    if [[ $version == dev12.13 ]]; then
+        debugfs -R 'dump /var/lib/y700/build/tablet-desktop.lock.json tablet-desktop.lock' "$root" >/dev/null 2>&1
+        cmp "$repo/config/tablet-desktop.lock.json" tablet-desktop.lock
+        media_locks+=(tablet-desktop.lock)
+    fi
+    jq -sr 'map(.links // {}) | add | to_entries[] | [.key, .value] | @tsv' "${media_locks[@]}" > links.tsv
+    while IFS=$'\t' read -r path target; do
+        debugfs -R "stat /$path" "$root" 2>/dev/null | grep -Fx "Fast link dest: \"$target\"" >/dev/null
+    done < links.tsv
     # The update replaces the player's private plugin while the Debian plugin,
     # desktop entry, launcher and license files retain their original locks.
     jq -ser 'map(.files) | add | to_entries[] | [.value, .key] | @tsv' "${media_locks[@]}" > media-files.tsv

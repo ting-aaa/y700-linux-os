@@ -4,8 +4,8 @@ set -euo pipefail
 export LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1795150416 MTOOLSRC=/dev/null
 umask 077
 mode=ldo5
-case ${1:-} in --gt9768|--gt9768-rtc1|--dev12.12) mode=${1#--}; shift ;; esac
-[[ $# == 3 ]] || { echo 'Usage: build-camera-esp.sh [--gt9768|--gt9768-rtc1|--dev12.12] RELEASE_ESP.FAT KERNEL_IMAGE_DIRECTORY NEW_ESP.FAT' >&2; exit 2; }
+case ${1:-} in --gt9768|--gt9768-rtc1|--dev12.12|--dev12.13) mode=${1#--}; shift ;; esac
+[[ $# == 3 ]] || { echo 'Usage: build-camera-esp.sh [--gt9768|--gt9768-rtc1|--dev12.12|--dev12.13] RELEASE_ESP.FAT KERNEL_IMAGE_DIRECTORY NEW_ESP.FAT' >&2; exit 2; }
 esp=$(realpath -e -- "$1")
 image=$(realpath -e -- "$2")
 parent=$(realpath -e -- "$(dirname -- "$3")")
@@ -15,12 +15,13 @@ kernel=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
 dtb=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
 original=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
 candidate=ecdc35608c24b06cbad557f724ada12d7f3c98dbc92143a2e8c6d562ca9b7b67
-if [[ $mode == dev12.12 ]]; then
+if [[ $mode == dev12.* ]]; then
     original=92d47c14c4606d106ebad21ece8f5e23f244bd5aecea0c377bbe8966f8261b36
     kernel=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
     dtb=53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7
     notes=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
     candidate=1f6d75c17b5f38ff69d57e13c671bd0c1cbccf0c74cf1ea3f79e2011445ed091
+    if [[ $mode == dev12.13 ]]; then candidate=cdd0e35bf0d0cd859f521bf74fafa594388ea3093c33ea81c189da56cb3dea0d; fi
 elif [[ $mode != ldo5 ]]; then
     kernel=b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625
     dtb=a178f9de454d0e8aa5b474c91b4280da3aadc6aad0622c0120661447d836209f
@@ -53,13 +54,13 @@ readback() {
     (cd "$dir"; find . -type f -print0 | sort -z | xargs -0 sha256sum) >"$dir.files"
 }
 readback "$esp" before
-if [[ $mode == dev12.12 ]]; then
+if [[ $mode == dev12.* ]]; then
     cp before/EFI/debian/kernel.efi kernel-120.efi
     install -m600 "$image/kernel.efi" kernel.efi
     cmp "$image/board.dtb" before/EFI/debian/board.dtb
     base=before/loader/entries/debian.conf
-    sed '1c title Y700 dev12.12 (60 / 120 Hz display)' "$base" > debian.conf
-    sed -e '1c title Y700 dev12.12 (dev12.11 kernel, 120 Hz only)' \
+    sed "1c title Y700 $mode (60 / 120 Hz display)" "$base" > debian.conf
+    sed -e "1c title Y700 $mode (dev12.11 kernel, 120 Hz only)" \
         -e 's|^linux .*|linux /EFI/debian/kernel-120.efi|' \
         -e 's/^sort-key debian$/sort-key debian-fallback/' "$base" > debian-120.conf
     touch -d "@$SOURCE_DATE_EPOCH" kernel{,-120}.efi debian{,-120}.conf

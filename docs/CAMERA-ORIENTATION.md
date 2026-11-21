@@ -1,6 +1,6 @@
 # 相机预览与照片方向
 
-国行 TB320FC 的内屏以 1600 × 2560 竖屏为原生方向。机主报告图像上下和左右同时颠倒时，内屏 `DSI-1` 的 RandR 状态为 `left`，桌面为 2560 × 1600 横屏。
+国行 TB320FC 的内屏以 1600 × 2560 竖屏为原生方向。机主报告后置主摄的实时预览上下和左右同时颠倒时，内屏 `DSI-1` 的 RandR 状态为 `left`，桌面为 2560 × 1600 横屏。安装 y7008 后，机主在日用系统中重新打开「Y700 相机」，确认后置主摄的实景预览方向正确。本次现场复核针对实时预览。
 
 在该次实机上，以普通用户向三个镜头请求 `Rotate0`，分别生成并验证彩色预览配置。诊断未获取相机、配置硬件、启动取景或读取任何一帧。三路均返回 `Rotate270`。CN350 出厂设备树的主摄、前摄和微距都标有 270° roll，两个后摄的 yaw 为 180°，前摄为 0°。Linux 端三个传感器节点各自提供 270° 安装角及前后位置。应用应使用协商之后的图像方向。[板级移植](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/linux-kernel/sm8475/asphalt/patches/local/0016-asphalt-camera-wiring.patch) · [libcamera 的方向协商](https://docs.libcamera.org/master/public-api/classlibcamera_1_1CameraConfiguration.html) · [Android 前后摄及显示方向的约定](https://developer.android.com/media/camera/camera2/camera-preview)
 
@@ -30,4 +30,4 @@ sudo bash /var/lib/y700/updates/qcam-orientation-y7008/update.sh rollback
 
 在 dev12.12 的 ARM64 虚拟机上，三个模拟镜头使用参考机实际协商的 `Rotate270`。同一相机进程在四个内屏方向间切换，12 次预览和 12 张解码后的 JPEG 的四角顺序与宽高均符合预期。用同一幅标靶在 `left` 横屏比较，旧版保持原始后摄画面，新版把后置主摄和微距旋转 180°，前摄保持原角度。收据 `out/qcam-orientation-vm/verification.txt` 的 SHA-256 为 `5bc9a7ade014f86a7c44de32de3225cc2bed925b16478b90538c87bca77f811b`。[复现方法与各方向预期值](../tests/qcam-photo/orient-vm.md)
 
-在参考机上，已安装的新版相机在 200% 缩放、中英文两种界面下都能选到后置主摄、前摄和微距，并能取消退出。此次菜单验证期间，三个传感器均保持挂起，活动时长增量为零。实景方向的最终确认由机主在日用桌面取景时完成。
+在参考机上，已安装的新版相机在 200% 缩放、中英文两种界面下都能选到后置主摄、前摄和微距，并能取消退出。此次菜单验证期间，三个传感器均保持挂起，活动时长增量为零。

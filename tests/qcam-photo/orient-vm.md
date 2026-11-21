@@ -2,7 +2,7 @@
 
 This ARM64 VM runs the packaged qcam ELF on the sealed dev12.12 root. A VKMS connector named `DSI-1` drives the modesetting Xorg server. The test changes its live CRTC with RandR and checks the resulting connector geometry. At 200% Qt scale it compares four asymmetrical color markers inside the mapped qcam window with the decoded JPEG from the same camera's shutter. Each camera has a different original pattern and resolution. The JPEG and generated source frames live in the disposable guest. The host records text.
 
-On the daily tablet, a configuration-only inspection found `Rotate270` for all three integrated sensors after requesting `Rotate0`. The virtual pipeline patch reproduces that negotiation, and a separate program checks all three lens IDs and facing properties inside the VM. The application's UI and capture code, Xorg rotation events, Qt rendering and JPEG encoding run normally. Whether a physical scene looks upright to the owner requires observation on the tablet. [Physical camera metadata](../../docs/CAMERA-ORIENTATION.md)
+On the daily tablet, a configuration-only inspection found `Rotate270` for all three integrated sensors after requesting `Rotate0`. The virtual pipeline patch reproduces that negotiation, and a separate program checks all three lens IDs and facing properties inside the VM. The application's UI and capture code, Xorg rotation events, Qt rendering and JPEG encoding run normally. The owner separately confirmed that the real rear main preview is upright on the tablet after reopening the installed app. [Physical camera metadata and observation](../../docs/CAMERA-ORIENTATION.md)
 
 | RandR rotation | Rear main and macro, clockwise | Front, clockwise |
 | --- | ---: | ---: |

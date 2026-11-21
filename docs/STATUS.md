@@ -1,5 +1,7 @@
 # Hardware and system status
 
+The dev12.13 board archive and microSD image carry qcam y7008, touch-friendly Blueman, the single-tap Pinyin fix and the top-panel Quick Settings. On the daily tablet, the owner confirmed that reopening the rear main camera now shows an upright real scene. The complete dev12.13 root ran a 200% Xfce desktop from RAM on that tablet. [Release files and verification](DEV12.13-VERIFICATION.md) · [Rear preview](CAMERA-ORIENTATION.md)
+
 The PRC tablet booted the dev12.12 kernel and root in RAM twice and returned automatically to daily Debian. On the fixed target the rear HI1339 delivered 419 preview frames. The GT9768 driver accepted all nine coarse focus controls, but the measured contrast variation was too small to confirm focus. Both daily filesystems remained writable with zero error counts after return. [Physical camera results](CAMERA-FOCUS-PROBE.md#diskless-rear-autofocus-on-22-november)
 
 The dev12.12 offline desktop update brings the rear-camera default, touch-sized Bluetooth controls and single-tap Pinyin selection to existing installations. The reference tablet subsequently received the y7008 image-orientation update and the standalone top-panel Quick Settings package. [Camera orientation](CAMERA-ORIENTATION.md) · [Quick Settings](QUICK-SETTINGS.md) · [Offline update and rollback](DEV12.12-DESKTOP-UPDATE.md)
