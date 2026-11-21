@@ -1,19 +1,47 @@
 --- a/sys/v4l2/gstv4l2videodec.c
 +++ b/sys/v4l2/gstv4l2videodec.c
-@@ -357,6 +357,37 @@
+@@ -200,6 +200,8 @@
+ 
+   GST_DEBUG_OBJECT (self, "Starting");
+ 
++  g_atomic_int_set (&self->flush_started, FALSE);
++
+   gst_v4l2_object_unlock (self->v4l2output);
+   g_atomic_int_set (&self->active, TRUE);
+   self->output_flow = GST_FLOW_OK;
+@@ -332,6 +334,23 @@
+ }
+ 
+ static gboolean
++is_iris_seek_decoder (GstV4l2VideoDec * self)
++{
++  return (self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_HEVC ||
++          self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_VP9) &&
++      !strcmp ((const char *) self->v4l2output->vcap.driver, "iris_driver") &&
++      !strcmp ((const char *) self->v4l2output->vcap.card, "Iris Decoder") &&
++      g_str_has_prefix ((const char *) self->v4l2output->vcap.bus_info,
++          "platform:aa00000.video-codec:");
++}
++
++static gboolean
++iris_flush_started (GstV4l2VideoDec * self)
++{
++  return g_atomic_int_get (&self->flush_started) && is_iris_seek_decoder (self);
++}
++
++static gboolean
+ gst_v4l2_video_dec_flush (GstVideoDecoder * decoder)
+ {
+   GstV4l2VideoDec *self = GST_V4L2_VIDEO_DEC (decoder);
+@@ -357,6 +376,32 @@
    gst_v4l2_object_unlock_stop (self->v4l2output);
    gst_v4l2_object_unlock_stop (self->v4l2capture);
  
 +  /* On the SM8475 Iris, restarting only the queues after a seek can leave
 +   * CAPTURE waiting indefinitely for a new picture. OUTPUT becomes active
 +   * first, so also restart a seek interrupted before CAPTURE negotiation. */
-+  if (self->iris_flush_state == IRIS_FLUSH_STOP && GST_V4L2_IS_ACTIVE (self->v4l2output) &&
-+      (self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_HEVC ||
-+          self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_VP9) &&
-+      !strcmp ((const char *) self->v4l2output->vcap.driver, "iris_driver") &&
-+      !strcmp ((const char *) self->v4l2output->vcap.card, "Iris Decoder") &&
-+      g_str_has_prefix ((const char *) self->v4l2output->vcap.bus_info,
-+          "platform:aa00000.video-codec:")) {
++  if (self->iris_flush_state == IRIS_FLUSH_STOP &&
++      GST_V4L2_IS_ACTIVE (self->v4l2output) && is_iris_seek_decoder (self)) {
 +    GST_INFO_OBJECT (self, "Opening a new Iris decoder session after flush");
 +    /* An outstanding old allocator must not issue REQBUFS on the new fd. */
 +    if (!gst_v4l2_buffer_pool_orphan (self->v4l2output) ||
@@ -38,7 +66,7 @@
    gst_v4l2_buffer_pool_flush (self->v4l2output);
  
    /* gst_v4l2_buffer_pool_flush() calls streamon the capture pool and must be
-@@ -369,6 +400,14 @@
+@@ -369,6 +414,14 @@
      gst_v4l2_object_stop (self->v4l2capture);
  
    return TRUE;
@@ -53,7 +81,55 @@
  }
  
  static gboolean
-@@ -1236,7 +1275,14 @@
+@@ -765,6 +818,11 @@
+   GST_LOG_OBJECT (self, "Looping.");
+ 
+   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
++  if (iris_flush_started (self)) {
++    GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
++    ret = GST_FLOW_FLUSHING;
++    goto beach;
++  }
+   if (G_UNLIKELY (!GST_V4L2_IS_ACTIVE (self->v4l2capture))) {
+     ret = gst_v4l2_video_dec_wait_for_src_ch (self);
+     if (ret != GST_FLOW_OK) {
+@@ -792,6 +850,15 @@
+        * In case we are flushing or stopping the element, ensure the active
+        * state is reflected onto the newly create pool.
+        */
++      if (iris_flush_started (self)) {
++        /* FLUSH_START may have unlocked the old CAPTURE pool while this
++         * thread was negotiating its replacement. Do not poll the new pool. */
++        GST_DEBUG_OBJECT (self, "Interrupting newly negotiated Iris capture pool");
++        gst_v4l2_object_unlock (self->v4l2capture);
++        GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
++        ret = GST_FLOW_FLUSHING;
++        goto beach;
++      }
+       if (!g_atomic_int_get (&self->active))
+         gst_v4l2_object_unlock (self->v4l2capture);
+     }
+@@ -1041,6 +1108,11 @@
+     }
+   }
+ 
++  if (iris_flush_started (self)) {
++    ret = GST_FLOW_FLUSHING;
++    goto drop;
++  }
++
+   task_state = gst_pad_get_task_state (GST_VIDEO_DECODER_SRC_PAD (self));
+   if (task_state == GST_TASK_STOPPED || task_state == GST_TASK_PAUSED) {
+     /* It's possible that the processing thread stopped due to an error */
+@@ -1228,6 +1300,7 @@
+ 
+   switch (type) {
+     case GST_EVENT_FLUSH_START:
++      g_atomic_int_set (&self->flush_started, TRUE);
+       GST_DEBUG_OBJECT (self, "flush start");
+       gst_v4l2_object_unlock (self->v4l2output);
+       gst_v4l2_object_unlock (self->v4l2capture);
+@@ -1236,7 +1309,15 @@
        break;
    }
  
@@ -64,14 +140,18 @@
 +    if (self->iris_flush_state == IRIS_FLUSH_FAILED)
 +      ret = FALSE;
 +    self->iris_flush_state = IRIS_FLUSH_IDLE;
++    g_atomic_int_set (&self->flush_started, FALSE);
 +  }
  
    switch (type) {
      case GST_EVENT_FLUSH_START:
 --- a/sys/v4l2/gstv4l2videodec.h
 +++ b/sys/v4l2/gstv4l2videodec.h
-@@ -66,6 +66,7 @@
+@@ -64,8 +64,10 @@
+   GstFlowReturn output_flow;
+ 
    /* Source Change Events */
++  gint flush_started;  /* Atomic: FLUSH_START is not serialized. */
    gboolean wait_for_source_change;
    gboolean draining;
 +  enum { IRIS_FLUSH_IDLE, IRIS_FLUSH_STOP, IRIS_FLUSH_FAILED } iris_flush_state;
