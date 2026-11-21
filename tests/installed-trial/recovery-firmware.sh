@@ -8,11 +8,13 @@ if [[ ${1:-} == --cci0 ]]; then shift; mode=cci0; prefix=y700-installed-cci0-qac
 if [[ ${1:-} == --ldo5 ]]; then shift; mode=ldo5; prefix=y700-installed-ldo5-qaldo; fi
 if [[ ${1:-} == --gt9768 ]]; then shift; mode=gt9768; prefix=y700-installed-gt9768-qafocus; fi
 if [[ ${1:-} == --dev12.11 ]]; then shift; mode=dev1211; prefix=y700-installed-dev1211-qafallback; fi
+if [[ ${1:-} == --panel60 ]]; then shift; mode=panel60; prefix=y700-installed-panel60-qapanel; fi
 [[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0|--ldo5|--gt9768|--dev12.11] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
 work=$(realpath -e "$1")
 bios=$(realpath -e "$2"); dt=$(realpath -e "$3"); busy=$(realpath -e "$4")
 efivarfs=$(realpath -e "$5")
-[[ $work == /var/tmp/y700-recovery-menu.* && -s $work/menu.fat && -d $work/armed-loader ]]
+[[ ( $work == /var/tmp/y700-recovery-menu.* || ( $mode == panel60 && $work == /var/tmp/y700-panel60.*/* ) ) &&
+   -s $work/menu.fat && -d $work/armed-loader ]]
 mkdir -m700 "$work/firmware"; cd "$work/firmware"
 mkdir -p init/{bin,dev,proc,sys}
 install -m755 "$busy" init/bin/busybox
@@ -32,6 +34,22 @@ mount -t efivarfs -o ro efivars /sys/firmware/efi/efivars
 key=/sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
 selected=$(cat "$key" | tail -c +5 | tr -d '\000')
 case "$selected" in
+    y700-installed-panel60-qapanel-trial.conf|y700-installed-panel60-qapanel-base.conf)
+        grep -Fwq y700.release=dev12.11 /proc/cmdline
+        grep -Fwq y700.recovery=journal /proc/cmdline
+        grep -Fwq root=UUID=c0e447e4-82db-59ee-91d6-0e1ec9d5f45e /proc/cmdline
+        notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
+        if [ "${selected##*-}" = trial.conf ]; then
+            grep -Fwq y700.panel_probe=60hz /proc/cmdline
+            grep -Fwq y700.installed_trial=qapanel /proc/cmdline
+            grep -Fwq systemd.wants=y700-installed-trial-deadline.timer /proc/cmdline
+            test "$notes" = c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+            echo "PANEL60_EFI selected=$selected notes=$notes"; reboot -f
+        else
+            if grep -Eq ' y700[.](installed_trial|panel_probe)=' /proc/cmdline; then exit 1; fi
+            test "$notes" = 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+            echo "PANEL60_EFI selected=$selected notes=$notes"; poweroff -f
+        fi ;;
     y700-installed-dev1211-qafallback-trial.conf|y700-installed-dev1211-qafallback-base.conf)
         grep -Fwq y700.recovery=journal /proc/cmdline
         notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
@@ -133,7 +151,10 @@ mkfs.fat -F16 -S4096 esp4k.fat >/dev/null
 mkdir sources
 mcopy -s -i ../menu.fat '::/EFI' sources/
 mcopy -i esp4k.fat -s sources/EFI ::/
-if [[ $mode == ldo5 || $mode == gt9768 ]]; then
+if [[ $mode == panel60 ]]; then
+    mmd -i esp4k.fat ::/EFI/y700-panel60-12-11
+    mcopy -i esp4k.fat ../armed-probe/kernel.efi ::/EFI/y700-panel60-12-11/kernel.efi
+elif [[ $mode == ldo5 || $mode == gt9768 ]]; then
     mmd -i esp4k.fat "::/EFI/y700-$mode-12-10"
     # The transaction fixture retained the exact staged kernel from its FAT.
     mcopy -i esp4k.fat ../armed-probe/kernel.efi "::/EFI/y700-$mode-12-10/kernel.efi"
@@ -179,7 +200,7 @@ elif [[ $mode == ldo5 || $mode == gt9768 ]]; then
 fi
 for original in ../armed-loader/entries/y700-installed-*.conf; do
     qa_dt=/EFI/qa-virt.dtb
-    if [[ $mode != recovery && $mode != dev1211 && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-$mode-virt.dtb; fi
+    if [[ $mode != recovery && $mode != dev1211 && $mode != panel60 && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-$mode-virt.dtb; fi
     awk -v dt="$qa_dt" '/^devicetree / {print "devicetree " dt;next}
          /^initrd / {print; print "initrd /EFI/qa-observer.gz"; next}
          /^options / {$0=$0 " console=ttyAMA0 rdinit=/qa-init"} {print}' "$original" > boot.conf

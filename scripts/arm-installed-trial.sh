@@ -53,6 +53,16 @@ dt_probe_mode() {
     source_sub=y700-$dt_probe-12-10
     entry=$source_sub.conf
     case $dt_probe in
+        panel60)
+            dev1211_mode
+            trial_role=panel60-
+            baseline_sub=y700-file-12-11; baseline_entry=$baseline_sub.conf
+            source_sub=y700-panel60-12-11; entry=$source_sub.conf
+            probe_option=y700.panel_probe=60hz
+            probe_dtb_sha=53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7
+            probe_kernel_sha=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
+            probe_notes=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+            recovery_sha=78998db5c6e822cdb3d4f0f9ede72aacd730ecf2212ea28102d1cbece155feb4 ;;
         rtc1)
             probe_option=y700.rtc_probe=rtc1
             probe_dtb_sha=501e44f89c639165aa753ecbb336d14ac38846abdfc57cc343806a3248844e51
@@ -222,7 +232,7 @@ check_recovery_origin() {
     if [[ -n $dt_probe || $candidate_edition == dev12.11 ]]; then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
     elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
-    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo|focus)_probe)(=| |$)' <<<"$args"; then
+    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo|focus|panel)_probe)(=| |$)' <<<"$args"; then
         die 'already running a trial or recovery'
     fi
     case $dt_probe in
@@ -232,12 +242,19 @@ check_recovery_origin() {
 }
 verify_running_kernel() {
     local expected=$stock_notes
-    if [[ $candidate_edition == dev12.11 && $running_edition == dev12.11 ]]; then
+    if [[ $dt_probe == panel60 && $1 == confirm ]]; then expected=$probe_notes
+    elif [[ $candidate_edition == dev12.11 && $running_edition == dev12.11 ]]; then
         expected=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
     elif [[ -n $probe_notes && $1 == confirm ]]; then expected=$probe_notes; fi
     [[ $(sha "${2:-/sys/kernel/notes}") == "$expected" ]] || die 'unexpected installed kernel build'
 }
 verify_dev1211_restore() {
+    if [[ $dt_probe == panel60 ]]; then
+        [[ $running_edition == dev12.11 && ( $(selected_entry) == "$baseline_entry" ||
+           $(selected_entry) == "y700-installed-${trial_role}$id-base.conf" ) ]] ||
+            die 'restore the panel probe on the original dev12.11 kernel'
+        return
+    fi
     case $running_edition:$(selected_entry) in
         dev12.10:"$baseline_entry"|dev12.10:"y700-installed-${trial_role}$id-base.conf"|\
         dev12.11:"$entry"|dev12.11:"y700-installed-${trial_role}$id-trial.conf") ;;
@@ -248,7 +265,11 @@ check_recovery_runtime() {
     local action=$1 unit uuid=$prior_uuid
     [[ $baseline == 0 ]] || die 'launch recovery trial from the installed file-root'
     check_personalized_files
-    if [[ $candidate_edition == dev12.11 ]]; then
+    if [[ $dt_probe == panel60 ]]; then
+        [[ $running_edition == dev12.11 ]] || die 'panel probe requires the installed dev12.11 file-root'
+        uuid=$inner_uuid
+        verify_rtc1_tree
+    elif [[ $candidate_edition == dev12.11 ]]; then
         if [[ $action == arm ]]; then
             [[ $running_edition == dev12.10 ]] || die 'arm from dev12.10 recovery'
             check_prepared_image
@@ -289,7 +310,7 @@ recovery_payloads() {
         [[ $result == "$expected" ]] || die 'deployed entry or payload differs from the sealed manifest'
     done
     if [[ $candidate_edition == dev12.11 ]]; then
-        result=$(cd "$esp" && sha256sum "EFI/$source_sub/"{kernel.efi,board.dtb,initrd} "loader/entries/$entry" | sha256sum | cut -c1-64)
+        result=$(cd "$esp" && sha256sum EFI/y700-file-12-11/{kernel.efi,board.dtb,initrd} loader/entries/y700-file-12-11.conf | sha256sum | cut -c1-64)
         [[ $result == d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362 ]] || die 'dev12.11 installed entry or payload differs'
     fi
     if [[ -n $dt_probe ]]; then
@@ -308,7 +329,7 @@ payloads() {
             die 'invalid BLS payload declaration'
         expected_dir=$sub
         if [[ -n $dt_probe && $sub == "$source_sub" ]]; then
-            if [[ $key == initrd || ( $key == linux && -z $probe_kernel_sha ) ]]; then expected_dir=y700-recovery-12-10; fi
+            if [[ $key == initrd || ( $key == linux && -z $probe_kernel_sha ) ]]; then expected_dir=$baseline_sub; fi
         fi
         [[ $value =~ ^/EFI/$expected_dir/[a-zA-Z0-9_.-]+$ && ${value##*/} != . && ${value##*/} != .. ]] ||
             die 'unexpected BLS payload path'
@@ -453,7 +474,7 @@ current_trial() {
             [[ $(selected_entry) == "y700-installed-${trial_role}$id-trial.conf" ]] || die 'unexpected recovery selection'
     fi
     if [[ -n $dt_probe ]]; then
-        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci|ldo|focus)_probe(=|$)') == "$probe_option" ]] ||
+        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci|ldo|focus|panel)_probe(=|$)') == "$probe_option" ]] ||
             die 'wrong DT probe option'
         case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; ldo5|gt9768) verify_ldo5_tree trial ;; esac
     fi
@@ -583,7 +604,7 @@ main() {
         [[ $# == 2 && $1 =~ ^(arm|confirm|promote|restore|prepare-candidate)$ ]] || die 'usage: --dev12.11 prepare-candidate MOUNT | arm|confirm|promote|restore RUN_ID'
         if [[ $1 != prepare-candidate ]]; then set -- "$@" "$recovery_sha"; fi
     elif [[ ${1:-} == --recovery ]]; then shift; recovery_mode
-    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 || ${1:-} == --gt9768 ]]; then
+    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 || ${1:-} == --gt9768 || ${1:-} == --panel60 ]]; then
         dt_probe_mode "${1#--}"; shift
         [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die "usage: --$dt_probe arm|confirm|restore RUN_ID"
         set -- "$@" "$recovery_sha"

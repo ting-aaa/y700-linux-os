@@ -4,7 +4,19 @@ set -euo pipefail
 umask 077
 [[ $# == 4 ]] || { echo 'Usage: build-dt-probe-entry.sh --rtc1|--cci0 RECOVERY_ENTRY PROBE_DTB NEW_DIRECTORY, or --ldo5|--gt9768 RECOVERY_ENTRY IMAGE_DIRECTORY NEW_DIRECTORY' >&2; exit 2; }
 kernel_hash=
+release=dev12.10
+base=y700-recovery-12-10
+base_manifest=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b
 case $1 in
+    --panel60)
+        release=dev12.11; base=y700-file-12-11
+        base_manifest=d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362
+        name=y700-panel60-12-11
+        title='NT36523N 60 Hz probe'; option=y700.panel_probe=60hz
+        tree_hash=53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7
+        kernel_hash=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
+        notes_hash=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+        manifest=1f208f3a5f4713a69987e62820d811d7886e801f7931ece5cfb4780cda7e4223 ;;
     --rtc1)
         name=y700-rtc1-12-10
         title='RTC1 awake probe'; option=y700.rtc_probe=rtc1
@@ -43,7 +55,7 @@ else
 fi
 dest=$(realpath -m "$3")
 [[ ! -e $dest && ! -L $dest ]]
-(cd "$source_entry"; echo '36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b  SHA256SUMS' | sha256sum --strict -c -; sha256sum --strict -c SHA256SUMS)
+(cd "$source_entry"; echo "$base_manifest  SHA256SUMS" | sha256sum --strict -c -; sha256sum --strict -c SHA256SUMS)
 printf '%s  %s\n' "$tree_hash" "$dtb" | sha256sum --strict -c -
 work=$(mktemp -d "${dest%/*}/.y700-dt-entry.XXXXXXXX")
 trap 'rm -r --one-file-system -- "$work"' EXIT
@@ -57,7 +69,7 @@ fi
 mkdir -p "$work/entry/EFI/$name" "$work/entry/loader/entries"
 cd "$work/entry"
 files=()
-linux_sub=y700-recovery-12-10
+linux_sub=$base
 if [[ -n $kernel_hash ]]; then
     linux_sub=$name
     install -m644 "$image/kernel.efi" "EFI/$name/kernel.efi"
@@ -65,11 +77,11 @@ if [[ -n $kernel_hash ]]; then
 fi
 install -m644 "$dtb" "EFI/$name/board.dtb"
 files+=("EFI/$name/board.dtb")
-sed -e "s/^title .*/title Y700 dev12.10 ($title)/" \
+sed -e "s/^title .*/title Y700 $release ($title)/" \
     -e "s|^linux .*|linux /EFI/$linux_sub/kernel.efi|" \
     -e "s|^devicetree .*|devicetree /EFI/$name/board.dtb|" \
     -e "/^options /s/$/ $option/" \
-    "$source_entry/loader/entries/y700-recovery-12-10.conf" >"loader/entries/$name.conf"
+    "$source_entry/loader/entries/$base.conf" >"loader/entries/$name.conf"
 sha256sum "${files[@]}" "loader/entries/$name.conf" >SHA256SUMS
 printf '%s  SHA256SUMS\n' "$manifest" | sha256sum --strict -c -
 sha256sum --strict -c SHA256SUMS

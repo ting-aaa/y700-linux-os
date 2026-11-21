@@ -4,8 +4,10 @@ set -euo pipefail
 export LC_ALL=C
 args=("$@")
 lens=false
+panel60=false
 if [[ ${1:-} == --lens ]]; then lens=true; shift; fi
-[[ $# == 2 && $EUID == 0 ]] || { echo 'Usage as root: build-camera-ldo5.sh [--lens] PREPARED_KERNEL NEW_OUTPUT' >&2; exit 2; }
+if $lens && [[ ${1:-} == --panel-60 ]]; then panel60=true; shift; fi
+[[ $# == 2 && $EUID == 0 ]] || { echo 'Usage as root: build-camera-ldo5.sh [--lens [--panel-60]] PREPARED_KERNEL NEW_OUTPUT' >&2; exit 2; }
 src=$(realpath -e "$1")
 out=$(realpath -m "$2")
 project=$(cd "$(dirname "$0")/.." && pwd)
@@ -39,6 +41,11 @@ if $lens; then
     install -m644 "$project/config/kernel/asphalt-gt9768.c" drivers/media/i2c/
     echo 'obj-$(CONFIG_VIDEO_ASPHALT_SENSORS) += asphalt-gt9768.o' >> drivers/media/i2c/Makefile
     cat "$project/config/kernel/asphalt-gt9768.dtsi" >> "${dtb%.dtb}.dts"
+fi
+if $panel60; then
+    printf '%s  %s\n' 568833b7c4f84ce9409a5c2a73bac6ae193ebfc8f5321b6d795600e09cbef31e \
+        drivers/gpu/drm/panel/panel-novatek-nt36523.c | sha256sum --strict -c
+    patch --batch --fuzz=0 -p1 <"$project/config/kernel/nt36523n-y700-60hz.patch"
 fi
 export KBUILD_BUILD_USER=y700 KBUILD_BUILD_HOST=builder KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP='2026-11-18 00:00:00 UTC'
@@ -83,6 +90,12 @@ dtc -q -s -I dtb -O dts "$dtb" | cmp - "$scratch/expected.dts"
 delivery=$(mktemp -d "$(dirname "$out")/.camera-ldo5.XXXXXXXX")
 cp arch/arm64/boot/Image "$delivery/kernel.efi"
 cp "$dtb" "$delivery/board.dtb"
+if $panel60; then
+    bash "$project/scripts/build-rtc-dtb.sh" --gt9768-rtc1 "$src" "$scratch/rtc"
+    cp "$scratch/rtc/board.dtb" "$delivery/board.dtb"
+    "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python \
+        "$project/tests/panel-refresh/check-kernel.py" "$src/vmlinux" vmlinux "$delivery/kernel.efi"
+fi
 llvm-objcopy --dump-section ".notes=$delivery/notes" --only-section=.notes vmlinux "$scratch/notes.elf"
 (cd "$delivery"; sha256sum kernel.efi board.dtb notes >SHA256SUMS; sha256sum --strict -c SHA256SUMS)
 mv --no-clobber -T "$delivery" "$out"

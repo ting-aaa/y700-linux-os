@@ -6,7 +6,12 @@ die() { echo "File trial entry: $*" >&2; exit 1; }
 payload=y700-file
 probe=0
 manifest=c0ab1aca3a71d38000e6dda15d8730cdb7d68afc06e4cc0904ba18dd1a4184a2
-if [[ ${1:-} == --dev12.11 ]]; then
+if [[ ${1:-} == --dev12.11-panel60 ]]; then
+    shift
+    probe=1
+    payload=y700-panel60-12-11
+    manifest=1f208f3a5f4713a69987e62820d811d7886e801f7931ece5cfb4780cda7e4223
+elif [[ ${1:-} == --dev12.11 ]]; then
     shift
     payload=y700-file-12-11
     manifest=d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362
@@ -58,10 +63,18 @@ flock -n "$guard" || die 'another menu operation is active'
 default=$(awk 'tolower($1)=="default" {print $2}' loader/loader.conf)
 preserved=(loader/loader.conf loader/entries/debian.conf EFI/BOOT/BOOTAA64.EFI EFI/debian/{kernel.efi,board.dtb,initrd})
 if (( probe )) || [[ $payload == y700-file-12-11 ]]; then
-    [[ $default == y700-recovery-12-10.conf ]] || die 'expected permanent recovery default'
+    expected_default=y700-recovery-12-10.conf
+    if [[ $payload == y700-panel60-12-11 ]]; then
+        expected_default=y700-file-12-11.conf
+        existing=(EFI/y700-file-12-11/{kernel.efi,board.dtb,initrd} loader/entries/y700-file-12-11.conf)
+        [[ $(sha256sum "${existing[@]}" | sha256sum | cut -d' ' -f1) == d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362 ]] || die 'permanent dev12.11 payload differs'
+        preserved+=("${existing[@]}")
+    fi
+    [[ $default == "$expected_default" ]] || die 'expected permanent release default'
     ! compgen -G 'loader/entries/y700-installed-*.conf' >/dev/null || die 'a counted trial is active'
     [[ ! -e loader/entries/y700-rtc1-12-10.conf && ! -e loader/entries/y700-cci0-12-10.conf &&
-       ! -e loader/entries/y700-ldo5-12-10.conf && ! -e loader/entries/y700-gt9768-12-10.conf ]] || die 'unexpected uncounted DT probe entry'
+       ! -e loader/entries/y700-ldo5-12-10.conf && ! -e loader/entries/y700-gt9768-12-10.conf &&
+       ! -e loader/entries/y700-panel60-12-11.conf ]] || die 'unexpected uncounted probe entry'
     for prior in y700-file-12-10 y700-recovery-12-10; do
         existing=("EFI/$prior/"{kernel.efi,board.dtb,initrd} "loader/entries/$prior.conf")
         case $prior in
@@ -88,7 +101,7 @@ payloads=(kernel.efi board.dtb initrd)
 if (( probe )); then
     menu=$dir/source.conf
     payloads=(board.dtb)
-    if [[ $payload == y700-ldo5-12-10 || $payload == y700-gt9768-12-10 ]]; then payloads+=(kernel.efi); fi
+    if [[ $payload == y700-ldo5-12-10 || $payload == y700-gt9768-12-10 || $payload == y700-panel60-12-11 ]]; then payloads+=(kernel.efi); fi
 fi
 check_dir() {
     local count=${#payloads[@]}
