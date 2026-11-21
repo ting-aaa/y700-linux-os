@@ -89,14 +89,23 @@ else
 fi
 [[ -c $port ]]
 export Y700_AF_DIAGNOSTICS=1
+export Y700_AF_RAM_V2=1
+source "$payload/private-allocator.sh"
 run_measurement() {
     if (( virt )); then
+        if [[ $1 == --check-rear-config ]]; then
+            "$payload/allocator-vm.sh"
+            return
+        fi
         # The QEMU transport can only exercise synthetic data with no camera devices.
         systemd-run --quiet --wait --collect --pipe --uid=y700 -p PrivateDevices=yes -p PrivateNetwork=yes \
             -p ProtectSystem=strict -p ProtectHome=yes -p NoNewPrivileges=yes -p LimitCORE=0 -p RuntimeMaxSec=70s \
             --setenv="LD_LIBRARY_PATH=$stage:/opt/y700-camera/lib" "$stage/y700-af-measure" --self-test
-    else
+    elif [[ $1 == --self-test ]]; then
         /bin/bash "$stage/measure-board.sh" "$1" "$stage/y700-af-measure"
+    else
+        healthy || return 1
+        with_private_allocator /bin/bash "$stage/measure-board.sh" "$1" "$stage/y700-af-measure"
     fi
 }
 if (( ! virt )); then stty -F "$port" raw -echo clocal; fi
@@ -124,6 +133,26 @@ while (( SECONDS < deadline )); do
     fi
     case $command in
         STATUS) status ;;
+        "CONFIG $token")
+            if [[ $state != READY ]]; then publish 'AF1 REFUSED config_unavailable'; continue; fi
+            if [[ ! -f $payload/config-result ]]; then
+                if (( returning )) && (( $(cut -d. -f1 /proc/uptime) - origin >= 500 )); then
+                    publish 'AF1 REFUSED return_pending'; continue
+                fi
+                healthy || { publish 'AF1 REFUSED storage'; exit 1; }
+                rc=0
+                run_measurement --check-rear-config 2>&1 | /bin/bash "$payload/filter.sh" > "$payload/config-result" || rc=1
+                if (( virt )); then
+                    grep -Fxq 'AF_TEST allocator_private=1 baseline_denied=1 original_preserved=1 cleanup=1 wrong_device_refused=1 camera_access=0' "$payload/config-result" || rc=1
+                else
+                    grep -Fxq 'AF_CONFIG_ONLY result=pass allocated=0 started=0 queued=0 af_triggered=0 pixels_read=0' "$payload/config-result" &&
+                        grep -Fxq 'AF_CONFIG_RESOURCE path=/dev/udmabuf stat_rc=0 char=1 open_rdwr_rc=0' "$payload/config-result" &&
+                        grep -Fxq 'AF_ALLOCATOR cleanup=1 original_unchanged=1' "$payload/config-result" &&
+                        grep -Fxq 'AF_CLEANUP mode=--check-rear-config rear=suspended sensor_active_ms_delta=0 exit=0' "$payload/config-result" || rc=1
+                fi
+                printf 'AF1 CONFIG_END rc=%d\n' "$rc" >> "$payload/config-result"
+            fi
+            while IFS= read -r line; do send_line "$line" || break; done < "$payload/config-result" ;;
         "RESULT $token")
             if [[ $state != DONE ]]; then publish 'AF1 REFUSED result_unavailable'; continue; fi
             while IFS= read -r line; do send_line "$line" || break; done < "$payload/result" ;;
@@ -136,6 +165,9 @@ while (( SECONDS < deadline )); do
         "START $token")
             if [[ $state == BLOCKED ]]; then publish 'AF1 REFUSED selftest'; continue; fi
             if [[ $state != READY || -d $payload/consumed ]]; then publish 'AF1 REFUSED consumed'; continue; fi
+            if ! grep -Fxq 'AF1 CONFIG_END rc=0' "$payload/config-result" 2>/dev/null; then
+                publish 'AF1 REFUSED config_required'; continue
+            fi
             if (( returning )) && (( $(cut -d. -f1 /proc/uptime) - origin >= 540 )); then
                 publish 'AF1 REFUSED return_pending'; continue
             fi

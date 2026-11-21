@@ -4,6 +4,24 @@ set -euo pipefail
 umask 077
 [[ $# == 4 ]] || { echo 'Usage: build.sh SEALED_RAM_BUNDLE Y700_AF_MEASURE DIAGNOSTIC_LIB NEW_DIR' >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd -P)
+# Rebuilding the original attachment uses its original runner, filters, and units.
+if ! printf '%s  %s\n' df565cb8108acb42c0d2912c1b1a7786e2bebf9fe71c8900e5ed7168f22b66bc \
+        "$here/../camera-lens-graph/measure-board.sh" | sha256sum --quiet -c - 2>/dev/null; then
+    frozen=$(mktemp -d)
+    trap 'rm -r -- "$frozen"' EXIT
+    repo=$(realpath "$here/../..")
+    git_args=(-C "$repo")
+    if ! git "${git_args[@]}" rev-parse --git-dir >/dev/null 2>&1 && [[ -f $repo/.git ]]; then
+        # A linked worktree created by Windows Git uses a Windows gitdir path.
+        gitdir=$(sed -n 's/^gitdir: //p' "$repo/.git" | tr -d '\r')
+        [[ $gitdir =~ ^[[:alpha:]]:[/\\] ]]
+        git_args=(--git-dir="$(wslpath -u "$gitdir")")
+    fi
+    git "${git_args[@]}" archive 9b3b6a18435b4d93d281f14ed0bf81a45c2e7664 \
+        tests/ram-af-acm tests/camera-lens-graph/measure-board.sh | tar -x -C "$frozen"
+    bash "$frozen/tests/ram-af-acm/build.sh" "$@"
+    exit
+fi
 base=$(realpath -e "$1"); tool=$(realpath -e "$2"); library=$(realpath -e "$3"); out=$(realpath -m "$4")
 [[ ! -e $out && ! -L $out ]]
 echo "2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453  $base/SHA256SUMS" | sha256sum --strict -c -

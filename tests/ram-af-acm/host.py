@@ -6,6 +6,10 @@ import socket
 import time
 
 
+DATA_ROW = re.compile(r"AF_(PREVIEW|SCAN|EXPOSURE|RESULT|ERROR|DIAG|CLEANUP|TEST|CONFIG|CONFIG_RESOURCE|CONFIG_ONLY|ALLOCATOR)"
+                      r"( [a-z_]+=[A-Za-z0-9_.,/:+-]+)+")
+
+
 class Channel:
     def __init__(self, port, vm_socket):
         self.buffer = bytearray()
@@ -108,8 +112,7 @@ def result(channel, token, virtual, start, acknowledge=False):
                 else:
                     raise TimeoutError("Return confirmation missing; independent RAM timer remains armed")
             return int(row.split("=")[1])
-        elif not (running and re.fullmatch(r"AF_(PREVIEW|SCAN|EXPOSURE|RESULT|ERROR|DIAG|CLEANUP|TEST)"
-                                          r"( [a-z_]+=[A-Za-z0-9_./:+-]+)+", row)):
+        elif not (running and DATA_ROW.fullmatch(row)):
             raise RuntimeError("Unexpected diagnostic response")
         else:
             digest.update((row + "\n").encode("ascii"))
@@ -117,9 +120,35 @@ def result(channel, token, virtual, start, acknowledge=False):
     raise TimeoutError("No terminal measurement receipt")
 
 
+def check_config(channel, token, virtual=False):
+    channel.send("CONFIG " + token)
+    end = time.monotonic() + 90
+    required = ({"AF_TEST allocator_private=1 baseline_denied=1 original_preserved=1 cleanup=1 wrong_device_refused=1 camera_access=0"}
+                if virtual else {
+                    "AF_CONFIG_RESOURCE path=/dev/udmabuf stat_rc=0 char=1 open_rdwr_rc=0",
+                    "AF_CONFIG_ONLY result=pass allocated=0 started=0 queued=0 af_triggered=0 pixels_read=0",
+                    "AF_CLEANUP mode=--check-rear-config rear=suspended sensor_active_ms_delta=0 exit=0",
+                    "AF_ALLOCATOR cleanup=1 original_unchanged=1",
+                })
+    while time.monotonic() < end:
+        row = channel.line()
+        if row is None or row.startswith("AF1 READY "):
+            continue
+        if re.fullmatch(r"AF1 CONFIG_END rc=[01]", row):
+            if row.endswith("=0") and required:
+                raise RuntimeError("Configuration success receipt is incomplete")
+            print(row, flush=True)
+            return int(row[-1])
+        if not DATA_ROW.fullmatch(row):
+            raise RuntimeError("Configuration check refused or invalid response")
+        required.discard(row)
+        print(row, flush=True)
+    raise TimeoutError("No configuration check receipt")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["status", "start", "result"])
+    parser.add_argument("action", choices=["status", "check-config", "start", "result"])
     transport = parser.add_mutually_exclusive_group(required=True)
     transport.add_argument("--port")
     transport.add_argument("--vm-socket")
@@ -128,6 +157,10 @@ if __name__ == "__main__":
     link = Channel(args.port, args.vm_socket)
     try:
         state, token = status(link, bool(args.vm_socket))
+        if args.action == "check-config":
+            if state != "READY" or args.token != token:
+                raise SystemExit("Configuration check requires the matching READY token")
+            raise SystemExit(check_config(link, token, bool(args.vm_socket)))
         if args.action == "start":
             if state != "READY" or args.token != token:
                 raise SystemExit("Start requires a matching READY token from this boot")

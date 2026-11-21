@@ -2,6 +2,46 @@
 
 This private RAM diagnostic attachment exposes one serial interface. It sends aggregate measurements from the pinned optical client. An ordinary user runs the client through the existing board runner with a private network, read-only system and hidden home directories. The attachment contains no login credentials.
 
+## Diskless dev12.12 with a private software-ISP allocator
+
+The original diskless tablet boot reached the ACM self-test. Its rear-camera check returned `no_cpu_rgb_mode` before streaming. A separate comparison on the daily tablet reproduced the raw-only selection for the unprivileged account. Giving only the transient measurement process read/write access to the real `/dev/udmabuf` yielded 640 × 480 ABGR8888 with a 2,560-byte stride. The configure-only client allocated zero buffers, read zero pixels and left the rear sensor suspended with zero additional active time. The local comparison is in `out/camera-optical-qa/physical-private-config-v2.log`.
+
+Build the new USB receiver beside the original, on the same filesystem. Four hard links reuse the boot kernel, diskless board tree, command line and 1,351,581,696-byte immutable carrier. The builder verifies the old attachment at the end of the initial ramdisk and replaces that member. Each resulting directory has its own manifest.
+
+```sh
+bash tests/ram-af-acm/build-allocator.sh out/dev12.12-ram-receiver \
+    out/ram-af-acm-return out/camera-optical-config/y700-af-measure-config \
+    out/camera-af-settling/libcamera.so.0.7 out/dev12.12-ram-receiver-allocator
+```
+
+| File | SHA-256 |
+| --- | --- |
+| Receiver `SHA256SUMS` | `e06431c4839c40d93afaf8ffbe3467d337782607e1de5434136abae76166fb90` |
+| Small `initrd`, 13,809,252 bytes | `e434556372b01949ebdd43ef703f0c7c908fcbf1e05d75a8a8c4c92a5ed23666` |
+| `attachment/af-acm.cpio` | `bf4325938126dda719c41dd78bb58c0190e40fb602df5db2127b06d7427af249` |
+
+After an authorized physical boot of this attachment, obtain the token and request the configure-only receipt. The host checks the sensor cleanup, all five zero activity counters, allocator access and private-node cleanup. The guest keeps that receipt for a retry. A successful configuration allows a separate, explicitly requested one-shot optical run.
+
+```powershell
+uv run --no-project --with pyserial==3.5 python tests/ram-af-acm/host.py status --port COMn
+uv run --no-project --with pyserial==3.5 python tests/ram-af-acm/host.py check-config --port COMn --token TOKEN
+```
+
+The service rechecks both disabled controllers, the absence of physical block devices and swap, and the read-only carrier with tmpfs changes before granting allocator access. It checks the live device number against sysfs, creates a private `0600` node beneath a root-owned `0700` directory on devtmpfs, and bind-mounts only that node into the ordinary user's transient unit. Cleanup removes the alias and checks the original node's inode, owner, group, permissions and device number. CONFIG closes after 500 seconds from handover. The existing independent reboot timer and START window still apply.
+
+To exercise the split boot, allocator and serial protocol on a PC, use an ARM64 QEMU installation and an available 8 GiB guest allocation. The VM has the release kernel's real udmabuf device. It tests access denial, private access, refusal of a substituted device, cleanup and receipt replay. Optical data in this VM come from the synthetic self-test. Physical RAM autofocus and optical gain require their own measurement.
+
+```sh
+AF_QA_ALLOCATOR=1 bash tests/ram-trial/check-receiver.sh \
+    out/dev12.12-ram-receiver-allocator \
+    e06431c4839c40d93afaf8ffbe3467d337782607e1de5434136abae76166fb90 "$new_vm_log_dir"
+uv run --offline --no-project python -B tests/ram-af-acm/test-receipt.py
+```
+
+## Original attachment and shared return protocol
+
+Run the original builder from a Git checkout that contains `9b3b6a18435b4d93d281f14ed0bf81a45c2e7664`. It uses the historical scripts and the original client and library to reproduce the first attachment.
+
 ```sh
 bash tests/ram-af-acm/build.sh "$sealed_dev1212_ram" "$exposure_gated_arm64_elf" \
     "$diagnostic_libcamera_so" "$new_attachment"
@@ -37,4 +77,4 @@ AF_QA_RETURN=ack AF_QA_DISCONNECT=1 bash tests/ram-af-acm/run-qemu.sh "$sealed_d
 AF_QA_RETURN=deadline bash tests/ram-af-acm/run-qemu.sh "$sealed_dev1212_ram" "$new_attachment" "$new_idle_return_log_dir"
 ```
 
-The acknowledged and idle ARM64 runs each reached `systemd-shutdown: Rebooting` and the kernel restart with no host kill. Shutdown reported two busy read-only RAM loop mounts before restart. Physical USB enumeration, autofocus and the firmware's selection of the daily Debian system on the following boot require a tablet run.
+The acknowledged and idle ARM64 runs each reached `systemd-shutdown: Rebooting` and the kernel restart with no host kill. Shutdown reported two busy read-only RAM loop mounts before restart. On the tablet the original attachment returned its camera configuration failure via USB and the next boot reached daily dev12.11. Receipts are in `out/camera-optical-qa/physical-cold-af.log` and `physical-cold-daily-return.log`.

@@ -2,7 +2,7 @@ import os
 import sys
 import time
 
-from host import Channel, result, status
+from host import Channel, check_config, result, status
 
 
 def expect(channel, wanted):
@@ -27,6 +27,13 @@ try:
     link.send("START incorrect")
     expect(link, "AF1 REFUSED command")
     assert status(link, True) == ("READY", token)
+    if os.getenv("AF_QA_ALLOCATOR") == "1":
+        link.send("START " + token)
+        expect(link, "AF1 REFUSED config_required")
+        link.send("CONFIG incorrect")
+        expect(link, "AF1 REFUSED command")
+        assert check_config(link, token, virtual=True) == 0
+        assert check_config(link, token, virtual=True) == 0  # Re-read this boot's stored check.
     if os.getenv("AF_QA_DISCONNECT") == "1":
         link.send("START " + token)
         expect(link, f"AF1 RUNNING {token} virtual=1")
