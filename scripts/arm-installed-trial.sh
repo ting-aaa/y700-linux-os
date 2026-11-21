@@ -12,6 +12,9 @@ source_sub=y700-file-12-10
 recovery=0
 dt_probe=
 probe_dtb_sha=
+probe_kernel_sha=
+stock_notes=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+ldo5_notes=b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7
 probe_option=
 trial_role=
 recovery_sha=21b05d85897a5047834766a5ae1629203d6fad6fd43d0aa614c110b1f3bfa834
@@ -40,6 +43,11 @@ dt_probe_mode() {
             probe_option=y700.cci_probe=cci0
             probe_dtb_sha=b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea
             recovery_sha=e621697a905ba34e2274d9ba2a4cacb076bf9b4d7df7f6c96f527c73a06e5635 ;;
+        ldo5)
+            probe_option=y700.ldo_probe=ldo5
+            probe_dtb_sha=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
+            probe_kernel_sha=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
+            recovery_sha=16526328e8c3079fd0dd1755f075c5316fec876cdd41ba02e0d1bbb3d12fa724 ;;
         *) die 'unknown DT probe' ;;
     esac
 }
@@ -176,10 +184,18 @@ check_recovery_origin() {
     if [[ -n $dt_probe ]]; then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
     elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
-    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci)_probe)(=| |$)' <<<"$args"; then
+    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo)_probe)(=| |$)' <<<"$args"; then
         die 'already running a trial or recovery'
     fi
-    if [[ $dt_probe == cci0 ]]; then verify_cci0_tree base; fi
+    case $dt_probe in
+        cci0) verify_cci0_tree base ;;
+        ldo5) verify_ldo5_tree base ;;
+    esac
+}
+verify_running_kernel() {
+    local expected=$stock_notes
+    if [[ $dt_probe == ldo5 && $1 == confirm ]]; then expected=$ldo5_notes; fi
+    [[ $(sha "${2:-/sys/kernel/notes}") == "$expected" ]] || die 'unexpected installed kernel build'
 }
 check_recovery_runtime() {
     local action=$1 unit
@@ -188,8 +204,7 @@ check_recovery_runtime() {
     [[ $(cat "$backing/etc/y700/image-id") == asphalt-prc-debian13-xfce-7.3.4-v1 &&
        $(cat /etc/y700/image-id) == y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f &&
        $(stat -c %s "$store/dev12.10/linux-boot.fat") == 1073741824 ]] || die 'wrong installed pair'
-    [[ $(sha /sys/kernel/notes) == c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564 ]] ||
-        die 'unexpected installed kernel build'
+    verify_running_kernel "$action"
     for unit in "$timer" "${timer%.timer}.service"; do
         regular "/etc/systemd/system/$unit"
         if [[ $unit == "$timer" ]]; then match <(timer_unit) "/etc/systemd/system/$unit"
@@ -217,6 +232,9 @@ recovery_payloads() {
         [[ ! -e $entries/$entry &&
            $(sha "$esp/EFI/$source_sub/board.dtb") == "$probe_dtb_sha" &&
            $(sha "$source_conf") == "$recovery_sha" ]] || die 'unexpected DT probe staging'
+        if [[ -n $probe_kernel_sha ]]; then
+            [[ $(sha "$esp/EFI/$source_sub/kernel.efi") == "$probe_kernel_sha" ]] || die 'unexpected probe kernel'
+        fi
     fi
 }
 payloads() {
@@ -225,7 +243,9 @@ payloads() {
         value=$(awk -v k="$key" '$1==k {if(NF!=2)exit 1; print $2; n++} END{if(n!=1)exit 1}' "$conf") ||
             die 'invalid BLS payload declaration'
         expected_dir=$sub
-        if [[ -n $dt_probe && $sub == "$source_sub" && $key != devicetree ]]; then expected_dir=y700-recovery-12-10; fi
+        if [[ -n $dt_probe && $sub == "$source_sub" ]]; then
+            if [[ $key == initrd || ( $key == linux && -z $probe_kernel_sha ) ]]; then expected_dir=y700-recovery-12-10; fi
+        fi
         [[ $value =~ ^/EFI/$expected_dir/[a-zA-Z0-9_.-]+$ && ${value##*/} != . && ${value##*/} != .. ]] ||
             die 'unexpected BLS payload path'
         regular "$esp$value"
@@ -365,9 +385,9 @@ current_trial() {
             [[ $(selected_entry) == "y700-installed-${trial_role}$id-trial.conf" ]] || die 'unexpected recovery selection'
     fi
     if [[ -n $dt_probe ]]; then
-        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci)_probe(=|$)') == "$probe_option" ]] ||
+        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci|ldo)_probe(=|$)') == "$probe_option" ]] ||
             die 'wrong DT probe option'
-        case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; esac
+        case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; ldo5) verify_ldo5_tree trial ;; esac
     fi
 }
 verify_rtc1_tree() {
@@ -391,9 +411,41 @@ verify_cci0_tree() {
         *) die 'unknown CCI0 tree phase' ;;
     esac
     [[ ! -e $tree/aliases/rtc1 ]] || die 'unexpected RTC trial alias'
-    digest=$(cd "$tree" && find . -type f \( -name assigned-clocks -o -name assigned-clock-parents -o -name assigned-clock-rates \) -print0 |
-        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1) || die 'cannot read assigned clock properties'
+    digest=$(tree_properties "$tree" -name assigned-clocks -o -name assigned-clock-parents -o -name assigned-clock-rates) || die 'cannot read assigned clock properties'
     [[ $digest == "$expected" ]] || die "unexpected $phase clock assignments ($digest)"
+}
+tree_properties() (
+    cd "$1" || exit 1
+    shift
+    find . -type f \( "$@" \) -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+)
+verify_ldo5_tree() {
+    local phase=$1 tree=${2:-$(clock_tree_path)} supplies clocks
+    local cci=$tree/soc@0/cci@ac15000 rail=$tree/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators/ldo5
+    local aux=$cci/i2c-bus@0/camera@20/aux-supply
+    [[ ! -e $tree/aliases/rtc1 && ! -e $cci/assigned-clocks && ! -e $cci/assigned-clock-rates ]] ||
+        die 'unexpected RTC or CCI clock probe'
+    cmp -s <(printf 'disabled\0') "$tree/soc@0/spmi@c400000/pmic@0/rtc@6100/status" ||
+        die 'unexpected PMK8350 RTC state'
+    cmp -s <(printf 'camera-ldo5\0') "$rail/regulator-name" &&
+        cmp -s <(printf '\x00\x2a\xb9\x80') "$rail/regulator-min-microvolt" &&
+        cmp -s "$rail/regulator-min-microvolt" "$rail/regulator-max-microvolt" ||
+        die 'unexpected camera LDO5 voltage constraints'
+    case $phase in
+        base)
+            [[ ! -e $aux && ! -e $rail/phandle ]] || die 'unexpected baseline sensor supply'
+            clocks=87a289c645da8122ad725f8374181eda3af2628deb5809809079b1a8db56c018
+            supplies=1bdc087e99072f026a73330063da500e306caf43b59ce6d1ca05772cfabcddc6 ;;
+        trial)
+            cmp -s <(printf '\x00\x00\x00\xe4') "$rail/phandle" && cmp -s "$rail/phandle" "$aux" ||
+                die 'HI1339 auxiliary supply does not resolve to LDO5'
+            clocks=c12f32a67a2971704296384ea97c10f7de74944e1edd84191a19526ffa81aa99
+            supplies=3e680a8e5043c0251ee36dfefd56a8ee8b9340ea0f22210221dedc31e87ea714 ;;
+        *) die 'unknown supply tree phase' ;;
+    esac
+    [[ $(tree_properties "$tree" -name '*-supply') == "$supplies" &&
+       $(tree_properties "$tree" -name assigned-clocks -o -name assigned-clock-parents -o -name assigned-clock-rates) == "$clocks" ]] ||
+        die "unexpected $phase supply or clock assignments"
 }
 current_boot() { cat /proc/sys/kernel/random/boot_id; }
 no_reboot_pending() {
@@ -443,7 +495,7 @@ main() {
     [[ $EUID == 0 ]] || die 'root required'
     local -a original_args=("$@")
     if [[ ${1:-} == --recovery ]]; then shift; recovery_mode
-    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 ]]; then
+    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 ]]; then
         dt_probe_mode "${1#--}"; shift
         [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die "usage: --$dt_probe arm|confirm|restore RUN_ID"
         set -- "$@" "$recovery_sha"

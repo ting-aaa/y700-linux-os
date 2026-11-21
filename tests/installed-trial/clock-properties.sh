@@ -7,7 +7,11 @@ dtc -q -s -I dtb -O dts "$1" | awk '
     $NF=="{" {path[depth+1] = depth ? path[depth] "/" $1 : ""; depth++; next}
     $1=="};" {depth--; next}
     $1 ~ /^assigned-(clocks|clock-parents|clock-rates)$/ ||
-    (path[depth]=="/soc@0/clock-controller@ade0000" && $1=="phandle") {
+    $1 ~ /-supply$/ ||
+    (path[depth]=="/soc@0/clock-controller@ade0000" && $1=="phandle") ||
+    (path[depth]=="/soc@0/spmi@c400000/pmic@0/rtc@6100" && $1=="status") ||
+    (path[depth]=="/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators/ldo5" &&
+      $1 ~ /^(phandle|regulator-name|regulator-min-microvolt|regulator-max-microvolt)$/) {
         print path[depth], $1
     }
 ' | while read -r node prop; do

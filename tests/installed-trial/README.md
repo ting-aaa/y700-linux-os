@@ -99,3 +99,22 @@ bash scripts/manage-file-trial-entry.sh --dev12.10-cci0 remove "$work/entry" "$O
 ```
 
 Two builds produced the same 23,663-byte archive, SHA-256 `868979edce4e53e1aefefb12b0832fed1fc4eeecee6f4638a375b8b490159968`. Repeat the FAT transaction with `tests/installed-trial/rtc1-arm.sh --cci0 RECOVERY_MENU_QA_DIR PROBE_ENTRY NEW_WORK`, then run `recovery-firmware.sh --cci0` with the five firmware fixture arguments above. The transaction rejected a tree with an additional clock assignment on CCI1. The ARM64 guest used the two CCI0 properties on an unbound node of its virtual DT. The first EFI boot consumed the attempt and the second selected the recovery tree. Local logs are in `out/dev12.10-cci0-trial/`.
+
+## Single-boot HI1339 LDO5 probe
+
+The LDO5 entry stages a kernel and a device tree under `EFI/y700-ldo5-12-10`. It uses the installed recovery initrd. Both trees retain the baseline CCI0 clock configuration and disabled PMK8350 RTC. In the probe tree, the HI1339 `aux-supply` references the WL2864C LDO5 regulator with its original 2,800,000 µV constraints. The controller checks the running kernel notes, the regulator phandle, all supply references and all assigned-clock properties. The compiler renumbers some existing phandles when it creates the first reference to this regulator. The baseline and probe checks each use their respective digests.
+
+```sh
+bash scripts/build-camera-ldo5.sh "$PREPARED_KERNEL" "$work/image"
+bash scripts/build-dt-probe-entry.sh --ldo5 "$RECOVERY_ENTRY" "$work/image" "$work/entry"
+(cd "$work" && tar --sort=name --mtime=@1795150416 --owner=0 --group=0 --numeric-owner --mode=0700 -cf - entry | gzip -n >ldo5-entry.tar.gz)
+bash scripts/manage-file-trial-entry.sh --dev12.10-ldo5 add "$work/entry" "$OUTER_ESP"
+bash scripts/arm-installed-trial.sh --ldo5 arm "$RUN_ID"
+# On the counted boot, while the four-minute return timer is active
+bash scripts/arm-installed-trial.sh --ldo5 confirm "$RUN_ID"
+# After returning to recovery
+bash scripts/arm-installed-trial.sh --ldo5 restore "$RUN_ID"
+bash scripts/manage-file-trial-entry.sh --dev12.10-ldo5 remove "$work/entry" "$OUTER_ESP"
+```
+
+The 16,056,721-byte archive has SHA-256 `97573e56f3b1a9b39a2457abb456454e8ebe812798bdfbc9e7b87c4bb9c92663`. Repeat the FAT transaction and ARM64 firmware fixture above with `--ldo5`. The EFI guest executed the exact probe kernel on the counted boot and the exact previous kernel on the second boot. The observer read their distinct notes and a synthetic auxiliary supply reference on the virtual tree. Traces are in `out/dev12.10-ldo5-trial/`. Physical regulator activity and hardware identification require separate evidence.

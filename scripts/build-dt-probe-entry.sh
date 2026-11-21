@@ -1,8 +1,9 @@
 #!/bin/bash
-# Build a DT-only supplement for the exact installed recovery kernel and initrd.
+# Build a single-boot probe which retains the installed recovery initrd.
 set -euo pipefail
 umask 077
-[[ $# == 4 ]] || { echo 'Usage: build-dt-probe-entry.sh --rtc1|--cci0 RECOVERY_ENTRY PROBE_DTB NEW_DIRECTORY' >&2; exit 2; }
+[[ $# == 4 ]] || { echo 'Usage: build-dt-probe-entry.sh --rtc1|--cci0 RECOVERY_ENTRY PROBE_DTB NEW_DIRECTORY, or --ldo5 RECOVERY_ENTRY IMAGE_DIRECTORY NEW_DIRECTORY' >&2; exit 2; }
+kernel_hash=
 case $1 in
     --rtc1)
         name=y700-rtc1-12-10
@@ -14,11 +15,24 @@ case $1 in
         title='CCI0 37.5 MHz probe'; option=y700.cci_probe=cci0
         tree_hash=b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea
         manifest=d181c60b152378d2b8e1505277587f346f3f54601f33b2b46b04bf816db5dcfd ;;
+    --ldo5)
+        name=y700-ldo5-12-10
+        title='HI1339 LDO5 probe'; option=y700.ldo_probe=ldo5
+        tree_hash=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
+        kernel_hash=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
+        manifest=ec8957894bdbc40d2a9abd07a98c54f1066bb081c4bfd2887a42fe2e09eae6c5 ;;
     *) exit 2 ;;
 esac
 shift
 source_entry=$(realpath -e "$1")
-dtb=$(realpath -e "$2")
+if [[ -n $kernel_hash ]]; then
+    image=$(realpath -e "$2")
+    dtb=$image/board.dtb
+    (cd "$image"; sha256sum --strict -c <<<"$kernel_hash  kernel.efi
+b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7  notes")
+else
+    dtb=$(realpath -e "$2")
+fi
 dest=$(realpath -m "$3")
 [[ ! -e $dest && ! -L $dest ]]
 (cd "$source_entry"; echo '36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b  SHA256SUMS' | sha256sum --strict -c -; sha256sum --strict -c SHA256SUMS)
@@ -34,12 +48,21 @@ if [[ $name == y700-cci0-12-10 ]]; then
 fi
 mkdir -p "$work/entry/EFI/$name" "$work/entry/loader/entries"
 cd "$work/entry"
+files=()
+linux_sub=y700-recovery-12-10
+if [[ -n $kernel_hash ]]; then
+    linux_sub=$name
+    install -m644 "$image/kernel.efi" "EFI/$name/kernel.efi"
+    files+=("EFI/$name/kernel.efi")
+fi
 install -m644 "$dtb" "EFI/$name/board.dtb"
+files+=("EFI/$name/board.dtb")
 sed -e "s/^title .*/title Y700 dev12.10 ($title)/" \
+    -e "s|^linux .*|linux /EFI/$linux_sub/kernel.efi|" \
     -e "s|^devicetree .*|devicetree /EFI/$name/board.dtb|" \
     -e "/^options /s/$/ $option/" \
     "$source_entry/loader/entries/y700-recovery-12-10.conf" >"loader/entries/$name.conf"
-sha256sum "EFI/$name/board.dtb" "loader/entries/$name.conf" >SHA256SUMS
+sha256sum "${files[@]}" "loader/entries/$name.conf" >SHA256SUMS
 printf '%s  SHA256SUMS\n' "$manifest" | sha256sum --strict -c -
 sha256sum --strict -c SHA256SUMS
 mv -nT "$work/entry" "$dest"
