@@ -26,7 +26,9 @@ if [[ $1 == setup ]]; then
     [[ $(cat /etc/y700/image-id) == y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ]]
     [[ $(systemctl get-default) == graphical.target ]]
     [[ $(cat /sys/module/drm_kms_helper/parameters/fbdev_emulation) == N && ! -e /dev/fb0 ]]
-    printf '%s  /sys/kernel/notes\n' c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564 | sha256sum --strict -c -
+    notes=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+    if [[ -f /boot/camera-autofocus.lock.json ]]; then notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6; fi
+    printf '%s  /sys/kernel/notes\n' "$notes" | sha256sum --strict -c -
     if locked; then
         account=locked
         test ! -e "$audio_marker"
@@ -85,6 +87,15 @@ if [[ $1 == setup ]]; then
         else
             cmp /boot/media-tested.lock /var/lib/y700/build/video-player.lock.json
         fi
+    fi
+    if [[ -f /boot/camera-autofocus.lock.json ]]; then
+        [[ $count == 1240 && -f /boot/media-update-tested.lock ]]
+        grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
+        cmp /boot/camera-autofocus.lock.json /var/lib/y700/build/camera-autofocus.lock.json
+        cmp /boot/wifi-sae-update.lock.json /var/lib/y700/build/wifi-sae-update.lock.json
+        expected=be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+        camera='0.7.2-1~bpo13+1.y7005'
+        test -z "$(dpkg -V y700-camera-runtime y700-camera-pipewire network-manager wpasupplicant)"
     fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)
@@ -227,6 +238,12 @@ if [[ -f /boot/media-tested.lock ]]; then
     media_edition=dev12.9
     if [[ -f /boot/media-update-tested.lock ]]; then media_edition=dev12.10; fi
     mapfile -d '' -t desktop_environment < "/proc/$pid/environ"
+    if [[ -f /boot/camera-autofocus.lock.json ]]; then
+        install -m644 /boot/camera-session.py "$media/"
+        setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
+            UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 150 "$media/uv" run --offline --no-project \
+            --python /usr/bin/python3 python -B "$media/camera-session.py"
+    fi
     setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
         UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 160 "$media/uv" run --offline --no-project \
         --python /usr/bin/python3 python -B "$media/media-session.py" "$media/media-clip.mp4" "$media_edition"

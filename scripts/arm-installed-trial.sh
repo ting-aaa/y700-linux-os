@@ -4,7 +4,11 @@ set -euo pipefail
 umask 077
 export LC_ALL=C
 outer_uuid=ef306764-2315-4235-8796-69e2c9b61946
-inner_uuid=171a4adb-916b-4763-9e6f-722b4a99988f
+prior_uuid=171a4adb-916b-4763-9e6f-722b4a99988f
+inner_uuid=$prior_uuid
+candidate_edition=dev12.10
+candidate_fat=171A-4ADB
+receipt=video-player-update.lock.json
 entry=y700-file-12-10.conf
 baseline_entry=debian.conf
 baseline_sub=debian
@@ -25,6 +29,20 @@ recovery_mode() {
     baseline_sub=y700-file-12-10
     source_sub=y700-recovery-12-10
     entry=$source_sub.conf
+}
+dev1211_mode() {
+    recovery=1
+    candidate_edition=dev12.11
+    inner_uuid=c0e447e4-82db-59ee-91d6-0e1ec9d5f45e
+    candidate_fat=31EC-3084
+    trial_role=dev1211-
+    baseline_sub=y700-recovery-12-10
+    baseline_entry=$baseline_sub.conf
+    source_sub=y700-file-12-11
+    entry=$source_sub.conf
+    receipt=camera-autofocus.lock.json
+    release_lock=411490734a965ca1405ca33e3b9a1fcb79a1fbad196d947cf3736cb66b1b41b1
+    recovery_sha=81d3dcd461ffe00806ba4d820c80eeb0a302e283372d637c88ed8989376f712e
 }
 dt_probe_mode() {
     recovery_mode
@@ -65,7 +83,7 @@ sha() { sha256sum -- "$1" | cut -c1-64; }
 regular() { [[ -f $1 && ! -L $1 ]] || die "expected a regular file: $1"; }
 match() { cmp -s -- "$1" "$2" || die "unexpected contents: $2"; }
 release() {
-    local lock=$1/var/lib/y700/build/video-player-update.lock.json
+    local lock=$1/var/lib/y700/build/$receipt
     regular "$lock"
     [[ $(sha "$lock") == "$release_lock" ]] || die 'candidate release receipt differs'
 }
@@ -117,23 +135,28 @@ prepare_candidate() {
     echo 'INSTALLED_TRIAL_PREPARED deadline_seconds=240'
 }
 check_personalized_files() {
-    local dir=$store/dev12.10 img=$store/dev12.10/root.ext4 marker=$store/dev12.10/installed.ok
+    local dir=$store/$candidate_edition
+    local img=$dir/root.ext4 marker=$dir/installed.ok
     [[ $(realpath -e "$dir") == "$dir" && $(stat -c '%u:%g:%a' "$dir") == 0:0:700 ]] || die 'unsafe image directory'
     regular "$marker"
     [[ $(stat -c '%u:%g:%a:%h' "$marker") == 0:0:600:1 ]] || die 'unsafe personalization receipt'
-    match <(printf '%s\n' 'dev12.10 personal files verified, USB identity retained') "$marker"
+    match <(printf '%s personal files verified, USB identity retained\n' "$candidate_edition") "$marker"
     [[ $(realpath -e "$img") == "$img" && $(stat -c '%u:%g:%a:%h' "$img") == 0:0:600:1 &&
        $(stat -c %s "$img") == 34359738368 && $(blkid -p -s UUID -o value "$img") == "$inner_uuid" ]] ||
         die 'expected private 32 GiB candidate root'
 }
 check_prepared_image() {
-    local img=$store/dev12.10/root.ext4
+    local img=$store/$candidate_edition/root.ext4
     check_personalized_files
     debugfs -R "cat /etc/systemd/system/$timer" "$img" 2>/dev/null | cmp - <(timer_unit) || die 'candidate timer differs'
     debugfs -R "cat /etc/systemd/system/${timer%.timer}.service" "$img" 2>/dev/null | cmp - <(reboot_unit) ||
         die 'candidate deadline service differs'
-    [[ $(debugfs -R 'cat /var/lib/y700/build/video-player-update.lock.json' "$img" 2>/dev/null | sha256sum | cut -c1-64) == "$release_lock" ]] ||
+    [[ $(debugfs -R "cat /var/lib/y700/build/$receipt" "$img" 2>/dev/null | sha256sum | cut -c1-64) == "$release_lock" ]] ||
         die 'staged image release identity differs'
+    if [[ $candidate_edition == dev12.11 ]]; then
+        [[ $(debugfs -R 'cat /etc/y700/image-id' "$img" 2>/dev/null) == "y700-prc-$inner_uuid" ]] ||
+            die 'candidate identity does not name its independent root'
+    fi
 }
 verify_board() {
     grep -azFxq lenovo,asphalt /proc/device-tree/compatible &&
@@ -150,20 +173,28 @@ check_loop() {
        $(losetup --raw -nO OFFSET "$loop") == 0 ]] || die 'loop backing does not match the installed image'
 }
 locate_boot() {
-    local ufs
+    local ufs root_uuid fat_uuid
+    running_edition=$candidate_edition
     ufs=$(realpath -e /dev/disk/by-partlabel/linux)
     if [[ $(findmnt -nro SOURCE -M /) == "$ufs" ]]; then
+        [[ $candidate_edition != dev12.11 ]] || die 'new release requires the installed file-root'
         backing=/; baseline=1
     else
         backing=/run/initramfs/backing; baseline=0
         [[ $(findmnt -nro SOURCE -M "$backing") == "$ufs" ]] || die 'unexpected outer filesystem'
-        [[ $(findmnt -nro UUID -M /) == "$inner_uuid" &&
-           $(findmnt -nro UUID -M /boot) == 171A-4ADB ]] || die 'unexpected candidate volumes'
-        grep -Fqw y700.release=dev12.10 /proc/cmdline && grep -Fqw y700.media=file /proc/cmdline ||
+        root_uuid=$(findmnt -nro UUID -M /); fat_uuid=$(findmnt -nro UUID -M /boot)
+        if [[ $candidate_edition == dev12.11 && $root_uuid == "$prior_uuid" && $fat_uuid == 171A-4ADB ]]; then
+            running_edition=dev12.10
+            printf '%s  %s\n' 39cd516bc47679ba3c7980dc3ed43a43c1bac80e40fba690c85d33d9794fd5eb \
+                /var/lib/y700/build/video-player-update.lock.json | sha256sum --quiet --strict -c - || die 'previous release receipt differs'
+        else
+            [[ $root_uuid == "$inner_uuid" && $fat_uuid == "$candidate_fat" ]] || die 'unexpected candidate volumes'
+            release ''
+        fi
+        grep -Fqw "y700.release=$running_edition" /proc/cmdline && grep -Fqw y700.media=file /proc/cmdline ||
             die 'missing file-root release options'
-        release ''
-        check_loop / "$backing/var/lib/y700-trial/dev12.10/root.ext4"
-        check_loop /boot "$backing/var/lib/y700-trial/dev12.10/linux-boot.fat"
+        check_loop / "$backing/var/lib/y700-trial/$running_edition/root.ext4"
+        check_loop /boot "$backing/var/lib/y700-trial/$running_edition/linux-boot.fat"
     fi
     [[ $(findmnt -nro UUID -M "$backing") == "$outer_uuid" &&
        $(findmnt -nro FSTYPE -M "$backing") == ext4 ]] || die 'unexpected outer UFS identity'
@@ -188,7 +219,7 @@ check_recovery_origin() {
     [[ $(selected_entry) == "$baseline_entry" ]] || die 'booted EFI entry differs from installed fallback'
     local args
     args=$(current_cmdline)
-    if [[ -n $dt_probe ]]; then
+    if [[ -n $dt_probe || $candidate_edition == dev12.11 ]]; then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
     elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
     if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo|focus)_probe)(=| |$)' <<<"$args"; then
@@ -201,16 +232,38 @@ check_recovery_origin() {
 }
 verify_running_kernel() {
     local expected=$stock_notes
-    if [[ -n $probe_notes && $1 == confirm ]]; then expected=$probe_notes; fi
+    if [[ $candidate_edition == dev12.11 && $running_edition == dev12.11 ]]; then
+        expected=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+    elif [[ -n $probe_notes && $1 == confirm ]]; then expected=$probe_notes; fi
     [[ $(sha "${2:-/sys/kernel/notes}") == "$expected" ]] || die 'unexpected installed kernel build'
 }
+verify_dev1211_restore() {
+    case $running_edition:$(selected_entry) in
+        dev12.10:"$baseline_entry"|dev12.10:"y700-installed-${trial_role}$id-base.conf"|\
+        dev12.11:"$entry"|dev12.11:"y700-installed-${trial_role}$id-trial.conf") ;;
+        *) die 'restore requires the selected candidate or its dev12.10 fallback' ;;
+    esac
+}
 check_recovery_runtime() {
-    local action=$1 unit
+    local action=$1 unit uuid=$prior_uuid
     [[ $baseline == 0 ]] || die 'launch recovery trial from the installed file-root'
     check_personalized_files
+    if [[ $candidate_edition == dev12.11 ]]; then
+        if [[ $action == arm ]]; then
+            [[ $running_edition == dev12.10 ]] || die 'arm from dev12.10 recovery'
+            check_prepared_image
+            local fat=$store/$candidate_edition/linux-boot.fat
+            [[ $(realpath -e "$fat") == "$fat" && $(stat -c '%u:%g:%a:%h' "$fat") == 0:0:600:1 &&
+               $(blkid -p -s UUID -o value "$fat") == "$candidate_fat" ]] || die 'wrong candidate boot FAT'
+        else
+            [[ $running_edition == dev12.11 ]] || die 'confirm or promote on the running dev12.11 trial'
+            uuid=$inner_uuid
+            verify_rtc1_tree
+        fi
+    fi
     [[ $(cat "$backing/etc/y700/image-id") == asphalt-prc-debian13-xfce-7.3.4-v1 &&
-       $(cat /etc/y700/image-id) == y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f &&
-       $(stat -c %s "$store/dev12.10/linux-boot.fat") == 1073741824 ]] || die 'wrong installed pair'
+       $(cat /etc/y700/image-id) == "y700-prc-$uuid" &&
+       $(stat -c %s "$store/$candidate_edition/linux-boot.fat") == 1073741824 ]] || die 'wrong installed pair'
     verify_running_kernel "$action"
     for unit in "$timer" "${timer%.timer}.service"; do
         regular "/etc/systemd/system/$unit"
@@ -235,6 +288,10 @@ recovery_payloads() {
         result=$(cd "$esp" && sha256sum "EFI/$name/"{kernel.efi,board.dtb,initrd} "loader/entries/$name.conf" | sha256sum | cut -c1-64)
         [[ $result == "$expected" ]] || die 'deployed entry or payload differs from the sealed manifest'
     done
+    if [[ $candidate_edition == dev12.11 ]]; then
+        result=$(cd "$esp" && sha256sum "EFI/$source_sub/"{kernel.efi,board.dtb,initrd} "loader/entries/$entry" | sha256sum | cut -c1-64)
+        [[ $result == d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362 ]] || die 'dev12.11 installed entry or payload differs'
+    fi
     if [[ -n $dt_probe ]]; then
         [[ ! -e $entries/$entry &&
            $(sha "$esp/EFI/$source_sub/board.dtb") == "$probe_dtb_sha" &&
@@ -290,7 +347,7 @@ initialize() {
     cp "$entries/$baseline_entry" "$new/baseline.conf"
     cp "$source_conf" "$new/source.conf"
     [[ $(sha "$new/source.conf") == "$entry_sha" ]] || die 'deployed candidate entry digest differs'
-    grep -Eq '^options .*y700\.release=dev12\.10( |$)' "$new/source.conf" &&
+    awk -v want="y700.release=$candidate_edition" '$1=="options" {for(i=2;i<=NF;i++)if($i==want) n++} END{exit n!=1}' "$new/source.conf" &&
         grep -Eq '^options .*y700\.media=file( |$)' "$new/source.conf" || die 'candidate release or media option missing'
     for file in baseline source; do
         [[ $(grep -c '^options ' "$new/$file.conf") == 1 && $(grep -c '^sort-key ' "$new/$file.conf") == 1 ]] ||
@@ -386,6 +443,10 @@ current_trial() {
     local args
     args=$(current_cmdline)
     [[ $baseline == 0 ]] && grep -Fqw "y700.installed_trial=$id" <<<"$args" || die 'wrong running trial'
+    if [[ $candidate_edition == dev12.11 ]]; then
+        [[ $running_edition == dev12.11 && $(tr ' ' '\n' <<<"$args" | grep '^y700[.]release=') == y700.release=dev12.11 ]] ||
+            die 'trial is not running the requested dev12.11 release'
+    fi
     if (( recovery )); then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700\.installed_trial=') == "y700.installed_trial=$id" &&
            $(tr ' ' '\n' <<<"$args" | grep '^y700\.recovery=') == y700.recovery=journal ]] &&
@@ -517,7 +578,11 @@ confirm_boot() {
 main() {
     [[ $EUID == 0 ]] || die 'root required'
     local -a original_args=("$@")
-    if [[ ${1:-} == --recovery ]]; then shift; recovery_mode
+    if [[ ${1:-} == --dev12.11 ]]; then
+        shift; dev1211_mode
+        [[ $# == 2 && $1 =~ ^(arm|confirm|promote|restore|prepare-candidate)$ ]] || die 'usage: --dev12.11 prepare-candidate MOUNT | arm|confirm|promote|restore RUN_ID'
+        if [[ $1 != prepare-candidate ]]; then set -- "$@" "$recovery_sha"; fi
+    elif [[ ${1:-} == --recovery ]]; then shift; recovery_mode
     elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 || ${1:-} == --gt9768 ]]; then
         dt_probe_mode "${1#--}"; shift
         [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die "usage: --$dt_probe arm|confirm|restore RUN_ID"
@@ -536,13 +601,17 @@ main() {
         rmdir "$scratch"
     }
     trap cleanup_scratch EXIT
-    if [[ $recovery == 0 && $# == 2 && $1 == prepare-candidate ]]; then prepare_candidate "$2"; return; fi
+    if [[ $# == 2 && $1 == prepare-candidate && ( $recovery == 0 || $candidate_edition == dev12.11 ) ]]; then prepare_candidate "$2"; return; fi
     [[ $# == 3 && $1 =~ ^(arm|confirm|restore|promote)$ && $2 =~ ^[a-z0-9][a-z0-9-]{0,23}$ &&
        $3 =~ ^[0-9a-f]{64}$ ]] || die 'usage: prepare-candidate MOUNT | arm|confirm|restore|promote RUN_ID ENTRY_SHA256'
     local action=$1 boot device
     id=$2; entry_sha=$3
     if (( recovery )); then [[ $entry_sha == "$recovery_sha" ]] || die 'wrong recovery entry digest'; fi
     verify_board; locate_boot
+    if [[ $candidate_edition == dev12.11 && $action == restore ]]; then
+        verify_running_kernel restore
+        verify_dev1211_restore
+    fi
     exec 9<"$store"; flock -w 10 9 || die 'another trial change is active'
     if (( recovery )) && [[ $action != restore ]]; then check_recovery_runtime "$action"; fi
     if [[ $action == confirm && $recovery == 0 ]]; then confirm_boot; return; fi

@@ -2,9 +2,13 @@
 # Compile the optional PMK8350 RTC board change from the prepared Asphalt tree.
 set -euo pipefail
 reserve_rtc1=0
-if [[ ${1:-} == --probe-rtc1 ]]; then reserve_rtc1=1; shift; fi
+with_lens=false
+case ${1:-} in
+    --probe-rtc1) reserve_rtc1=1; shift ;;
+    --gt9768-rtc1) reserve_rtc1=1; with_lens=true; shift ;;
+esac
 if (( $# != 2 )); then
-    echo 'Usage: build-rtc-dtb.sh [--probe-rtc1] PREPARED_KERNEL NEW_DIRECTORY' >&2
+    echo 'Usage: build-rtc-dtb.sh [--probe-rtc1|--gt9768-rtc1] PREPARED_KERNEL NEW_DIRECTORY' >&2
     exit 2
 fi
 kernel=$(realpath -e "$1")
@@ -29,16 +33,28 @@ printf '%s  %s\n' "$original" "$work/original.dtb" | sha256sum --strict -c
 [[ $(fdtget "$work/original.dtb" "$rtc" status) == disabled ]]
 
 cp -- "$source" "$work/rtc.dts"
+base=$work/original.dtb
+if $with_lens; then
+    project=$(cd "$(dirname "$0")/.." && pwd)
+    # Replay the exact camera DTS hunk without patching any prepared kernel files.
+    sed -n '/^--- a\/arch\/arm64\/boot\/dts\/qcom\/sm8475-lenovo-asphalt.dts$/,$p' \
+        "$project/tests/camera-focus-ldo5.patch" >"$work/camera.patch"
+    patch --batch --fuzz=0 "$work/rtc.dts" "$work/camera.patch"
+    cat "$project/config/kernel/asphalt-gt9768.dtsi" >>"$work/rtc.dts"
+    base=$work/lens.dtb
+    compile "$work/rtc.dts" "$base"
+    printf '%s  %s\n' a178f9de454d0e8aa5b474c91b4280da3aadc6aad0622c0120661447d836209f "$base" | sha256sum --strict -c
+fi
 cat >>"$work/rtc.dts" <<'DTS'
 
 &pmk8350_rtc {
 	status = "okay";
 };
 DTS
-cp -- "$work/original.dtb" "$work/expected.dtb"
+cp -- "$base" "$work/expected.dtb"
 fdtput -t s "$work/expected.dtb" "$rtc" status okay
 if (( reserve_rtc1 )); then
-    ! fdtget -p "$work/original.dtb" /aliases | grep -Eq '^rtc[0-9]+$' || exit 1
+    ! fdtget -p "$base" /aliases | grep -Eq '^rtc[0-9]+$' || exit 1
     printf '%s\n' '/ { aliases { rtc1 = &pmk8350_rtc; }; };' >>"$work/rtc.dts"
     fdtput -t s "$work/expected.dtb" /aliases rtc1 "$rtc"
 fi
@@ -53,4 +69,5 @@ cmp "$work/expected.dtb.dts" "$work/board.dtb.dts"
 (cd "$work/delivery" && sha256sum board.dtb >SHA256SUMS && sha256sum --strict -c SHA256SUMS)
 mv -T --no-clobber "$work/delivery" "$output"
 [[ ! -e $work/delivery ]]
+if $with_lens; then echo 'GT9768_BASE_DTB rebuilt=exact'; fi
 echo "RTC_DTB original_rebuilt=exact semantic_changes=$((reserve_rtc1 + 1)) rtc_status=okay rtc1_alias=$reserve_rtc1 alarm=0:62:1:rising"

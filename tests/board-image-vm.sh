@@ -183,6 +183,18 @@ records=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Archi
 test "$(printf '%s\n' "$records" | wc -l)" = "$package_count"
 test "$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)" = "$package_digest"
 printf 'Y700_VM_INVENTORY count=%s digest=%s\n' "$package_count" "$package_digest"
+if grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release; then
+    test "$package_count" = 1240
+    test "$package_digest" = be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+    test "$kernel_notes_sha256" = 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+    grep -Fxq IMAGE_ID=y700-prc-debian /etc/os-release
+    printf '%s  %s\n' \
+        411490734a965ca1405ca33e3b9a1fcb79a1fbad196d947cf3736cb66b1b41b1 /var/lib/y700/build/camera-autofocus.lock.json \
+        3400560df16bd304fe76e7049f6ee9d5273e3e19bc23497ab95f6a7c83eef184 "/usr/lib/modules/$(uname -r)/kernel/drivers/rtc/rtc-pm8xxx.ko.zst" | sha256sum -c
+    modprobe rtc-pm8xxx
+    test -d /sys/module/rtc_pm8xxx
+    printf 'Y700_VM_DEV1211 image=dev12.11 camera_receipt=verified rtc_driver=loaded\n'
+fi
 printf 'Y700_BOOT_PASS image=%s root=%s esp=%s kernel=%s pid1=%s packages=%s split=%s\n' "$image_id" "$rootdev" "$bootdev" "$(uname -r)" "$(cat /proc/1/comm)" "$package_count" "$split"
 PROBE
 } > probe.sh

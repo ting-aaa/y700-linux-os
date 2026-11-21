@@ -7,7 +7,7 @@ import sys
 import time
 
 bios, role, mode = sys.argv[1:]
-assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768")
+assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768", "dev1211")
 assert role in ("trial", "base")
 command = [os.getenv("QEMU_SYSTEM_AARCH64", "qemu-system-aarch64")]
 if env_dir := os.getenv("QEMU_DATA"):
@@ -26,6 +26,9 @@ if mode == "ldo5":
     marker = f"LDO5_EFI selected=y700-installed-ldo5-qaldo-{role}.conf virtual_supply={int(role == 'trial')}"
 if mode == "gt9768":
     marker = f"GT9768_EFI selected=y700-installed-gt9768-qafocus-{role}.conf virtual_supply={int(role == 'trial')}"
+if mode == "dev1211":
+    version = "dev12.11" if role == "trial" else "dev12.10"
+    marker = f"DEV1211_EFI selected=y700-installed-dev1211-qafallback-{role}.conf release={version}"
 with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as vm:
     try:
         buffer = b""

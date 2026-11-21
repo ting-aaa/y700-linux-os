@@ -7,7 +7,8 @@ if [[ ${1:-} == --rtc1 ]]; then shift; mode=rtc1; prefix=y700-installed-rtc1-qar
 if [[ ${1:-} == --cci0 ]]; then shift; mode=cci0; prefix=y700-installed-cci0-qacci; fi
 if [[ ${1:-} == --ldo5 ]]; then shift; mode=ldo5; prefix=y700-installed-ldo5-qaldo; fi
 if [[ ${1:-} == --gt9768 ]]; then shift; mode=gt9768; prefix=y700-installed-gt9768-qafocus; fi
-[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0|--ldo5|--gt9768] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
+if [[ ${1:-} == --dev12.11 ]]; then shift; mode=dev1211; prefix=y700-installed-dev1211-qafallback; fi
+[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0|--ldo5|--gt9768|--dev12.11] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
 work=$(realpath -e "$1")
 bios=$(realpath -e "$2"); dt=$(realpath -e "$3"); busy=$(realpath -e "$4")
 efivarfs=$(realpath -e "$5")
@@ -31,6 +32,23 @@ mount -t efivarfs -o ro efivars /sys/firmware/efi/efivars
 key=/sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
 selected=$(cat "$key" | tail -c +5 | tr -d '\000')
 case "$selected" in
+    y700-installed-dev1211-qafallback-trial.conf|y700-installed-dev1211-qafallback-base.conf)
+        grep -Fwq y700.recovery=journal /proc/cmdline
+        notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
+        if [ "${selected##*-}" = trial.conf ]; then
+            grep -Fwq y700.installed_trial=qafallback /proc/cmdline
+            grep -Fwq y700.release=dev12.11 /proc/cmdline
+            grep -Fwq root=UUID=c0e447e4-82db-59ee-91d6-0e1ec9d5f45e /proc/cmdline
+            test "$notes" = 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+            echo "DEV1211_EFI selected=$selected release=dev12.11 notes=$notes"
+            reboot -f
+        else
+            if grep -Eq ' y700\.installed_trial=' /proc/cmdline; then exit 1; fi
+            grep -Fwq y700.release=dev12.10 /proc/cmdline
+            test "$notes" = c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+            echo "DEV1211_EFI selected=$selected release=dev12.10 notes=$notes"
+            poweroff -f
+        fi ;;
     y700-installed-recovery-qarecovery-trial.conf)
         grep -Fwq y700.installed_trial=qarecovery /proc/cmdline
         grep -Fwq y700.recovery=journal /proc/cmdline
@@ -119,6 +137,9 @@ if [[ $mode == ldo5 || $mode == gt9768 ]]; then
     mmd -i esp4k.fat "::/EFI/y700-$mode-12-10"
     # The transaction fixture retained the exact staged kernel from its FAT.
     mcopy -i esp4k.fat ../armed-probe/kernel.efi "::/EFI/y700-$mode-12-10/kernel.efi"
+elif [[ $mode == dev1211 ]]; then
+    mmd -i esp4k.fat ::/EFI/y700-file-12-11
+    mcopy -i esp4k.fat ../armed-dev1211/{board.dtb,kernel.efi,initrd} ::/EFI/y700-file-12-11/
 fi
 mcopy -i esp4k.fat -s ../armed-loader ::/loader
 mcopy -i esp4k.fat "$dt" ::/EFI/qa-virt.dtb
@@ -158,7 +179,7 @@ elif [[ $mode == ldo5 || $mode == gt9768 ]]; then
 fi
 for original in ../armed-loader/entries/y700-installed-*.conf; do
     qa_dt=/EFI/qa-virt.dtb
-    if [[ $mode != recovery && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-$mode-virt.dtb; fi
+    if [[ $mode != recovery && $mode != dev1211 && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-$mode-virt.dtb; fi
     awk -v dt="$qa_dt" '/^devicetree / {print "devicetree " dt;next}
          /^initrd / {print; print "initrd /EFI/qa-observer.gz"; next}
          /^options / {$0=$0 " console=ttyAMA0 rdinit=/qa-init"} {print}' "$original" > boot.conf

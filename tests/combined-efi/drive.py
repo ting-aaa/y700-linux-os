@@ -166,6 +166,23 @@ def exercise(work, secret, cold=False):
             sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "screen-lock"))
             from drive_lock import unlock
             unlock(work, stream, secret)
+        if os.environ.get("MEDIA_EDITION") == "dev12.11":
+            deadline = time.monotonic() + 420
+            while time.monotonic() < deadline:
+                report = (work / "report.log").read_text(errors="replace").splitlines()
+                if any(line.startswith("COMBINED_FAIL ") for line in report):
+                    raise RuntimeError("Guest observer failed before camera input")
+                button = next((line for line in report if line.startswith("COMBINED_CAMERA_BUTTON ")), None)
+                if button:
+                    _, sx, sy = button.split()
+                    x, y = int(sx), int(sy)
+                    if not (0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT):
+                        raise ValueError("Camera touch target is outside the guest display")
+                    enter(stream, {}, "", (x, y))
+                    break
+                time.sleep(0.35)
+            else:
+                raise TimeoutError("Camera chooser did not expose its Cancel button")
         wait_marker(work, "COMBINED_PASS", 420)
 
 

@@ -1,5 +1,29 @@
 # dev12.10 主摄供电候选 ESP
 
+## dev12.11 主摄与 RTC1
+
+dev12.11 的发行 FAT 为 1,073,741,824 字节，SHA-256 为 `92d47c14c4606d106ebad21ece8f5e23f244bd5aecea0c377bbe8966f8261b36`。它选用带 GT9768 的内核及同时启用 PMK8350 RTC 的设备树。板级 RTC 固定为 `rtc1`，内核的启动校时和回写目标均为 `rtc0`。构建先将仅含主摄改动的板级树重新编译到已审核哈希，再增加 RTC 的 `status = "okay"` 和 `rtc1` 别名。构建器对整个设备树做语义比对。[清醒闹钟实测](SUSPEND-ROUTING.md)
+
+```sh
+bash scripts/build-camera-ldo5.sh --lens "$PREPARED_KERNEL" "$work/lens"
+bash scripts/build-rtc-dtb.sh --gt9768-rtc1 "$PREPARED_KERNEL" "$work/combined"
+cp "$work/lens/kernel.efi" "$work/lens/notes" "$work/combined/"
+bash scripts/build-camera-esp.sh --gt9768-rtc1 "$dev1210_fat" "$work/combined" "$work/linux-boot.fat"
+```
+
+| 组件 | SHA-256 |
+| --- | --- |
+| 板级内核 | `b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625` |
+| 组合设备树 | `53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7` |
+| 运行内核 notes | `35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6` |
+| 根中的 `rtc-pm8xxx.ko.zst` | `3400560df16bd304fe76e7049f6ee9d5273e3e19bc23497ab95f6a7c83eef184` |
+
+两次独立重建得到相同 FAT，只有内核和板级树两个文件变化。仅启用 GT9768 的变体使用 `build-camera-esp.sh --gt9768`，输出哈希为 `5004039ac64b91a5dc70375cb0db6c11aff590dcb69031dd5c767323f1e90d40`。组合模式拒绝仅启用主摄的树、错误的内核 notes 和错误的来源 FAT。
+
+完整发行 TAR 解包后，ARM64 虚拟机用包内内核、原 initrd 和 dev12.11 根启动到 systemd。来宾匹配了全部 1,240 个已安装软件包及内核 notes，加载了包内 PMK8350 RTC 驱动，随后正常关机。虚拟机使用其专用设备树。平板的真实睡眠和唤醒需要在实机测量。[发行包](DEV12.11-IMAGE.md)
+
+## dev12.10 供电修复
+
 这份 1 GiB FAT32 分区镜像用于从 dev12.10 通用根启动带 HI1339 辅助供电的内核。默认入口仍是 `loader/entries/debian.conf`，其内核命令行仍选择 `root=PARTLABEL=linux`。这套介质需要同一发行包中的 `root.ext4` 和板级 U-Boot。日常平板已安装的文件根使用独立 EFI 入口。
 
 | 本地交付文件或配套输入 | 字节数 | SHA-256 |

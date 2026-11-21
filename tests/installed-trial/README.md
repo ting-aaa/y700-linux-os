@@ -134,3 +134,25 @@ bash tests/installed-trial/recovery-firmware.sh --gt9768 "$NEW_MENU_QA_DIR" \
 The FAT fixture checks the source menu, kernel, DT and inherited initrd before arming a single attempt. It also substitutes a wrong sensor-to-lens reference and a wrong BOB phandle to exercise confirmation failures. The EFI test runs the candidate and baseline kernels on QEMU's Arm virtual machine. Its synthetic tree carries the board's actual phandle values so the observer can check the sensor, lens and supply references across the boot manager handoff. Physical binding and optical behavior require tablet measurements.
 
 Two builds produced the same 16,059,711-byte `gt9768-entry.tar.gz` using the archive command in the LDO5 example. Its SHA-256 is `c3c33cac98fc0f764ff2ad1d76db7cd9d179bc1a790ca9b2f66a5b4e540e14d2`. The two EFI boots reported the GT9768 kernel notes and the original dev12.10 kernel notes in that order. The boot manager consumed the trial counter during the first boot. Logs from both boots and the earlier RTC1, CCI0 and LDO5 regression checks are in `out/dev12.10-gt9768-final-trial/`.
+
+## Independent dev12.11 installation
+
+The dev12.11 installation uses its own 32 GiB ext4 file and 1 GiB FAT file under `/var/lib/y700-trial/dev12.11` on the outer Debian filesystem. They have UUIDs `c0e447e4-82db-59ee-91d6-0e1ec9d5f45e` and `31EC-3084`. Its permanent menu entry is `y700-file-12-11.conf`. The controller preserves the existing `y700-recovery-12-10.conf` fallback and verifies both releases' payloads against their pinned digests.
+
+```sh
+# Run against the separate, personalized dev12.11 root while it is mounted.
+bash scripts/arm-installed-trial.sh --dev12.11 prepare-candidate "$CANDIDATE_ROOT"
+# Use the verified four-file directory and a private mount of the outer ESP.
+bash scripts/manage-file-trial-entry.sh --dev12.11 add "$VERIFIED_ENTRY" "$OUTER_ESP"
+# From the normal dev12.10 recovery boot, arm one counted attempt, then reboot.
+bash scripts/arm-installed-trial.sh --dev12.11 arm "$RUN_ID"
+# On the running counted dev12.11 boot, after its health checks:
+bash scripts/arm-installed-trial.sh --dev12.11 confirm "$RUN_ID"
+bash scripts/arm-installed-trial.sh --dev12.11 promote "$RUN_ID"
+# When a return to the previous default is wanted:
+bash scripts/arm-installed-trial.sh --dev12.11 restore "$RUN_ID"
+```
+
+The first attempt has a four-minute deadline. Confirmation requires live SSH, LightDM, the expected root, boot volume, kernel and RTC tree, and the counted EFI selection. Only the same confirmed boot can promote the new release. Restoration also accepts the automatically selected dev12.10 fallback alias. After returning to the previous default, `manage-file-trial-entry.sh --dev12.11 remove` with the original two paths removes the new menu files.
+
+Run `tests/installed-trial/dev1211-arm.sh PREVIOUS_RECOVERY_MENU_FAT DEV1211_ENTRY NEW_WORK` on the Linux host to verify the prepare, arm, confirm, promote and restore operations on disposable ext4 and FAT files. The resulting work directory can be passed to `recovery-firmware.sh --dev12.11` with the four firmware inputs. This second test checks the actual systemd-boot counter, EFI selection, inherited kernel options and running kernel notes on both boots.

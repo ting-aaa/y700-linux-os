@@ -6,7 +6,11 @@ die() { echo "File trial entry: $*" >&2; exit 1; }
 payload=y700-file
 probe=0
 manifest=c0ab1aca3a71d38000e6dda15d8730cdb7d68afc06e4cc0904ba18dd1a4184a2
-if [[ ${1:-} == --dev12.10 ]]; then
+if [[ ${1:-} == --dev12.11 ]]; then
+    shift
+    payload=y700-file-12-11
+    manifest=d7d617d453585e69eb04a279f7c3839a7edece65bd9a3887e1a1b7cdaba6a362
+elif [[ ${1:-} == --dev12.10 ]]; then
     shift
     payload=y700-file-12-10
     manifest=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
@@ -35,7 +39,7 @@ elif [[ ${1:-} == --dev12.10-recovery ]]; then
     payload=y700-recovery-12-10
     manifest=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b
 fi
-[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1|--dev12.10-cci0|--dev12.10-ldo5|--dev12.10-gt9768] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
+[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.11|--dev12.10|--dev12.10-recovery|--dev12.10-rtc1|--dev12.10-cci0|--dev12.10-ldo5|--dev12.10-gt9768] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
 mode=$1
 source_dir=$(realpath -e -- "$2")
 esp=$(realpath -e -- "$3")
@@ -53,7 +57,7 @@ flock -n "$guard" || die 'another menu operation is active'
 [[ -d EFI && -d loader/entries && -f loader/entries/debian.conf ]] || die 'internal Debian entry is missing'
 default=$(awk 'tolower($1)=="default" {print $2}' loader/loader.conf)
 preserved=(loader/loader.conf loader/entries/debian.conf EFI/BOOT/BOOTAA64.EFI EFI/debian/{kernel.efi,board.dtb,initrd})
-if (( probe )); then
+if (( probe )) || [[ $payload == y700-file-12-11 ]]; then
     [[ $default == y700-recovery-12-10.conf ]] || die 'expected permanent recovery default'
     ! compgen -G 'loader/entries/y700-installed-*.conf' >/dev/null || die 'a counted trial is active'
     [[ ! -e loader/entries/y700-rtc1-12-10.conf && ! -e loader/entries/y700-cci0-12-10.conf &&
