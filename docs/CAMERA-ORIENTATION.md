@@ -27,3 +27,7 @@ sudo bash /var/lib/y700/updates/qcam-orientation-y7008/update.sh rollback
 ## 方向回归测试
 
 在 ARM64 上以 100% 和 200% 缩放分别验证了 40 组方向组合。测试把带四色角标的帧送入实际 Qt 预览部件，同时用相机应用的照片写入路径生成 JPEG。每组均检查预览和解码后照片的四个角，覆盖协商方向带镜像标记的输入。对应收据为 `out/camera-qcam-orientation/raster.log`，SHA-256 为 `2977a0c58443b964560dfae806de6519b1c42b6078fc66aa1944b79af3a03886`。
+
+在 dev12.12 的 ARM64 虚拟机上，三个模拟镜头使用参考机实际协商的 `Rotate270`。同一相机进程在四个内屏方向间切换，12 次预览和 12 张解码后的 JPEG 的四角顺序与宽高均符合预期。用同一幅标靶在 `left` 横屏比较，旧版保持原始后摄画面，新版把后置主摄和微距旋转 180°，前摄保持原角度。收据 `out/qcam-orientation-vm/verification.txt` 的 SHA-256 为 `5bc9a7ade014f86a7c44de32de3225cc2bed925b16478b90538c87bca77f811b`。[复现方法与各方向预期值](../tests/qcam-photo/orient-vm.md)
+
+在参考机上，已安装的新版相机在 200% 缩放、中英文两种界面下都能选到后置主摄、前摄和微距，并能取消退出。此次菜单验证期间，三个传感器均保持挂起，活动时长增量为零。实景方向的最终确认由机主在日用桌面取景时完成。
