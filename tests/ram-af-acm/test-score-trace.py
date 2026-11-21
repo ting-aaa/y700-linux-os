@@ -30,9 +30,9 @@ class Wire:
 
 
 def through_filter(text, root):
-    proc = subprocess.run(["bash", str(root / "filter.sh")], input=text, text=True,
+    proc = subprocess.run([shutil.which("bash"), (root / "filter.sh").as_posix()], input=text.encode("ascii"),
                           capture_output=True, check=True)
-    return proc.stdout.splitlines()
+    return proc.stdout.decode("ascii").splitlines()
 
 
 def received(rows):
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         complete = [*pairs, *(line.replace("coarse", "fine") for line in pairs),
                     pairs[0].replace("coarse", "verify"), focused]
         assert through_filter("\n".join(complete) + "\n", root) == complete
-        counts, _, _, _ = parse(received(complete))
+        counts = parse(received(complete)).points
         assert [len(points) for points in counts.values()] == [9, 9, 1]
         for invalid in ([*receipt[1:]], [receipt[0], *receipt], receipt[:-2],
                         [*pairs[:8], diag, *ENDING], [pairs[1], pairs[0], *receipt[2:]],
@@ -93,7 +93,7 @@ if __name__ == "__main__":
             actual = through_filter(args.library_log.read_text(), root)
             diags = [line for line in actual if line.startswith("AF_DIAG ")]
             actual_receipt = received(diags)
-            points, _, _, _ = parse(actual_receipt)
+            points = parse(actual_receipt).points
             assert len(points["coarse"]) == 9
             print("SCORE_TRACE_LIBRARY_REPLAY coarse_pairs=9 compared_channels=2 host_ack_hash=1")
             print("\n".join(summarize(actual_receipt)))
