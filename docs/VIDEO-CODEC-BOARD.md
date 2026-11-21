@@ -37,6 +37,43 @@ uv run --no-project --with imageio-ffmpeg==0.6.0 python \
     tests/video-codec/player-reference.py "$repeating_clips" "$new_reference_dir"
 ```
 
+## 实机快进、回拖和暂停
+
+在 TB320FC_PRC 的原内核上，通过 USB 把 dev12.9 传入运行内存，从独立 Xfce 桌面的 Thunar 打开 1920×1080 本地视频。200% 缩放下，测试程序点击真实 Parole 窗口的播放键、点击进度条前跳，再按住滑块向回拖动。每段测试片持续 16 秒，每 4 秒改变一次颜色，每 2 秒有一个关键帧。程序同时核对窗口像素、暂停时画面是否静止、恢复后的颜色和同一播放器进程新收到的硬件解码缓冲区。[测试片生成和校验](../tests/video-codec/seek-clips.py) · [窗口和解码器观测](../tests/video-codec/parole-transport.py)
+
+| 8 位格式 | dev12.9 原播放器组合 | 更新后的平板内存试用 |
+| --- | --- | --- |
+| MP4 / H.264 | 快进、回拖、暂停、恢复均通过 | 四项通过，继续使用 Iris |
+| MP4 / HEVC | 能开始播放，首次前跳后 10 秒内没有新画面 | 四项通过，继续使用 Iris |
+| WebM / VP9 | 能开始播放，首次前跳后 10 秒内没有新画面 | 四项通过，继续使用 Iris |
+
+进度条前跳到黄色、回拖到绿色，暂停保持绿色超过 4.4 秒，恢复后进入蓝色。播放键从 72×68 增至 96×96 设备像素，进度条从 852×68 调整为 708×96。测试使用独立显示会话中的指针，实体手指手感、浏览器、长片和音画同步还需分别验证。[HiDPI 播放控件](../packaging/parole-touch/README.md)
+
+HEVC 和 VP9 在原组合上跳转后都触发了 V4L2 的 `SOURCE_CHANGE`。一次试验在同一文件描述上重建两个队列，HEVC 成功重新协商 NV12，但仍未返回新画面。播放器专用插件改为在这台 Iris 执行刷新跳转时释放旧队列并打开新的解码会话，保留输入格式。H.264 继续使用原有流程。此次区分依据是平板上三组受控对照，底层固件停滞的原因仍待定位。[Linux 有状态解码器接口](https://docs.kernel.org/userspace-api/media/v4l/dev-decoder.html) · [GStreamer 跳转语义](https://gstreamer.freedesktop.org/documentation/additional/design/seeking.html)
+
+快速回拖还暴露了一个时序问题。前一次跳转刚启动压缩输入队列、尚在等待输出格式时，用户可能已经拖到了下一个位置。只检查输出画面队列是否就绪会漏掉这次跳转。修正以压缩输入队列已启用为条件。VP9 的详细记录中，三次重新打开会话后，硬件都返回了该位置的首个关键帧，随后返回下一帧。首个空缓冲区仍按保守规则报告，未放宽底层错误检查。[Iris 跳转修正](../tests/video-vp9/iris-seek.patch)
+
+复验还捕捉到了另一处竞态。早期整包 `72a2f245…` 首轮通过，第二轮 HEVC 快速回拖时，下一次刷新恰好落在硬件输出缓冲池激活期间。这次刷新未能结束。修正后的解码器会中断刚刚激活的旧缓冲池。原版界面在同一台平板复测时，日志记录了这条中断路径，随后仍完成三轮往返、暂停和恢复。GStreamer 上游也处理过停止解码时新缓冲池激活造成的类似等待。[GStreamer 上游修复](https://github.com/GStreamer/gstreamer/commit/225d6b7e114b40066db3a3b0309b676b65f57526)
+
+Parole `4.18.2-1+y7002` 在高 DPI 下让滑块和时间提示随手势移动，松开时向 GStreamer 发出一次跳转。这样即使拖过许多位置，也只需在最终位置重新解码。实机验收对每次手势同时检查解码器新输出、窗口实际颜色和跳转事件数。[播放控件补丁](../packaging/parole-touch/seek/scrub.patch)
+
+VP9 的新会话还有一个恢复条件。实机曾在索引关键帧之前收到一包 44 字节的依赖帧，输出队列在关键帧到达前就开始等待格式并报错。最终插件在新开的 VP9 会话先跳过标为依赖帧的输入，从关键帧开始送入硬件。保留原版滑块进行快速回拖时，实机 14 次跳过前置依赖帧并从关键帧开解，三轮往返全部通过。[V4L2 恢复点定义](https://docs.kernel.org/userspace-api/media/v4l/dev-decoder.html#glossary)
+
+触屏输入另在 ARM64 虚拟机中验证。虚拟多点触屏通过 Linux 输入设备和 Xorg libinput 将触摸按下、移动和抬起事件送入实际 Parole 窗口。一次点击跳到 13 秒。随后三次拖动各有八次位置更新，按住期间均未发出跳转，松手后各发出一次，目标分别为 5、13、5 秒。实际窗口依次显示黄、绿、黄、绿。平板上的测试覆盖真实 Iris 和播放器画面；实体屏幕手感仍需用户体验。
+
+2026 年 11 月 21 日，最终离线升级包在平板的两次独立 RAM 会话中分别通过。每次从 1,240 个软件包的封存桌面安装，从 Thunar 分别打开三种格式，每种连续做三轮前跳和回拖，再暂停和恢复。两次共 36 个跳转手势，各产生一次 GStreamer 跳转，实际画面及硬解输出全数符合预期。两次退出后，原座席和服务均正常，解码器进入运行时挂起，新增挂载和循环设备均为零。
+
+工作树内的归档为 `out/video-player-upgrade/y7002-keyframe/y700-dev12.9-player-update-arm64.tar.gz`，共 5,237,744 字节，SHA-256 为 `d9ee91f23a6b6177e770378203e8bd220b328134c6534ac798cfc1d86609ff04`。可在 `out/video-seek/verified-gestures.txt` 查看每次操作的结果，记录的 SHA-256 为 `3d995b5fa918bf3009a050c6b0db9112b76ef96ad1bf01a85cf41f6767e68c17`。
+
+复测使用已校验的 dev12.9 RAM 包和配套离线升级包。在电脑的 Linux 环境运行以下命令，`update_sha256` 取自升级包的独立校验清单。完成后可在输出中查找每次动作的画面颜色和新硬解缓冲数。[升级包构建、安装与回退](../tests/video-player-upgrade/README.md)
+
+```bash
+uv run tests/video-codec/seek-clips.py "$new_seek_clips"
+PAROLE_UPGRADE_ARCHIVE="$update_archive" PAROLE_UPGRADE_SHA256="$update_sha256" \
+    bash tests/video-codec/run-parole-tablet.sh --transport "$usb_ssh" "$dev12_9_ram_bundle" \
+    --preinstalled "$new_seek_clips" "$tablet_xvfb_usr"
+```
+
 ## 复测
 
 电脑端需要 FFmpeg（含 libx264、libx265、libvpx）、uv 和 Linux。平板继续运行原 Debian，通过已固定主机密钥的 USB SSH 连接。生成器在新目录中创建无音频的动态图案、访问单元、标准容器和独立软件参考。通过条件同时包括真实 Iris 元素、解码结束、输出尺寸、每帧内容和原设备状态。完整操作不会修改平板的软件包。
