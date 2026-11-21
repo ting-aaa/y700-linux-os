@@ -60,6 +60,8 @@ if [[ $mode == candidate ]]; then
             echo 'PASS installed_versions dev12.10' ;;
         2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8)
             echo 'PASS installed_versions dev12.10 with Wi-Fi SAE update' ;;
+        be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
+            echo 'PASS installed_versions dev12.10 with Wi-Fi SAE and camera updates' ;;
         *) check installed_versions false ;;
     esac
     check migration_receipt grep -Fxq 'dev12.10 personal files verified, USB identity retained' "$origin/var/lib/y700-trial/dev12.10/installed.ok"
