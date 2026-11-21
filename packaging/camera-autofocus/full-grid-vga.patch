@@ -1,0 +1,20 @@
+Subject: [PATCH] simple: cover every central gradient in VGA-size focus streams
+
+Separate experimental decision candidate for the settled y7002 tree. Keep
+the normal sparse scan above 640x480. At VGA the full grid contains
+319 x 239 sites. All scoring thresholds and control timing are unchanged.
+
+--- a/src/libcamera/pipeline/simple/contrast_scan.cpp
++++ b/src/libcamera/pipeline/simple/contrast_scan.cpp
+@@ -29,8 +29,9 @@
+ 		return {};
+ 
+ 	uint64_t energy = 0, light = 0, count = 0;
+-	const unsigned int dx = std::max(1U, width / 192);
+-	const unsigned int dy = std::max(1U, height / 144);
++	const bool fullGrid = width <= 640 && height <= 480;
++	const unsigned int dx = fullGrid ? 1 : std::max(1U, width / 192);
++	const unsigned int dy = fullGrid ? 1 : std::max(1U, height / 144);
+ 	for (unsigned int y = height / 4; y < height - height / 4 - 1; y += dy) {
+ 		for (unsigned int x = width / 4; x < width - width / 4 - 1; x += dx) {
+ 			const uint8_t *g = plane + size_t(y) * stride + size_t(x) * pixelBytes + 1;

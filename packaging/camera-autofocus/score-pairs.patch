@@ -1,0 +1,165 @@
+Subject: [PATCH] simple: compare accepted focus scores with a full-grid diagnostic
+
+Apply after settle-after-control.patch. Enable Y700Af:DEBUG to observe paired
+scores at up to 640x480. Focus decisions still use the original sparse grid.
+
+--- a/src/libcamera/pipeline/simple/contrast_scan.h
++++ b/src/libcamera/pipeline/simple/contrast_scan.h
+@@ -21,7 +21,18 @@
+ 		unsigned int samples = 0;
+ 		unsigned int timestampRejects = 0;
+ 	};
++	struct SamplePair {
++		const char *phase = nullptr;
++		unsigned int point = 0;
++		double mean = 0;
++		double delta = 0;
++		double referenceMean = 0;
++		double referenceDelta = 0;
++	};
+ 	struct Diagnostic {
++		/* Consumed by the logger after the second scored frame. */
++		SamplePair pair;
++		std::optional<double> referenceSample, previousReference;
+ 		const char *phase = nullptr;
+ 		const char *reason = nullptr;
+ 		/* Coarse, Fine, Verify, in that order. */
+@@ -35,6 +46,11 @@
+ 					      unsigned int width, unsigned int height,
+ 					      unsigned int stride, unsigned int pixelBytes);
+ 
++	[[gnu::visibility("hidden")]]
++	static std::optional<double> referenceContrast(const uint8_t *plane, size_t length,
++						       unsigned int width, unsigned int height,
++						       unsigned int stride, unsigned int pixelBytes);
++
+ 	void reset(int low, int high);
+ 	void request(std::optional<bool> automatic, Trigger trigger);
+ 	State failedFrame();
+--- a/src/libcamera/pipeline/simple/contrast_scan.cpp
++++ b/src/libcamera/pipeline/simple/contrast_scan.cpp
+@@ -8,6 +8,8 @@
+ 
+ namespace libcamera {
+ 
++static constexpr const char *phaseNames[] = { "coarse", "fine", "verify" };
++
+ bool ContrastScan::supportsLens(std::string_view id, std::string_view sensor,
+ 				std::string_view lens, int low, int high)
+ {
+@@ -18,17 +20,16 @@
+ /* Green is byte 1 in all six little-endian RGB/BGR formats used here.
+  * Sample two-dimensional, one-pixel gradients in the central half of the
+  * actual ISP image. Normalizing by mean brightness reduces exposure bias. */
+-std::optional<double> ContrastScan::contrast(const uint8_t *plane, size_t length,
+-					    unsigned int width, unsigned int height,
+-					    unsigned int stride, unsigned int pixelBytes)
++static std::optional<double> gridContrast(const uint8_t *plane, size_t length,
++					  unsigned int width, unsigned int height,
++					  unsigned int stride, unsigned int pixelBytes,
++					  unsigned int dx, unsigned int dy)
+ {
+ 	if (!plane || width < 16 || height < 16 || (pixelBytes != 3 && pixelBytes != 4) ||
+ 	    uint64_t(width) * pixelBytes > stride || uint64_t(height) * stride > length)
+ 		return {};
+ 
+ 	uint64_t energy = 0, light = 0, count = 0;
+-	const unsigned int dx = std::max(1U, width / 192);
+-	const unsigned int dy = std::max(1U, height / 144);
+ 	for (unsigned int y = height / 4; y < height - height / 4 - 1; y += dy) {
+ 		for (unsigned int x = width / 4; x < width - width / 4 - 1; x += dx) {
+ 			const uint8_t *g = plane + size_t(y) * stride + size_t(x) * pixelBytes + 1;
+@@ -43,6 +44,24 @@
+ 	       std::max(12.0, double(light) / count);
+ }
+ 
++std::optional<double> ContrastScan::contrast(const uint8_t *plane, size_t length,
++					    unsigned int width, unsigned int height,
++					    unsigned int stride, unsigned int pixelBytes)
++{
++	return gridContrast(plane, length, width, height, stride, pixelBytes,
++			    std::max(1U, width / 192), std::max(1U, height / 144));
++}
++
++std::optional<double> ContrastScan::referenceContrast(const uint8_t *plane, size_t length,
++						     unsigned int width, unsigned int height,
++						     unsigned int stride, unsigned int pixelBytes)
++{
++	/* Bound the opt-in diagnostic to at most 319 x 239 sample sites. */
++	if (width > 640 || height > 480)
++		return {};
++	return gridContrast(plane, length, width, height, stride, pixelBytes, 1, 1);
++}
++
+ void ContrastScan::reset(int low, int high)
+ {
+ 	*this = ContrastScan{};
+@@ -98,8 +117,7 @@
+ ContrastScan::State ContrastScan::finish(State state, const char *reason, Diagnostic *diagnostic)
+ {
+ 	if (diagnostic) {
+-		static constexpr const char *phases[] = { "coarse", "fine", "verify" };
+-		diagnostic->phase = phases[static_cast<size_t>(phase_)];
++		diagnostic->phase = phaseNames[static_cast<size_t>(phase_)];
+ 		diagnostic->reason = reason;
+ 	}
+ 	return state_ = state;
+@@ -174,6 +192,8 @@
+ 		return state_;
+ 	}
+ 	lastCapture_ = captured;
++	if (diagnostic)
++		diagnostic->referenceSample.reset();
+ 	auto value = score();
+ 	if (!value || !std::isfinite(*value))
+ 		return finish(State::Failed, "invalid-score", diagnostic);
+@@ -181,10 +201,18 @@
+ 		++progress->samples;
+ 	if (!haveSample_) {
+ 		previousScore_ = *value;
++		if (diagnostic)
++			diagnostic->previousReference = diagnostic->referenceSample;
+ 		haveSample_ = true;
+ 		return state_;
+ 	}
+ 	double mean = (*value + previousScore_) / 2.0;
++	if (progress && diagnostic->referenceSample && diagnostic->previousReference) {
++		double ref = *diagnostic->referenceSample, prev = *diagnostic->previousReference;
++		diagnostic->pair = { phaseNames[static_cast<size_t>(phase_)], progress->samples / 2,
++				     mean, std::abs(*value - previousScore_),
++				     (ref + prev) / 2, std::abs(ref - prev) };
++	}
+ 	if (phase_ == Phase::Verify) {
+ 		if (mean >= best_ * 0.75)
+ 			return finish(State::Focused, "focused", diagnostic);
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -1146,12 +1146,26 @@
+ 		}
+ 		const auto plane = mapped.planes()[0];
+ 		const auto &cfg = focusStream_->configuration();
+-		auto score = ContrastScan::contrast(plane.data(), std::min<size_t>(plane.size(), buffer->metadata().planes()[0].bytesused),
+-						    cfg.size.width, cfg.size.height, cfg.stride, focusPixelBytes_);
++		size_t length = std::min<size_t>(plane.size(), buffer->metadata().planes()[0].bytesused);
++		auto score = ContrastScan::contrast(plane.data(), length, cfg.size.width, cfg.size.height,
++						    cfg.stride, focusPixelBytes_);
++		if (score && isLogSeverityEnabled<LogDebug>(logCategoryY700Af()))
++			focusDiagnostic_.referenceSample = ContrastScan::referenceContrast(
++				plane.data(), length, cfg.size.width, cfg.size.height, cfg.stride, focusPixelBytes_);
+ 		if (!score)
+ 			input = "plane-layout";
+ 		return score;
+ 	}, &focusDiagnostic_);
++	if (auto &pair = focusDiagnostic_.pair; pair.phase) {
++		/* A normalized 8-bit gradient is at most 255/12. Retain six
++		 * decimals in the diagnostic without logging raw positions or pixels. */
++		LOG(Y700Af, Debug) << "AF_DIAG phase=" << pair.phase << " point=" << pair.point
++				   << " mean_ppm=" << static_cast<unsigned int>(pair.mean * 1000000 + 0.5)
++				   << " pair_delta_ppm=" << static_cast<unsigned int>(pair.delta * 1000000 + 0.5)
++				   << " ref_mean_ppm=" << static_cast<unsigned int>(pair.referenceMean * 1000000 + 0.5)
++				   << " ref_pair_delta_ppm=" << static_cast<unsigned int>(pair.referenceDelta * 1000000 + 0.5);
++		pair = {};
++	}
+ 	if (focusDiagnostic_.reason) {
+ 		const auto &[coarse, fine, verify] = focusDiagnostic_.progress;
+ 		LOG(Y700Af, Debug) << "AF_DIAG phase=" << focusDiagnostic_.phase

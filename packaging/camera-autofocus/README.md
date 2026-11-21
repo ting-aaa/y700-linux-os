@@ -49,3 +49,17 @@ c++ -std=c++17 -O2 -I"$pipeline" tests/camera-autofocus/settling.cpp \
 ```
 
 With an injected 120 ms control delay the previous build scored a frame timestamped 90 ms. The candidate rejected it, discarded the first eligible completion at 170 ms and its duplicate, then scored the frames at 190 and 220 ms. The ARM64 candidate library also loaded the two signed IPAs and passed the packaged GStreamer scan tests on a PC. Its SHA-256 is `ab1cd0e90330a2b3905d8103b5be42fa098c4f15e494e8284c13f4decfcc5d23`. The experimental library and receipts are in `out/camera-af-settling/`. The sealed RAM trial uses the previous diagnostic library. The physical trials did not measure the elapsed duration of their lens commands.
+
+### Comparing both focus metrics on the same frames
+
+After the settling candidate, [score-pairs.patch](score-pairs.patch) adds one opt-in `Y700Af:DEBUG` row per completed pair, up to 19 per scan. Its one-based ordinal is local to coarse, fine or verify. Four integer fields give the mean and absolute difference of the two normalized gradient scores, in millionths, first on the production grid and then on every central pixel with a right and lower neighbour. Both grids use the same two mapped frames. Missing reference samples suppress that row. At 640×480 the reference reads 76,241 sites per accepted frame. Larger frames skip the reference. The scan still uses the original score, 0.025 floor, 1.12 peak-to-trough ratio and verification rule.
+
+A deterministic synthetic target with equal mean brightness exposed a sampling blind spot. In one of three horizontal phases, nine coarse measurements all scored 0.033900 while the dense reference ranged from 0.033966 to 0.137323. Shifting the detail one pixel horizontally allowed the same code to focus. The independent [full-grid VGA decision candidate](full-grid-vga.patch), applied to the settled source on its own, focused at all three phases and still rejected a fixed noisy target. No measured score establishes this mechanism on the physical tablet. In its 419-frame run, coarse scan accepted nine lens calls and 18 scores, rejected 18 timestamps and returned `flat-contrast`. Its 0.0573 and 0.0642 values came from the separate Laplacian observer.
+
+To repeat the build on a Linux host with ARM64 binfmt support, supply the Debian ARM64 SDK and the prepared object/source tree used for the settled diagnostic. The [rebuild script](../../tests/camera-autofocus/build-score-pairs.sh) first reproduces its exact ELF, then builds the paired library and exercises the three versions on ARM64. It writes into a new output directory.
+
+```sh
+sudo bash tests/camera-autofocus/build-score-pairs.sh "$sdk" "$settled_build" "$new_output"
+```
+
+Two builds produced SHA-256 `a56b92c1c2528582e23b151275291d4cbb4ae70e7fc8c446c885914f5c715012`. Existing GStreamer, ABI and signed IPA checks passed. The ten synthetic protocol lines and two timing measurements are in `out/camera-af-score-pairs/rebuilt/paired.log`. Timings there are host ARM64 emulation measurements.
