@@ -8,6 +8,8 @@ qemu=$(realpath -e "${3:?extracted QEMU bundle}")
 vm=$(realpath -m "${4:?new VM directory}")
 card=
 overlay=
+variant=${7:-}
+[[ -z $variant || $variant == --fallback-120 ]]
 if [[ -n ${5:-} ]]; then card=$(realpath -e "$5"); fi
 if [[ -n ${6:-} ]]; then overlay=$(realpath -e "$6"); fi
 if [[ -n $overlay ]]; then test -n "$card"; fi
@@ -38,9 +40,23 @@ sector=4096
 label=linux-boot
 esp=test-esp.fat
 split=0
+dual=0
+expected_root=$images/root.ext4
+selected=y700-test.conf
+payload_dir=y700-test
 qa_options='console=ttyAMA0 loglevel=7 systemd.show_status=yes'
 if [[ -n "$card" ]]; then
     (cd "$card" && sha256sum -c SHA256SUMS)
+    if mdir -b -i "$card/y700-test-card.img@@1048576" ::/loader/entries/debian-120.conf >/dev/null 2>&1; then
+        dual=1; payload_dir=y700-sd-12-12; selected=$payload_dir.conf
+        expected_root=$card/card-root.ext4
+        cmp "$images/SHA256SUMS" "$card/SOURCE-SHA256SUMS"
+        if [[ -n $variant ]]; then
+            [[ -n $overlay ]]
+            selected=$payload_dir-120.conf
+            notes_digest=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+        fi
+    fi
     sector=512
     label=y700-test-esp
     if [[ -n $overlay ]]; then
@@ -54,30 +70,37 @@ if [[ -n "$card" ]]; then
 else
     cp --sparse=always "$images/linux-boot.fat" "$esp"
 fi
+[[ -z $variant || $dual == 1 ]]
 if (( split )); then
     (cd "$overlay" && sha256sum -c SHA256SUMS)
-    # Stand in for the existing internal ESP. Its FAT ID must differ from the
-    # card referenced by fstab. U-Boot explicitly reads this volume's loader.
-    truncate -s 1G internal.fat
-    mkfs.fat -S 4096 -s 1 -F 32 -i 10ACCE55 internal.fat
-    mcopy -s -i internal.fat "$overlay/EFI" "$overlay/loader" ::/
-    mmd -i internal.fat ::/EFI/BOOT
     mcopy -i "$images/linux-boot.fat" ::/EFI/BOOT/BOOTAA64.EFI exported-loader.efi
-    mcopy -i internal.fat exported-loader.efi ::/EFI/BOOT/BOOTAA64.EFI
+    if (( dual )); then
+        cp --sparse=always "$images/linux-boot.fat" internal.fat
+        mcopy -s -i internal.fat "$overlay/EFI/$payload_dir" ::/EFI/
+        mcopy -i internal.fat "$overlay"/loader/entries/*.conf ::/loader/entries/
+    else
+        truncate -s 1G internal.fat
+        mkfs.fat -S 4096 -s 1 -F 32 -i 10ACCE55 internal.fat
+        mcopy -s -i internal.fat "$overlay/EFI" "$overlay/loader" ::/
+        mmd -i internal.fat ::/EFI/BOOT
+        mcopy -i internal.fat exported-loader.efi ::/EFI/BOOT/BOOTAA64.EFI
+        printf 'default y700-test.conf\ntimeout 0\n' > selected-loader.conf
+        mcopy -o -i internal.fat selected-loader.conf ::/loader/loader.conf
+    fi
     mtype -i internal.fat ::/EFI/BOOT/BOOTAA64.EFI | cmp - exported-loader.efi
-    entry=$overlay/loader/entries/y700-test.conf
-    grep -Fxq 'devicetree /EFI/y700-test/board.dtb' "$entry"
-    grep -Fxq 'linux /EFI/y700-test/kernel.efi' "$entry"
-    grep -Fxq 'initrd /EFI/y700-test/initrd' "$entry"
-    for payload in kernel.efi board.dtb; do
-        mtype -i "$card/y700-test-card.img@@1048576" "::/EFI/debian/$payload" | cmp - "$overlay/EFI/y700-test/$payload"
+    entry=$overlay/loader/entries/$selected
+    kernel=kernel.efi
+    if [[ -n $variant ]]; then kernel=kernel-120.efi; fi
+    grep -Fxq "devicetree /EFI/$payload_dir/board.dtb" "$entry"
+    grep -Fxq "linux /EFI/$payload_dir/$kernel" "$entry"
+    grep -Fxq "initrd /EFI/$payload_dir/initrd" "$entry"
+    for payload in "$kernel" board.dtb; do
+        mtype -i "$card/y700-test-card.img@@1048576" "::/EFI/debian/$payload" | cmp - "$overlay/EFI/$payload_dir/$payload"
     done
-    for payload in kernel.efi initrd; do
-        mtype -i internal.fat "::/EFI/y700-test/$payload" | cmp - "$overlay/EFI/y700-test/$payload"
+    for payload in "$kernel" initrd; do
+        mtype -i internal.fat "::/EFI/$payload_dir/$payload" | cmp - "$overlay/EFI/$payload_dir/$payload"
     done
-    sha256sum exported-loader.efi "$overlay/EFI/y700-test/"{kernel.efi,initrd} "$entry" | tee trial-core.sha256
-    printf 'default y700-test.conf\ntimeout 0\n' > selected-loader.conf
-    mcopy -o -i internal.fat selected-loader.conf ::/loader/loader.conf
+    sha256sum exported-loader.efi "$overlay/EFI/$payload_dir/$kernel" "$overlay/EFI/$payload_dir/initrd" "$entry" | tee trial-core.sha256
     cat > probe.service <<'UNIT'
 [Unit]
 Description=Verify the split EFI boot in QEMU
@@ -96,8 +119,7 @@ UNIT
     qa_options="$qa_options systemd.unit=y700-image-vm.service systemd.set_credential_binary=systemd.extra-unit.y700-image-vm.service:$(base64 -w0 probe.service)"
     cp -- "$entry" pending.conf
     esp=internal.fat
-    entry_name=y700-test.conf
-    payload_dir=y700-test
+    entry_name=$selected
 else
     mcopy -i "$esp" ::/loader/entries/debian.conf pending.conf
     qa_options="$qa_options systemd.unit=kernel-command-line.target systemd.run=/boot/probe.sh systemd.run_success_action=poweroff systemd.run_failure_action=poweroff"
@@ -127,6 +149,8 @@ mcopy -i "$esp" exported-options ::/exported-options
     printf 'kernel_notes_sha256=%s\n' "$notes_digest"
     printf 'fbdev=%s\n' "$fbdev"
     echo "split=$split"
+    echo "dual=$dual"
+    echo "expected_entry=$selected"
     echo "esp_label=$label"
     echo "logical_sector=$sector"
     cat <<'PROBE'
@@ -163,10 +187,18 @@ if [ "$split" = 1 ]; then
     if ! mountpoint -q "$efivars"; then mount -t efivarfs -o ro efivarfs "$efivars"; fi
     efi_value() { dd if="$efivars/$1-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f" bs=1 skip=4 status=none | tr -d '\000'; }
     entry=$(efi_value LoaderEntrySelected)
-    test "$entry" = y700-test.conf
+    test "$entry" = "$expected_entry"
     loaderpart=$(efi_value LoaderDevicePartUUID)
     test "$(printf '%s' "$loaderpart" | tr A-F a-f)" = "$(blkid -s PARTUUID -o value /dev/disk/by-partlabel/linux-boot)"
-    echo 'Y700_VM_EFI_ENTRY selected=y700-test.conf loader_esp=internal'
+    echo "Y700_VM_EFI_ENTRY selected=$entry loader_esp=internal"
+    if [ "$dual" = 1 ]; then
+        test "$(blkid -s UUID -o value /dev/disk/by-partlabel/linux)" = "$root_uuid"
+        test "$(blkid -s UUID -o value /dev/disk/by-partlabel/linux-boot)" = 171A-4ADB
+        test "$(findmnt -nro UUID -M /boot)" = 12DC-1212
+        grep -Fxq 'PARTLABEL=y700-test-root / ext4 defaults 0 1' /etc/fstab
+        grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
+        echo 'Y700_VM_SD_1212 ufs_root_uuid_collision=1 sd_esp=12DC-1212 ufs_esp=171A-4ADB'
+    fi
     options=/run/y700-image-vm/exported-options
     echo 'Y700_VM_SPLIT_LAYOUT root_and_boot_card=1 card_sector=512 internal_sector=4096 internal_observer_ro=1'
 else
@@ -200,8 +232,14 @@ PROBE
 } > probe.sh
 mcopy -i "$esp" probe.sh ::/probe.sh
 if (( split )); then
-    truncate -s 1027M internal.gpt
-    printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\n' | sfdisk --sector-size 4096 internal.gpt
+    if (( dual )); then
+        truncate -s 7171M internal.gpt
+        printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\nstart=262400, size=1572864, type=linux, name=linux\n' | sfdisk --sector-size 4096 internal.gpt
+        dd if="$images/root.ext4" of=internal.gpt bs=1M seek=1025 conv=sparse,notrunc status=none
+    else
+        truncate -s 1027M internal.gpt
+        printf 'label: gpt\nunit: sectors\n\nstart=256, size=262144, type=uefi, name=linux-boot\n' | sfdisk --sector-size 4096 internal.gpt
+    fi
     dd if=internal.fat of=internal.gpt bs=1M seek=1 conv=sparse,notrunc status=none
 elif [[ "$sector" = 4096 ]]; then
     truncate -s 7171M disk.gpt
@@ -209,9 +247,9 @@ elif [[ "$sector" = 4096 ]]; then
     dd if=test-esp.fat of=disk.gpt bs=1M seek=1 conv=sparse,notrunc status=none
     dd if="$images/root.ext4" of=disk.gpt bs=1M seek=1025 conv=sparse,notrunc status=none
 fi
-cmp -n 6442450944 "$images/root.ext4" disk.gpt 0 1074790400
+cmp -n 6442450944 "$expected_root" disk.gpt 0 1074790400
 "${UV_BIN:-uv}" run --no-project --python "${UV_PYTHON:-3.13}" python "$repo/tests/boot-efi-guest.py" \
-    "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$vm" "$(sed -n 's/^image_id=//p' "$images/identity.txt")" "$label" "$sector" "$split" "$package_count"
+    "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$vm" "$(sed -n 's/^image_id=//p' "$images/identity.txt")" "$label" "$sector" "$split" "$package_count" "$selected"
 if (( split )); then
     (cd "$card" && sha256sum -c SHA256SUMS)
     (cd "$overlay" && sha256sum -c SHA256SUMS)
