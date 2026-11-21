@@ -1,0 +1,12 @@
+--- a/src/libcamera/pipeline/virtual/virtual.cpp
++++ b/src/libcamera/pipeline/virtual/virtual.cpp
+@@ -171 +171,8 @@ CameraConfiguration::Status VirtualCameraConfiguration::validate()
+-	Status status = Valid;
++	Status status = Valid;
++	/* Report the negotiated buffer orientation observed on the three PRC
++	 * integrated cameras. The generated asymmetric input stays in buffer coordinates. */
++	if (data_->config_.id.rfind("/base/soc@0/cci@", 0) == 0 &&
++	    orientation != Orientation::Rotate270) {
++		orientation = Orientation::Rotate270;
++		status = Adjusted;
++	}
