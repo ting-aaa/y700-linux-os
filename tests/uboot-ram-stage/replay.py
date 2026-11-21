@@ -209,6 +209,40 @@ def bulk(address):
     checked([x[0] for x in exercise("upload")] == ["stage", "continue"])
 
 
+def efi_handoff(debian):
+    raw = (debian / "physical-20261117-ram-recovery/uboot-console.log").read_bytes()
+    # Strip the later commands from the archived ANSI menu rendering.
+    start = raw.index(b"*** U-Boot Boot Menu ***")
+    end = raw.index(b"0. Exit", start) + len(b"0. Exit")
+    menu = raw[start:end]
+    version = b" systemd-boot 262 (aa64), UEFI Specification 2.110, Vendor Das U-Boot 8230.4096 "
+    pause = b" Press any key to continue..."
+    for displays, expected, success in [
+        ([b"", version, pause, menu], b"vQ\x03\x1b\x03", True),
+        ([menu], b"\x1b\x03", True),
+        ([b"=> "], b"\x03", True),
+        ([b"", b"v"], b"v\x03", True),
+        ([pause], b"", False),
+        ([menu.replace(b"Boot NixOS", b"Other OS")], b"", False),
+        ([version, b""], b"v", False),  # A stale identity cannot authorize Q.
+        ([b"", version.replace(b"262", b"261")], b"v", False),
+        ([b"", version.replace(b"8230.4096", b"8230.40960")], b"v", False),
+        ([b"", version + b"\r\n=> "], b"v", False),
+        ([b"", b"Other firmware menu"], b"v", False),
+        ([b"", version, b"Reboot now?"], b"vQ", False),
+        ([b"", version, b"Reset requested\r\n" + pause], b"vQ", False),
+        ([b"", version, pause, menu.replace(b"Drop to shell", b"Restart")], b"vQ\x03", False),
+    ]:
+        port = io.BytesIO()
+        with (patch.object(stage, "read_display", side_effect=displays), patch.object(stage, "prompt"),
+              patch.object(stage.time, "sleep"), patch.object(stage, "receipt")):
+            if success:
+                stage.acquire_from_efi(port)
+            else:
+                rejects(lambda: stage.acquire_from_efi(port))
+        checked(port.getvalue() == expected)
+
+
 if __name__ == "__main__":
     debian, new, pin = sys.argv[1:]
     addrs, identity = historical(Path(debian))
@@ -218,4 +252,5 @@ if __name__ == "__main__":
     ymodem()
     esp(blobs, addrs)
     bulk(addrs)
+    efi_handoff(Path(debian))
     stage.receipt(host_assertions=passed, historical_crcs=3, hardware_commands=0)

@@ -27,6 +27,12 @@ KERNEL = "0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60"
 DISKLESS_DT = "8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82"
 CONTROLLERS = ("/soc@0/ufshc@1d84000", "/soc@0/mmc@8804000")
 ESP_KERNEL = "/EFI/y700-display-12-11.efi"
+EFI_ID = b"systemd-boot 262 (aa64), UEFI Specification 2.110, Vendor Das U-Boot 8230.4096"
+RETURN_WAIT = b"Press any key to continue..."
+BOARD_MENU = [b"*** U-Boot Boot Menu ***", b"Press UP/DOWN to move, ENTER to select, ESC to quit",
+              b"1. Boot NixOS", b"2. Enable USB serial console", b"3. Drop to shell",
+              b"4. Reset device", b"0. Exit"]
+SHELL_PROMPT = re.compile(rb"(?:^|[\r\n])=> $")
 
 
 class Refused(Exception):
@@ -142,7 +148,7 @@ def prompt(port, timeout=12):
     end, raw = time.monotonic() + timeout, bytearray()
     while time.monotonic() < end and len(raw) < 128 * 1024:
         raw.extend(port.read(max(port.in_waiting, 1)))
-        if re.search(rb"(?:^|[\r\n])=> $", raw):
+        if SHELL_PROMPT.search(raw):
             return raw.decode("ascii", "replace").replace("\r", "").removesuffix("=> ")
     raise Refused("U-Boot shell prompt missing")
 
@@ -152,7 +158,76 @@ def command(port, cmd, timeout=12):
     return prompt(port, timeout)
 
 
-def connect(wait):
+def cancel_menu(port):
+    write(port, b"\x1b")
+    time.sleep(.3)
+    write(port, b"\x03")
+    prompt(port)
+
+
+def read_display(port, timeout=4):
+    """Read one serial display update through a quiet interval without sending a key."""
+    deadline = time.monotonic() + timeout
+    latest = None
+    raw = bytearray()
+    while time.monotonic() < deadline:
+        data = port.read(min(max(port.in_waiting, 1), 4096))
+        if data:
+            raw.extend(data)
+            need(len(raw) < 128 * 1024, "Unexpectedly large boot menu response")
+            latest = time.monotonic()
+        elif latest is not None and time.monotonic() - latest >= .3:
+            return bytes(raw)
+    need(latest is None, "Boot menu response did not settle")
+    return b""
+
+
+def display_rows(raw):
+    # Colour changes preserve text. Cursor movement and erasure delimit fields
+    # on both the U-Boot ANSI display and systemd-boot's EFI text console.
+    raw = re.sub(rb"\x1b\[[0-9;]*m", b"", raw)
+    raw = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"\n", raw)
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def board_menu(rows):
+    return rows[-len(BOARD_MENU):] == BOARD_MENU
+
+
+def acquire_from_efi(port):
+    initial = read_display(port, 1.5)
+    rows = display_rows(initial)
+    if SHELL_PROMPT.search(initial):
+        write(port, b"\x03")
+        prompt(port)
+        return
+    if board_menu(rows):
+        cancel_menu(port)
+        return
+    need(RETURN_WAIT not in rows, "Unverified continuation prompt already active")
+    need(BOARD_MENU[0] not in rows, "Unrecognized or incomplete U-Boot maintenance menu")
+
+    # 'v' displays the EFI version. In an already-running shell it merely
+    # echoes the typed character. Never submit that character as a command.
+    write(port, b"v")
+    fresh = read_display(port)
+    if fresh == b"v":
+        write(port, b"\x03")
+        prompt(port)
+        return
+    # The EFI text console can draw a horizontal border below the status line.
+    fields = [row for row in display_rows(fresh) if row.replace("─".encode(), b"")]
+    need(fields == [EFI_ID], "Expected the verified systemd-boot and U-Boot version display")
+    write(port, b"Q")
+    rows = display_rows(read_display(port, 8))
+    need(rows == [RETURN_WAIT], "EFI did not return to the expected continuation prompt")
+    write(port, b"\x03")
+    need(board_menu(display_rows(read_display(port, 8))), "Expected the PRC U-Boot maintenance menu")
+    cancel_menu(port)
+    receipt(efi_menu_exit=1)
+
+
+def connect(wait, exit_efi_menu=False):
     import serial
     from serial.tools import list_ports
     end = time.monotonic() + wait
@@ -166,12 +241,10 @@ def connect(wait):
                 time.sleep(.4)
                 continue
             try:
-                # Escape/back out of the observed U-Boot bootmenu. Never send
-                # Return (which selects a boot entry) before seeing the shell.
-                write(port, b"\x1b")
-                time.sleep(.3)
-                write(port, b"\x03")
-                prompt(port)
+                if exit_efi_menu:
+                    acquire_from_efi(port)
+                else:
+                    cancel_menu(port)
                 return port
             except BaseException:
                 port.close()
@@ -380,15 +453,19 @@ def main():
     cli.add_argument("--fastboot", type=Path, help="Use this host fastboot executable instead of ACM YMODEM")
     cli.add_argument("--esp-kernel", type=uuid.UUID, metavar="PARTUUID",
                      help="Allow read-only UFS access to the verified linux-boot ESP to save kernel upload time")
+    cli.add_argument("--exit-efi-menu", action="store_true",
+                     help="Allow exiting the verified dev12.11 systemd-boot menu back to its U-Boot shell")
     args = cli.parse_args()
     if args.esp_kernel and (args.fastboot or args.action not in ("stage", "boot")):
         cli.error("--esp-kernel applies to YMODEM stage or boot")
+    if args.exit_efi_menu and args.action == "check":
+        cli.error("--exit-efi-menu applies to board actions")
     blobs, cmdline = inputs(args.directory, args.manifest_sha256)
     receipt(host_verified=5, first_stage_files=3, first_stage_bytes=sum(map(len, blobs.values())))
     if args.action == "check":
         return
     executable = None if args.fastboot is None else str(args.fastboot.resolve(strict=True))
-    with closing(connect(30)) as serial_port:
+    with closing(connect(30, args.exit_efi_menu)) as serial_port:
         address = inspect(serial_port)
         receipt(verified_boards=1, verified_ram_slots=3)
         if args.action == "inspect":

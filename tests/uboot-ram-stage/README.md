@@ -26,6 +26,18 @@ uv run --offline --python 3.13 $Tool boot-staged $Bundle $Pin
 
 `inspect` 查询 U-Boot 版本、bdinfo、命名地址和控制 DT，仅在 RAM 选择工作 DT。它检查型号、SoC 和 PRC 地区、完整 LMB 计数/边界/标志，以及该版固件实际合并的整段启动缓冲区预约。内核和 initrd 各有 128 MiB，DT 有 2 MiB。数值来自 Qualcomm 分配逻辑，运行地址由本次启动读取。[Qualcomm U-Boot 缓冲区分配](https://github.com/u-boot/u-boot/blob/master/arch/arm/mach-snapdragon/board.c#L489-L527)
 
+### 从已显示的 dev12.11 EFI 菜单返回
+
+机主按住音量减重启时，这台平板的同一个 USB 串口还可能显示 systemd-boot 的系统选择菜单。此次实机在该菜单按小写 `v` 得到 `systemd-boot 262 (aa64), UEFI Specification 2.110, Vendor Das U-Boot 8230.4096`。随后大写 `Q` 结束 EFI 程序，出现 `Press any key to continue...`。此时发送一次 Ctrl-C，串口显示板级维护菜单，其中有 `Boot NixOS`、`Enable USB serial console` 和 `Drop to shell`。进入 shell 后原工具核实了 PRC 身份和三个 RAM 地址槽，并从日常 ESP 命中已校验的内核。EFI 退出实机收据为 `out/camera-optical-qa/physical-menu-efi-exit.log`，SHA-256 为 `0652623f5fea46f445de95266b91593fbb02c19a6b3906ca8c8e9f3938200246`。
+
+在已确认停于菜单或空闲 shell 时，可显式使用以下命令。使用该选项时，工具核对当次版本查询、EFI 返回提示和完整维护菜单，随后通过原有提示符检查。遇到其他版本或缺少预期答复会停止。此过程退出当前 EFI 程序，保留已有默认项。无人按键冷启动到该菜单的路径仍待实机验证。
+
+```powershell
+uv run --offline --python 3.13 $Tool inspect $Bundle $Pin --exit-efi-menu
+```
+
+如果内屏已经显示 `*** U-Boot Boot Menu ***` 而主机还没有 ACM，松开音量减，用音量键移动高亮到 `Enable USB serial console`，短按电源键确认。若再次显示维护菜单，可用相同方式选择 `Drop to shell`。已有数据传输时，由正在使用串口的主机进程继续完成传输。
+
 `stage` 默认用 ACM/YMODEM，逐包验 CRC16 并有限重传，结束核对接收字节数、三件在目标 RAM 的 CRC32、目标 DT 上的型号及两个存储控制器的 disabled 状态。历史 DT 传输和 CRC 成功；此前一次内核传输约 13.7 KiB/s 后由主机取消，按同速传 53.3 MB 约 63 分钟。`boot-staged` 重新检查身份、布局、当前 RAM 内容、DT 和内核参数，再发一条 `booti`。`boot` 可将上传与启动合在一次调用。启动请求回执之后另等 Linux 接收器握手。
 
 有可用的 Windows fastboot 驱动时，可在 `stage` 或 `boot` 末尾加 `--fastboot <fastboot.exe>`。工具切到短时的 U-Boot USB fastboot，以一次性 RAM 环境值、版本及 128 MiB 容量确认同一设备，下载三件合包，在 RAM 内复制两件，再经 `continue` 返回串口并核对 CRC。旧实机已验证这种 stage、RAM 复制及串口 CRC；此次主机侧另外模拟了 USB 两次切换、错误设备和不完整下载。若 WinUSB 未绑定，沿用默认 ACM。进入 fastboot 后缺主机驱动时，历史菜单记录的恢复方式是短按音量键退出，随后重新出现 ACM。操作工具只请求临时 RAM 和环境变量。[U-Boot USB fastboot 接口](https://docs.u-boot.org/en/latest/android/fastboot.html) · [continue 回到调用者](https://github.com/u-boot/u-boot/blob/master/drivers/usb/gadget/f_fastboot.c)
@@ -58,3 +70,5 @@ Linux 主机还可运行独立的 AArch64 QEMU U-Boot FAT 检查。它使用临�
 ```sh
 uv run --offline --no-project --python /usr/bin/python3 python -B tests/uboot-ram-stage/esp-qemu.py "$Bundle/kernel.efi" "$QemuUBoot"
 ```
+
+另一次 ARM64 QEMU 实验使用 dev12.11 发行 FAT 的原始 `EFI/BOOT/BOOTAA64.EFI` 和启用 `CONFIG_CMD_BOOTMENU`、`CONFIG_CMD_PAUSE` 的 U-Boot 2026.10。已有 shell 和正式 EFI 菜单分别通过了新的接管路径，测试期间没有选中维护菜单项，虚拟磁盘校验前后一致。版本不符、旧版本回显、缺少继续提示、返回其他菜单等负例均在对应阶段停止。[EFI 菜单测试](efi-menu-qemu.py) · [历史串口及负例回放](replay.py)
