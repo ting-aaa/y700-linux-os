@@ -1,0 +1,124 @@
+--- a/diagnostic.sh
++++ b/diagnostic.sh
+@@ -54,7 +54,7 @@
+ fi
+ stage=$(mktemp -d /run/y700-af-optical.XXXXXXXX)
+ chmod 0755 "$stage"
+-install -m755 y700-af-measure measure-board.sh "$stage"
++install -m755 y700-af-measure y700-signal-measure measure-board.sh "$stage"
+ install -m644 libcamera.so.0.7 "$stage"
+ g=/sys/kernel/config/usb_gadget/y700-ram-af
+ own=0
+@@ -64,7 +64,7 @@
+         rm -f -- "$g/configs/c.1/acm"
+         rmdir "$g/functions/acm.qa" "$g/configs/c.1" "$g/strings/0x409" "$g" 2>/dev/null || :
+     fi
+-    rm -f -- "$stage/y700-af-measure" "$stage/measure-board.sh" "$stage/libcamera.so.0.7"
++    rm -f -- "$stage/y700-af-measure" "$stage/y700-signal-measure" "$stage/measure-board.sh" "$stage/libcamera.so.0.7"
+     rmdir "$stage"
+ }
+ trap cleanup EXIT
+@@ -98,6 +98,13 @@
+             "$payload/allocator-vm.sh"
+             return
+         fi
++        if [[ $1 == --rear-signal ]]; then
++            systemd-run --quiet --wait --collect --pipe --uid=y700 -p PrivateDevices=yes -p PrivateNetwork=yes \
++                -p ProtectSystem=strict -p ProtectHome=yes -p NoNewPrivileges=yes -p LimitCORE=0 -p RuntimeMaxSec=70s \
++                --setenv=LD_LIBRARY_PATH=/opt/y700-camera/lib "$stage/y700-signal-measure" --self-test || return 1
++            /usr/bin/python3 -I -B "$payload/signal_receipt.py" virtual-fixture
++            return
++        fi
+         # The QEMU transport can only exercise synthetic data with no camera devices.
+         systemd-run --quiet --wait --collect --pipe --uid=y700 -p PrivateDevices=yes -p PrivateNetwork=yes \
+             -p ProtectSystem=strict -p ProtectHome=yes -p NoNewPrivileges=yes -p LimitCORE=0 -p RuntimeMaxSec=70s \
+@@ -106,7 +113,9 @@
+         /bin/bash "$stage/measure-board.sh" "$1" "$stage/y700-af-measure"
+     else
+         healthy || return 1
+-        with_private_allocator /bin/bash "$stage/measure-board.sh" "$1" "$stage/y700-af-measure"
++        local client="$stage/y700-af-measure"
++        if [[ $1 == --rear-signal ]]; then client="$stage/y700-signal-measure"; fi
++        with_private_allocator /bin/bash "$stage/measure-board.sh" "$1" "$client"
+     fi
+ }
+ if (( ! virt )); then stty -F "$port" raw -echo clocal; fi
+@@ -163,7 +172,7 @@
+             fi
+             systemctl start y700-ram-af-ack.timer
+             publish 'AF1 RETURN acknowledged=1' ;;
+-        "START $token")
++        "START $token"|"SIGNAL $token")
+             if [[ $state == BLOCKED ]]; then publish 'AF1 REFUSED selftest'; continue; fi
+             if [[ $state != READY || -d $payload/consumed ]]; then publish 'AF1 REFUSED consumed'; continue; fi
+             if ! grep -Fxq 'AF1 CONFIG_END rc=0' "$payload/config-result" 2>/dev/null; then
+@@ -174,11 +183,18 @@
+             fi
+             if ! healthy; then publish 'AF1 REFUSED storage'; exit 1; fi
+             mkdir "$payload/consumed"
++            selection=--rear-af
++            filter=(/bin/bash "$payload/filter.sh")
++            if [[ $command == "SIGNAL $token" ]]; then
++                selection=--rear-signal
++                filter=(/usr/bin/python3 -I -B "$payload/signal_receipt.py" filter)
++                if (( virt )); then filter+=(--virtual); fi
++            fi
+             state=RUNNING
+             publish "AF1 RUNNING $token virtual=$virt"
+             set +e
+             : > "$payload/result"
+-            run_measurement --rear-af 2>&1 | /bin/bash "$payload/filter.sh" | {
++            run_measurement "$selection" 2>&1 | "${filter[@]}" | {
+                 connected=1
+                 while IFS= read -r line; do
+                     printf '%s\n' "$line" >> "$payload/result" || exit 1
+@@ -188,7 +204,9 @@
+             codes=("${PIPESTATUS[@]}")
+             set -e
+             rc=${codes[0]}; [[ ${codes[1]} == 0 && ${codes[2]} == 0 ]] || rc=1
+-            if (( virt )); then
++            if [[ $selection == --rear-signal ]]; then
++                : # The numeric filter verified the complete measurement and cleanup rows.
++            elif (( virt )); then
+                 echo 'AF_TEST virtual=1 camera_access=0' >> "$payload/result"; publish 'AF_TEST virtual=1 camera_access=0'
+             elif ! grep -q '^AF_CLEANUP mode=--rear-af rear=suspended ' "$payload/result"; then rc=1; fi
+             printf 'AF1 END rc=%s\n' "$rc" >> "$payload/result"
+--- a/measure-board.sh
++++ b/measure-board.sh
+@@ -28,10 +28,10 @@
+ fi
+ case $mode in
+     --self-test) isolated_devices=yes ;;
+-    --rear-af|--check-rear-config) isolated_devices=no ;;
++    --rear-af|--rear-signal|--check-rear-config) isolated_devices=no ;;
+     *) exit 2 ;;
+ esac
+-if [[ $mode == --rear-af ]]; then
++if [[ $mode == --rear-af || $mode == --rear-signal ]]; then
+     options=,$(findmnt -nro OPTIONS -T /),
+     if [[ $options == *,ro,* || $options == *,emergency_ro,* ]]; then
+         echo 'AF_ERROR reason=root_filesystem_read_only' >&2
+@@ -72,13 +72,13 @@
+         "$diag_sha" libcamera.so.0.7 \
+         90dfdbf117fd844ead381f9ffc4f365f35e185a204e0768d70c2c5394fff1773 "$library/libcamera.so.0.7.2" \
+         7de9f8cf7eca33dc7cf4d14da83ed60d1240530f73f45c57484dc263f6ca5b8c "$library/libcamera-base.so.0.7.2" | sha256sum --quiet -c -)
+-    library=$stage:$library
++    if [[ $mode != --rear-signal ]]; then library=$stage:$library; fi
+     levels='*:FATAL,V4L2:ERROR,Y700Af:DEBUG'
+ fi
+ unit=y700-optical-$(cat /proc/sys/kernel/random/uuid)
+ rc=0
+ inhibit=()
+-if [[ $mode == --rear-af ]]; then
++if [[ $mode == --rear-af || $mode == --rear-signal ]]; then
+     inhibit=(systemd-inhibit --what=sleep:idle --mode=block --who=y700-optical --why="Rear camera measurement in progress")
+ fi
+ "${inhibit[@]}" systemd-run --unit="$unit" --quiet --collect --wait --pipe --uid=y700 "${bind[@]}" \
+@@ -94,6 +94,6 @@
+ done
+ [[ $(cat "$sensor/power/runtime_status") == suspended ]]
+ after=$(cat "$sensor/power/runtime_active_time")
+-if [[ $mode != --rear-af ]]; then [[ $before == "$after" ]]; fi
++if [[ $mode != --rear-af && $mode != --rear-signal ]]; then [[ $before == "$after" ]]; fi
+ printf 'AF_CLEANUP mode=%s rear=suspended sensor_active_ms_delta=%s exit=%s\n' "$mode" "$((after - before))" "$rc"
+ exit "$rc"

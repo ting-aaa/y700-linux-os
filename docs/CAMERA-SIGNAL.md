@@ -35,6 +35,8 @@ uv run --offline --no-project python tests/camera-autofocus/stock-signal.py "$cn
 
 ## Physical diagnostic
 
+The [dev12.13 USB signal receiver](CAMERA-SIGNAL-USB.md) provides an explicit host command for the paired measurement and handles recovery of the numerical receipt after disconnection.
+
 The new probe mode `y700-af-measure --rear-signal` requests both streams. It allows 24 successful frames for warm-up, then measures precisely one RAW/RGB pair from the same request, checking both timestamps and sequence numbers. It reports exposure, gain and the four channel black levels from that request. The count, mean and fractions below and above each reporting threshold are the only scene statistics it emits. The process disables core dumps and releases both streams. It sends no focus or flash controls. Its 24-frame warm-up does not establish auto-exposure convergence. This mode has been compiled for ARM64. A physical paired receipt is outstanding.
 
 For a future diskless trial, place a stationary, evenly lit target with distinct light and dark detail across the centre. Record the lighting condition along with the numbers. For comparison with the 664-frame trial, check the actual per-frame gain and exposure. The usual AF trial remains available separately. [Optical trial environment](../tests/camera-autofocus/optical.md)

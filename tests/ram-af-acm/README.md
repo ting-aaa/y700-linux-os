@@ -1,5 +1,7 @@
 # Rear autofocus receipt over USB ACM
 
+The [dev12.13 matched-signal receiver](../../docs/CAMERA-SIGNAL-USB.md) also accepts a one-shot `signal` command for paired RAW/RGB measurements through the same protected session.
+
 This private RAM diagnostic attachment exposes one serial interface. It sends aggregate measurements from the pinned optical client. An ordinary user runs the client through the existing board runner with a private network, read-only system and hidden home directories. The attachment contains no login credentials.
 
 ## Compare the two focus scores on the same frames

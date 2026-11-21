@@ -5,6 +5,8 @@ import re
 import socket
 import time
 
+import signal_receipt
+
 
 DATA_ROW = re.compile(r"AF_(PREVIEW|SCAN|EXPOSURE|RESULT|ERROR|DIAG|CLEANUP|TEST|CONFIG|CONFIG_RESOURCE|CONFIG_ONLY|ALLOCATOR)"
                       r"( [a-z_]+=[A-Za-z0-9_.,/:+-]+)+")
@@ -79,13 +81,14 @@ def status(channel, virtual):
     raise TimeoutError("No verified health and self-test receipt")
 
 
-def result(channel, token, virtual, start, acknowledge=False):
+def result(channel, token, virtual, start, acknowledge=False, signal=False):
     if start:
-        channel.send("START " + token)
+        channel.send(("SIGNAL " if signal else "START ") + token)
     else:
         channel.send("RESULT " + token)
     running = not start
     digest = hashlib.sha256()
+    signal_rows = []
     deadline = time.monotonic() + 100
     while time.monotonic() < deadline:
         row = channel.line()
@@ -96,6 +99,11 @@ def result(channel, token, virtual, start, acknowledge=False):
         elif row.startswith(("AF1 READY ", "AF1 DONE ")):
             continue  # A previously sent STATUS may still have a response in flight.
         elif running and re.fullmatch(r"AF1 END rc=\d{1,3}", row):
+            rc = int(row.split("=")[1])
+            if signal:
+                valid = signal_receipt.complete(signal_rows, virtual) if rc == 0 else signal_rows == [signal_receipt.FAIL]
+                if not valid:
+                    raise RuntimeError("Incomplete matched-signal receipt")
             digest.update((row + "\n").encode("ascii"))
             print(row, flush=True)
             if acknowledge:
@@ -111,8 +119,12 @@ def result(channel, token, virtual, start, acknowledge=False):
                     break
                 else:
                     raise TimeoutError("Return confirmation missing; independent RAM timer remains armed")
-            return int(row.split("=")[1])
-        elif not (running and DATA_ROW.fullmatch(row)):
+            return rc
+        elif signal and running and (signal_receipt.valid_row(len(signal_rows), row, virtual)
+                                      or (not signal_rows and row == signal_receipt.FAIL)):
+            signal_rows.append(row)
+            digest.update((row + "\n").encode("ascii"))
+        elif signal or not (running and DATA_ROW.fullmatch(row)):
             raise RuntimeError("Unexpected diagnostic response")
         else:
             digest.update((row + "\n").encode("ascii"))
@@ -148,7 +160,7 @@ def check_config(channel, token, virtual=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["status", "check-config", "start", "result"])
+    parser.add_argument("action", choices=["status", "check-config", "start", "result", "signal", "signal-result"])
     transport = parser.add_mutually_exclusive_group(required=True)
     transport.add_argument("--port")
     transport.add_argument("--vm-socket")
@@ -161,13 +173,15 @@ if __name__ == "__main__":
             if state != "READY" or args.token != token:
                 raise SystemExit("Configuration check requires the matching READY token")
             raise SystemExit(check_config(link, token, bool(args.vm_socket)))
-        if args.action == "start":
+        if args.action in {"start", "signal"}:
             if state != "READY" or args.token != token:
                 raise SystemExit("Start requires a matching READY token from this boot")
-            raise SystemExit(result(link, token, bool(args.vm_socket), True, acknowledge=not args.vm_socket))
-        if args.action == "result":
+            raise SystemExit(result(link, token, bool(args.vm_socket), True, acknowledge=not args.vm_socket,
+                                    signal=args.action == "signal"))
+        if args.action in {"result", "signal-result"}:
             if state != "DONE" or args.token != token:
                 raise SystemExit("Retrieval requires a matching DONE token from this boot")
-            raise SystemExit(result(link, token, bool(args.vm_socket), False, acknowledge=not args.vm_socket))
+            raise SystemExit(result(link, token, bool(args.vm_socket), False, acknowledge=not args.vm_socket,
+                                    signal=args.action == "signal-result"))
     finally:
         link.close()
