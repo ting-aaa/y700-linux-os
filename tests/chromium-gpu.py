@@ -10,6 +10,7 @@ import platform
 from queue import Empty, Full, Queue
 import re
 import secrets
+import signal
 import subprocess
 import tempfile
 from threading import Thread
@@ -109,6 +110,8 @@ def run_browser(args):
         ]
         if args.headless:
             command.append("--headless")
+            if args.backend == "vulkan" and platform.system() == "Linux":
+                command.append("--enable-gpu")
         elif platform.system() == "Linux":
             command.append("--ozone-platform=x11")
         if args.software_control:
@@ -119,7 +122,8 @@ def run_browser(args):
 
         Thread(target=server.serve_forever, daemon=True).start()
         try:
-            browser = subprocess.Popen(command, stdout=subprocess.DEVNULL)
+            private_group = os.name == "posix"
+            browser = subprocess.Popen(command, stdout=subprocess.DEVNULL, start_new_session=private_group)
             try:
                 deadline = time.monotonic() + args.timeout
                 while time.monotonic() < deadline:
@@ -137,6 +141,12 @@ def run_browser(args):
                     except subprocess.TimeoutExpired:
                         browser.kill()
                         browser.wait()
+                if private_group:
+                    # Renderers and utility processes may still be flushing the temporary profile.
+                    try:
+                        os.killpg(browser.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
         finally:
             server.shutdown()
 
@@ -167,8 +177,10 @@ def self_test():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--browser", type=Path, default=Path("/usr/lib/chromium/chromium"),
-                        help="Path to the native browser executable")
+    launch = parser.add_mutually_exclusive_group()
+    launch.add_argument("--browser", type=Path, help="Path to the native browser executable")
+    launch.add_argument("--product-launcher", action="store_true",
+                        help="Measure the installed Debian Chromium launcher and its packaged defaults")
     parser.add_argument("--frames", type=int, default=120, help="Frames to verify, from 2 to 3600")
     parser.add_argument("--timeout", type=int, default=45, help="Maximum startup and workload seconds")
     parser.add_argument("--backend", choices=("default", "gl", "gles", "vulkan"), default="default")
@@ -183,13 +195,19 @@ def main():
         parser.error("Choose 2–3600 frames and a positive timeout")
     if args.software_control and args.backend != "default":
         parser.error("Software control cannot select an ANGLE backend")
+    if args.product_launcher and (args.backend != "default" or args.software_control):
+        parser.error("The product launcher must use its own GPU defaults")
+    if args.product_launcher:
+        args.browser = Path("/usr/bin/chromium")
+    elif args.browser is None:
+        args.browser = Path("/usr/lib/chromium/chromium")
     if platform.system() == "Linux":
         if os.geteuid() == 0:
             parser.error("Run as an unprivileged user so Chromium can retain its sandbox")
         if not args.headless and not os.environ.get("DISPLAY"):
             parser.error("A signed-in X11 session with DISPLAY is required")
-        if args.browser.resolve() == Path("/usr/bin/chromium"):
-            parser.error("Select the native binary directly; the Debian wrapper applies product GPU defaults")
+        if not args.product_launcher and args.browser.resolve() == Path("/usr/bin/chromium"):
+            parser.error("Use --product-launcher to measure the Debian wrapper")
     try:
         report = run_browser(args)
     except OSError as error:
@@ -198,7 +216,8 @@ def main():
     if args.software_control and result == "adreno-730-rendered":
         result = "software-control-unexpected-adreno"
     print(json.dumps({"result": result, "headless": args.headless, "kernel": platform.release(),
-                      "backend": args.backend, "softwareControl": args.software_control,
+                      "backend": args.backend, "productLauncher": args.product_launcher,
+                      "softwareControl": args.software_control,
                       "requestedFrames": args.frames, "report": report}, indent=2))
     return int(result != "adreno-730-rendered")
 

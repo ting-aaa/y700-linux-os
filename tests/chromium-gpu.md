@@ -18,3 +18,18 @@ Run the synthetic classifier decision tests on any PC with `uv`. For a browser-l
 ```sh
 uv run --no-project --python 3.13 python tests/chromium-gpu.py --self-test
 ```
+
+## dev12.11 without a desktop session
+
+The dev12.11 image installs Chromium `156.0.8078.47-1~deb13u1`. Its Debian launcher reads `/etc/chromium.d/99-y700-software-rendering`, which adds `--disable-gpu`. The board fixture measures the effective default first. A separate run calls the same installed Chromium ELF directly, requests headless ANGLE Vulkan and keeps Chromium's sandbox and GPU blocklist active. Chromium documents that the Vulkan path can work without X11 on some Linux configurations. Physical Xfce composition and browser video decoding require separate tests. [Upstream headless GPU guidance](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/gpu/using-gpu-hardware-in-headless-chrome.md)
+
+Place `chromium-gpu-board.sh`, `chromium-gpu.py`, and `chromium-gpu.html` together. Set `UV_BIN` to a trusted, executable ARM64 uv. The root supervisor creates private mount, PID and network namespaces, brings up only loopback, and supplies a new home and temporary directory. It runs Chromium as `y700` without display credentials. Each command creates a fresh browser profile and removes it on exit. The hardware run can be made from USB maintenance while the tablet remains at its greeter.
+
+```sh
+sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh product
+sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh vulkan
+```
+
+The product control requires the actual launcher flag, a sandboxed renderer, and a page reporting either software rendering or WebGL 2 unavailable. The Vulkan run additionally requires every sampled frame to match, a renderer string identifying Adreno 730 and Vulkan, and retired work on an MSM DRM client owned by this browser's GPU process. Both commands report renderer seccomp and sandbox-bypass flags. A software renderer, an unattributed GPU, or a timeout leaves the hardware check unverified.
+
+On 21 November 2026, the product control ran inside the ARM64 dev12.11 release in QEMU. Chromium's SwiftShader rendered all 60 frames and the page verified four pixels in each frame. The observer found the packaged disable-GPU flag, seccomp filtering with no-new-privileges in the renderer, and zero attributed MSM work. The local receipt is `out/dev12.11-chromium-gpu/pc-product.log`, SHA-256 `582245d2637108367abfeec4102a3cb94e75fdf25afd08916a04968d065a71f9`.
