@@ -43,7 +43,7 @@ rm -r --one-file-system -- "$stage"
 tag=DEV1213
 [[ $2 != dev12.15 ]] || tag=DEV1215
 echo "${tag}_CLEANUP boot_seat_lock_services_backlight_mounts_swap_network_cameras_same=$matched staging_removed=1 leaked_loop=0 leaked_mount_namespace=0"
-awk '/^MemAvailable:/ {print "DEV1213_POST memory_available_kib=" $2}' /proc/meminfo
+awk -v tag="$tag" '/^MemAvailable:/ {print tag "_POST memory_available_kib=" $2}' /proc/meminfo
 [[ $matched == yes ]]
 CLEAN
     fi
@@ -68,8 +68,10 @@ else
     cp "$repo/tests/software-updates/observe.py" "$local_stage/"
 fi
 for a in "$local_stage"/*.sh; do bash -n "$a"; done
-stage=$(bash "$ssh" bash -s <<'PRE'
+stage=$(bash "$ssh" bash -s -- "$edition" <<'PRE'
 set -euo pipefail
+tag=DEV1213
+[[ $1 != dev12.15 ]] || tag=DEV1215
 [[ $(uname -m) == aarch64 && $(findmnt -nro FSTYPE -T /run) == tmpfs && $(wc -l </proc/swaps) == 1 ]]
 tr '\0' '\n' </proc/device-tree/compatible | grep -Fxq lenovo,asphalt
 tr '\0' '\n' </proc/device-tree/compatible | grep -Fxq qcom,sm8475
@@ -97,9 +99,10 @@ for socket in /run/user/*/pipewire-0; do
     [[ -S $socket ]] || continue
     runtime=${socket%/*}; uid=$(stat -c %u "$runtime")
     setpriv --reuid="$uid" --regid="$(id -g "$uid")" --clear-groups env -i PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$runtime" pw-dump |
-    perl -MJSON::PP -0777 -ne 'my @n=grep { $_->{type} eq "PipeWire:Interface:Node" && (($_->{info}{props}{"media.class"} // "") =~ m{^Video/Source}) } @{decode_json($_)}; exit 1 if grep { $_->{info}{state} eq "running" } @n; print STDERR "DEV1213_CAMERA_PREFLIGHT suspended_lenses=3 active_video_sources=0\n"'
+    perl -MJSON::PP -0777 -ne 'my @n=grep { $_->{type} eq "PipeWire:Interface:Node" && (($_->{info}{props}{"media.class"} // "") =~ m{^Video/Source}) } @{decode_json($_)}; exit 1 if grep { $_->{info}{state} eq "running" } @n'
 done
-awk '/^MemAvailable:/ {print "DESKTOP_RAM_PRE memory_available_kib=" $2}' /proc/meminfo >&2
+echo "${tag}_CAMERA_PREFLIGHT suspended_lenses=3 active_video_sources=0" >&2
+awk -v tag="$tag" '/^MemAvailable:/ {print tag "_PRE memory_available_kib=" $2}' /proc/meminfo >&2
 umask 077
 mktemp -d /run/y700-1213-settings.XXXXXXXX
 PRE

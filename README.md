@@ -8,6 +8,8 @@
 
 ## 已确认的基线
 
+国行 dev12.15 现有 **4.22 MiB 增量安装包**，直接配合已有 dev12.13 完整包使用。新装桌面在「设置 → 软件更新」中刷新 Debian 软件源并选择更新，内核可加载数字 USB 耳麦驱动。平板从 RAM 校验了新版全部 1,248 个软件包，并在日用内核上运行了 200% Xfce。内置日用系统也已单独装好这两项功能。[dev12.15 安装](docs/DEV12.15-IMAGE.md) · [验收记录](docs/DEV12.15-VERIFICATION.md) · [软件更新](docs/SOFTWARE-UPDATES.md) · [USB 音频](docs/USB-AUDIO.md)
+
 国行 dev12.14 全新安装复用 dev12.13 基包，另加 490 KiB 的增量包。新版预装浏览器相机方向修复。从这两个包重建的镜像已在 ARM64 虚拟机完成触屏首次设密、登录 Xfce 和启动 Chromium。平板日用系统已单独装好同版相机组件。[全新安装说明](docs/DEV12.14-IMAGE.md) · [验收记录](docs/DEV12.14-VERIFICATION.md) · [日用系统更新](docs/BROWSER-CAMERA-UPDATE.md)
 
 国行 dev12.13 安装镜像预装统一快捷设置、随内屏转向的相机、触屏蓝牙管理器和中文输入修复。机主在日用平板上确认后置主摄的实时预览方向已经正确。整个新根也已在同一台平板的 RAM 中校验并运行 200% Xfce 桌面。[镜像解包](docs/DEV12.13-IMAGE.md) · [镜像、试用卡与验收结果](docs/DEV12.13-VERIFICATION.md) · [相机实测](docs/CAMERA-ORIENTATION.md)
