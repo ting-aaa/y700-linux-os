@@ -1,6 +1,6 @@
 # 国行 Y700 的 UFS 时钟与电源协调候选
 
-2026-11-22，在 dev12.13 默认 60/120 Hz 内核上移植了社区的 UFS / ICE 时钟与 CX、MX 电源域变更。原发行镜像保持原版本。候选在电脑完成两次独立 ARM64 链接、PRC 设备树校验和 QEMU 无盘内核启动。平板上的 UFS 链路、耗电、读写和睡眠唤醒仍待验证。
+2026-11-22，在 dev12.13 默认 60/120 Hz 内核上移植了社区的 UFS / ICE 时钟与 CX、MX 电源域变更。原发行镜像保持原版本。候选在电脑完成两次独立 ARM64 链接、PRC 设备树校验和 QEMU 无盘内核启动。随后两版内核在同一台国行平板完成了本文末尾的只读对照：进入运行时挂起与 Hibern8 后，均能唤醒并读回相同内容。耗电、带写入的长期稳定性和整机深睡仍待验证。
 
 ## 先前故障与本次范围
 
@@ -48,7 +48,7 @@ sudo env "PATH=$new_tools/bin:$PATH" "UV_BIN=$(command -v uv)" \
 bash tests/ufs-scaling/boot-smoke.sh "$new_output" "$busybox_arm64" "$new_log"
 ```
 
-下一次有授权的硬件比较应记录普通启动与候选运行时 notes、设备树、UFS devfreq、当前 AXI/UniPro/ICE 频率、RPMh 可观察的投票、运行时电源状态和 UFS 错误计数。通过已知只读数据的有界读取、空闲及再次读取，比较首次恢复延迟，并记录 `ufshcd_clk_scaling` 和 `ufshcd_uic_command` 可用事件。应分别记录主机运行时省电、链路 Hibern8 和整机深睡，只有完整观察到的转换才算对应资格。现有完全无盘诊断 DT 已禁用 UFS，无法测到这条链路。试验内核和板树应从独立入口共同加载，并保留正式启动项和现场恢复条件。
+实机比较分别核对运行内核 notes、板树、UFS devfreq、AXI/UniPro/ICE 频率、运行时电源状态和 UFS 错误计数。日用内核另有跟踪事件和电源域摘要。两次 RAM 观测均间隔 12 秒再读；读取后的系统恢复与整机深睡分开验证。
 
 ## 从独立 RAM 环境观测
 
@@ -94,3 +94,18 @@ uv run --offline tests/ufs-scaling/stage.py check "$new_cache" candidate "$initr
 主机在获准的单轮试启动前先启动 `stage.py boot "$new_cache" stock "$initrd_sha" --linux-partuuid "$private_linux_partuuid"` 等候串口，再从空闲日用系统正常重启。候选使用 `candidate`。U-Boot 只从该分区的固定路径读入三件工件，核对各自的长度、RAM 地址和 CRC、板型、UFS 启用与 microSD 禁用状态，最后发出一次启动请求。原有无盘相机工具继续要求两个存储控制器均已禁用。
 
 用真实 ARM64 QEMU U-Boot 和含校验和及 orphan file 特性的 ext4 测试盘，两套输入都通过。错误分区 UUID 和错误文件 CRC 均被拒绝，可写的合成整盘在固件读取前后 SHA-256 相同。首个平板对照试启动同样通过了 U-Boot 的三项 RAM 校验，USB 观测口未出现，平板自动返回日用 dev12.11。复机后两层 ext4 直接读回通过，临时文件清理完成。随后在独立、未绑定 USB 控制器的 configfs 测试目录内复现了旧程序的相对链接失败；使用绝对目标路径创建 ACM 链接成功。[U-Boot 对照测试](../tests/ufs-scaling/stage-qemu.py) · [固件加载入口](../tests/ufs-scaling/stage.py)
+
+## 实机对照结果
+
+两次独立的 RAM 启动使用相同的 V2 观测程序、相同分区和相同的两段只读操作。两棵树均启用 UFS、禁用 microSD，运行内核的 notes 分别对应原版和候选。同一次启动内读两次相同的 64 KiB，间隔 12 秒。两次内核启动均未设置日用系统的 75 MHz 上限，devfreq 可用范围实读为 75–850 MHz。
+
+| 单次试验 | 工作时 AXI / UniPro / ICE | 空闲时 AXI / UniPro / ICE | 首次直接读 | 空闲后直接读 |
+| --- | --- | --- | ---: | ---: |
+| 原版 dev12.13 | 约 850 / 850 / 300 MHz | 75 / 75 / 300 MHz | 545 µs | 10,342 µs |
+| 社区候选 | 约 850 / 850 / 850 MHz | 75 / 75 / 75 MHz | 496 µs | 16,164 µs |
+
+这是内核时钟框架在板上的读数；高档实际报告 849,999,902 Hz。等待后的采样中，两版主机都处于 runtime suspended、链路 Hibern8；第二次读取后都回到 active。两个样本均匹配封存引导文件的前缀 SHA-256。每轮观测期间，目标父块设备的内核写入计数无变化，十项 UFS 错误合计为零，逻辑单元复位维持为一，主机复位与命令中止均为零。一个读延迟样本不足以比较吞吐或判定性能变化。
+
+此结果确认候选的 ICE 变频路径在板上生效。此前 Wi-Fi、SMMU 和 UFS 在混合负载下先后报错的原因仍未确定。此次采样没有测量功耗或验证整机深睡。日用系统另一次独立采样中，Linux 通用电源域 `cx` 报告 on/256、`mx` 报告 off-0/0；这是软件投票汇总，实际物理电压仍需测量。两轮均正常返回原 dev12.11 内核，1,248 个包、四项服务及两层 ext4 的写入同步和直接读回均通过。主机随后核对并清理了数据分区的五个暂存文件。
+
+原版及候选收据的 SHA-256 分别为 `b9c7f3e1d0cb25e5000c9739f5514c4102fced6eec3a169d268d21636fa5d6df` 和 `8567156cbc635c19c3fab14a1fea316ba274a7a73e79c26d1e70647c59afea3c`。[原版数值收据](../tests/ufs-scaling/physical/stock.txt) · [候选数值收据](../tests/ufs-scaling/physical/candidate.txt)
