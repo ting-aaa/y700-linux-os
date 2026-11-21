@@ -58,3 +58,26 @@ sudo bash arm-installed-trial.sh --recovery promote "$run" "$entry_sha"
 For rollback, run `sudo bash arm-installed-trial.sh --recovery restore "$run" "$entry_sha"`. This restores the exact saved loader configuration. Each recovery run has a separate `recovery-control-RUN_ID` directory on the outer ext4.
 
 Run `bash tests/installed-trial/recovery-arm.sh RELEASE_ENTRY RECOVERY_ENTRY GENERIC_ESP NEW_WORK` as root on a Linux PC. Use a new work directory under `/var/tmp/y700-recovery-menu.*`. The test installs the checked files on a new FAT, exercises tampered payloads and wrong boot identities, and preserves the armed BLS entries for the optional firmware test. Run `bash tests/installed-trial/recovery-firmware.sh NEW_WORK VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD` to exercise two boot-manager selections. The firmware fixture uses a virtual-machine DTB, the matching kernel module and a small observer initramfs to read the actual EFI selected-entry variable and to reset after the first selection.
+
+## Single-boot RTC1 probe
+
+The RTC1 probe boots from the installed dev12.10 recovery entry and reuses its exact kernel and initrd. The two-file supplement adds a board DTB with the PMK8350 RTC enabled and numbered `rtc1`, and a BLS template. To rebuild the local archive on a Linux PC, use the verified recovery entry, the numbered board DTB and a fresh output directory.
+
+```sh
+bash scripts/build-rtc1-entry.sh "$RECOVERY_ENTRY" "$RTC1_DTB" "$work/entry"
+(cd "$work" && tar --sort=name --mtime=@1795150416 --owner=0 --group=0 --numeric-owner --mode=0700 -cf - entry | gzip -n >rtc1-entry.tar.gz)
+```
+
+On the running permanent recovery system, use the privately mounted outer ESP for `add` and `remove`. The installer keeps the uncounted template in `EFI/y700-rtc1-12-10/source.conf`, outside the boot menu. The controller makes only a counted probe entry and a recovery fallback visible. Confirmation checks the EFI selection, running DT alias, boot identity, root, active services and deadline. The four-minute timer stays active after confirmation. On the fallback, restore the saved default and remove the supplement.
+
+```sh
+bash scripts/manage-file-trial-entry.sh --dev12.10-rtc1 add "$work/entry" "$OUTER_ESP"
+bash scripts/arm-installed-trial.sh --rtc1 arm "$RUN_ID"
+# After booting the counted probe
+bash scripts/arm-installed-trial.sh --rtc1 confirm "$RUN_ID"
+# After returning to the recovery system
+bash scripts/arm-installed-trial.sh --rtc1 restore "$RUN_ID"
+bash scripts/manage-file-trial-entry.sh --dev12.10-rtc1 remove "$work/entry" "$OUTER_ESP"
+```
+
+The 23,671-byte archive has SHA-256 `74bd49497c80637efb43ae8b895d611fb76d2280ab73ef202c80119d8e74553c`. The FAT transaction fixture is `tests/installed-trial/rtc1-arm.sh RECOVERY_MENU_QA_DIR RTC1_ENTRY NEW_WORK`. Its armed menu can be passed to `recovery-firmware.sh --rtc1` with the same arguments as the recovery firmware test. On ARM64 QEMU the first EFI selection consumed the counter and provided a virtual PL031 RTC alias. The second selected the recovery fallback with the original virtual tree. Receipts are in `out/dev12.10-rtc1-trial/`. PMIC alarm delivery is measured separately on the tablet.

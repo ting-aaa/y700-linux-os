@@ -10,13 +10,26 @@ baseline_entry=debian.conf
 baseline_sub=debian
 source_sub=y700-file-12-10
 recovery=0
+rtc_probe=0
+trial_role=
 recovery_sha=21b05d85897a5047834766a5ae1629203d6fad6fd43d0aa614c110b1f3bfa834
 recovery_mode() {
     recovery=1
+    trial_role=recovery-
     baseline_entry=y700-file-12-10.conf
     baseline_sub=y700-file-12-10
     source_sub=y700-recovery-12-10
     entry=$source_sub.conf
+}
+rtc1_mode() {
+    recovery_mode
+    rtc_probe=1
+    trial_role=rtc1-
+    baseline_sub=y700-recovery-12-10
+    baseline_entry=$baseline_sub.conf
+    source_sub=y700-rtc1-12-10
+    entry=$source_sub.conf
+    recovery_sha=58587dee5b4e72b98b2cafdd1be382a7f73f6db1245697d93199e729ff6185f7
 }
 release_lock=39cd516bc47679ba3c7980dc3ed43a43c1bac80e40fba690c85d33d9794fd5eb
 timer=y700-installed-trial-deadline.timer
@@ -131,7 +144,7 @@ locate_boot() {
     [[ $(realpath -e "$store") == "$store" && $(stat -c '%u:%g:%a' "$store") == 0:0:700 ]] ||
         die 'unsafe control directory'
     state=$store/control-$id
-    if (( recovery )); then state=$store/recovery-control-$id; fi
+    if (( recovery )); then state=$store/${trial_role}control-$id; fi
 }
 check_efi_variables() {
     local vars=/sys/firmware/efi/efivars
@@ -146,7 +159,12 @@ selected_entry() {
 current_cmdline() { cat /proc/cmdline; }
 check_recovery_origin() {
     [[ $(selected_entry) == "$baseline_entry" ]] || die 'booted EFI entry differs from installed fallback'
-    if grep -Eq '(^| )(y700[.]installed_trial|y700[.]recovery)(=| |$)' <<<"$(current_cmdline)"; then
+    local args
+    args=$(current_cmdline)
+    if (( rtc_probe )); then
+        [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
+    elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
+    if grep -Eq '(^| )(y700[.]installed_trial|y700[.]rtc_probe)(=| |$)' <<<"$args"; then
         die 'already running a trial or recovery'
     fi
 }
@@ -176,19 +194,26 @@ check_recovery_runtime() {
 }
 recovery_payloads() {
     local name expected result
-    for name in "$baseline_sub" "$source_sub"; do
-        if [[ $name == "$baseline_sub" ]]; then expected=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
+    for name in y700-file-12-10 y700-recovery-12-10; do
+        if [[ $name == y700-file-12-10 ]]; then expected=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
         else expected=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b; fi
         result=$(cd "$esp" && sha256sum "EFI/$name/"{kernel.efi,board.dtb,initrd} "loader/entries/$name.conf" | sha256sum | cut -c1-64)
         [[ $result == "$expected" ]] || die 'deployed entry or payload differs from the sealed manifest'
     done
+    if (( rtc_probe )); then
+        [[ ! -e $entries/$entry &&
+           $(sha "$esp/EFI/$source_sub/board.dtb") == 501e44f89c639165aa753ecbb336d14ac38846abdfc57cc343806a3248844e51 &&
+           $(sha "$source_conf") == "$recovery_sha" ]] || die 'unexpected RTC1 staging'
+    fi
 }
 payloads() {
-    local conf=$1 sub=$2 key value
+    local conf=$1 sub=$2 key value expected_dir
     for key in linux initrd devicetree; do
         value=$(awk -v k="$key" '$1==k {if(NF!=2)exit 1; print $2; n++} END{if(n!=1)exit 1}' "$conf") ||
             die 'invalid BLS payload declaration'
-        [[ $value =~ ^/EFI/$sub/[a-zA-Z0-9_.-]+$ && ${value##*/} != . && ${value##*/} != .. ]] ||
+        expected_dir=$sub
+        if [[ $sub == y700-rtc1-12-10 && $key != devicetree ]]; then expected_dir=y700-recovery-12-10; fi
+        [[ $value =~ ^/EFI/$expected_dir/[a-zA-Z0-9_.-]+$ && ${value##*/} != . && ${value##*/} != .. ]] ||
             die 'unexpected BLS payload path'
         regular "$esp$value"
         (cd "$esp" && sha256sum -- "${value#/}")
@@ -223,7 +248,7 @@ initialize() {
     new=$(mktemp -d "$store/.installed-control.XXXXXXXX")
     cp "$conf" "$new/original.conf"
     cp "$entries/$baseline_entry" "$new/baseline.conf"
-    cp "$entries/$entry" "$new/source.conf"
+    cp "$source_conf" "$new/source.conf"
     [[ $(sha "$new/source.conf") == "$entry_sha" ]] || die 'deployed candidate entry digest differs'
     grep -Eq '^options .*y700\.release=dev12\.10( |$)' "$new/source.conf" &&
         grep -Eq '^options .*y700\.media=file( |$)' "$new/source.conf" || die 'candidate release or media option missing'
@@ -251,11 +276,16 @@ initialize() {
 menu() {
     local action=$1 file next previous
     entries=$esp/loader/entries; conf=$esp/loader/loader.conf; prefix=y700-installed-$id
-    if (( recovery )); then prefix=y700-installed-recovery-$id; recovery_payloads; fi
+    source_conf=$entries/$entry
+    if (( rtc_probe )); then
+        [[ $action != promote ]] || die 'RTC probe is single-boot only'
+        source_conf=$esp/EFI/$source_sub/source.conf
+    fi
+    if (( recovery )); then prefix=y700-installed-${trial_role}$id; recovery_payloads; fi
     local pending=$entries/$prefix-trial+1.conf used=$entries/$prefix-trial+0-1.conf fallback=$entries/$prefix-base.conf
     if [[ $action == arm && ! -e $state ]]; then initialize; fi
     check_state
-    match "$state/baseline.conf" "$entries/$baseline_entry"; match "$state/source.conf" "$entries/$entry"
+    match "$state/baseline.conf" "$entries/$baseline_entry"; match "$state/source.conf" "$source_conf"
     (cd "$esp" && sha256sum --quiet --strict -c "$state/payload.sha256") || die 'installed firmware payload changed'
     for file in "$entries"/y700-installed-*.conf; do
         [[ -e $file ]] || continue
@@ -291,7 +321,7 @@ menu() {
         fi
         if ! cmp -s "$next" "$conf"; then
             previous=$state/armed.conf
-            if [[ $action == restore ]] && cmp -s "$state/promoted.conf" "$conf"; then previous=$state/promoted.conf; fi
+            if [[ $action == restore && $rtc_probe == 0 ]] && cmp -s "$state/promoted.conf" "$conf"; then previous=$state/promoted.conf; fi
             match "$previous" "$conf"
             if [[ $action == promote ]]; then touch "$state/promoting"; sync -f "$state"; fi
             if [[ $action == promote ]]; then promotable_boot; fi
@@ -319,8 +349,18 @@ current_trial() {
     if (( recovery )); then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700\.installed_trial=') == "y700.installed_trial=$id" &&
            $(tr ' ' '\n' <<<"$args" | grep '^y700\.recovery=') == y700.recovery=journal ]] &&
-            [[ $(selected_entry) == "y700-installed-recovery-$id-trial.conf" ]] || die 'unexpected recovery selection'
+            [[ $(selected_entry) == "y700-installed-${trial_role}$id-trial.conf" ]] || die 'unexpected recovery selection'
     fi
+    if (( rtc_probe )); then
+        [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]rtc_probe=') == y700.rtc_probe=rtc1 ]] || die 'wrong RTC probe option'
+        verify_rtc1_tree
+    fi
+}
+verify_rtc1_tree() {
+    local node=/soc@0/spmi@c400000/pmic@0/rtc@6100
+    [[ $(tr -d '\0' </proc/device-tree/aliases/rtc1) == "$node" &&
+       $(tr -d '\0' <"/proc/device-tree$node/status") == okay &&
+       $(tr -d '\0' <"/proc/device-tree$node/compatible") == qcom,pmk8350-rtc ]] || die 'unexpected running RTC device tree'
 }
 current_boot() { cat /proc/sys/kernel/random/boot_id; }
 no_reboot_pending() {
@@ -358,13 +398,23 @@ confirm_boot() {
         printf '%s\n' "$boot" > "$state/confirmation.new"; mv -T "$state/confirmation.new" "$state/confirmed"
         sync -f "$state"
     fi
+    if (( rtc_probe )); then
+        systemctl is-active --quiet "$timer" || die 'RTC return deadline stopped unexpectedly'
+        printf 'RTC1_TRIAL_CONFIRMED boot=%s deadline=active\n' "$boot"
+        return
+    fi
     systemctl stop "$timer"; promotable_boot
     printf 'INSTALLED_TRIAL_CONFIRMED boot=%s deadline=stopped\n' "$boot"; return
 }
 main() {
     [[ $EUID == 0 ]] || die 'root required'
     local -a original_args=("$@")
-    if [[ ${1:-} == --recovery ]]; then shift; recovery_mode; fi
+    if [[ ${1:-} == --recovery ]]; then shift; recovery_mode
+    elif [[ ${1:-} == --rtc1 ]]; then
+        shift; rtc1_mode
+        [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die 'usage: --rtc1 arm|confirm|restore RUN_ID'
+        set -- "$@" "$recovery_sha"
+    fi
     if [[ $# == 3 && ( $1 =~ ^(promote|restore)$ || $recovery == 1 ) && $(findmnt -nro SOURCE -M /) =~ ^/dev/loop[0-9]+$ ]] &&
        [[ $(readlink /proc/self/ns/mnt) == "$(readlink /proc/1/ns/mnt)" || $(findmnt -nro PROPAGATION -T /) != private ]]; then
         exec unshare --mount --propagation private bash "$(realpath -e "$0")" "${original_args[@]}"

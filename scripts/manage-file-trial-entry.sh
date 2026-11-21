@@ -9,12 +9,16 @@ if [[ ${1:-} == --dev12.10 ]]; then
     shift
     payload=y700-file-12-10
     manifest=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
+elif [[ ${1:-} == --dev12.10-rtc1 ]]; then
+    shift
+    payload=y700-rtc1-12-10
+    manifest=8fe4ebbca9fc20b6cd13453eb014fcf0aa48d5b6af97c4b40c0ad3d96bc0809a
 elif [[ ${1:-} == --dev12.10-recovery ]]; then
     shift
     payload=y700-recovery-12-10
     manifest=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b
 fi
-[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
+[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
 mode=$1
 source_dir=$(realpath -e -- "$2")
 esp=$(realpath -e -- "$3")
@@ -32,7 +36,20 @@ flock -n "$guard" || die 'another menu operation is active'
 [[ -d EFI && -d loader/entries && -f loader/entries/debian.conf ]] || die 'internal Debian entry is missing'
 default=$(awk 'tolower($1)=="default" {print $2}' loader/loader.conf)
 preserved=(loader/loader.conf loader/entries/debian.conf EFI/BOOT/BOOTAA64.EFI EFI/debian/{kernel.efi,board.dtb,initrd})
-if [[ $payload == y700-recovery-12-10 && $default == y700-file-12-10.conf ]]; then
+if [[ $payload == y700-rtc1-12-10 ]]; then
+    [[ $default == y700-recovery-12-10.conf ]] || die 'expected permanent recovery default'
+    ! compgen -G 'loader/entries/y700-installed-*.conf' >/dev/null || die 'a counted trial is active'
+    [[ ! -e loader/entries/y700-rtc1-12-10.conf ]] || die 'unexpected uncounted RTC entry'
+    for prior in y700-file-12-10 y700-recovery-12-10; do
+        existing=("EFI/$prior/"{kernel.efi,board.dtb,initrd} "loader/entries/$prior.conf")
+        case $prior in
+            y700-file-12-10) expected=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d ;;
+            y700-recovery-12-10) expected=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b ;;
+        esac
+        [[ $(sha256sum "${existing[@]}" | sha256sum | cut -d' ' -f1) == "$expected" ]] || die 'retained installed payload differs'
+        preserved+=("${existing[@]}")
+    done
+elif [[ $payload == y700-recovery-12-10 && $default == y700-file-12-10.conf ]]; then
     existing=(EFI/y700-file-12-10/{kernel.efi,board.dtb,initrd} loader/entries/y700-file-12-10.conf)
     existing_manifest=$(sha256sum "${existing[@]}" | sha256sum | cut -d' ' -f1)
     [[ $existing_manifest == dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d ]] ||
@@ -44,9 +61,16 @@ fi
 original=$(sha256sum "${preserved[@]}")
 dir=EFI/$payload
 menu=loader/entries/$payload.conf
+source_menu=$menu
 payloads=(kernel.efi board.dtb initrd)
+if [[ $payload == y700-rtc1-12-10 ]]; then
+    menu=$dir/source.conf
+    payloads=(board.dtb)
+fi
 check_dir() {
-    [[ -d $dir && $(find "$dir" -mindepth 1 -maxdepth 1 -printf . | wc -c) == 3 ]] || die 'unexpected contents at trial payload path'
+    local count=${#payloads[@]}
+    if [[ $payload == y700-rtc1-12-10 && -e $menu ]]; then ((count+=1)); fi
+    [[ -d $dir && $(find "$dir" -mindepth 1 -maxdepth 1 -printf . | wc -c) == "$count" ]] || die 'unexpected contents at trial payload path'
     for file in "${payloads[@]}"; do cmp -- "$source_dir/$dir/$file" "$dir/$file"; done
 }
 tmp_dir=
@@ -63,7 +87,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ -e $menu ]]; then
-    cmp -- "$menu" "$source_dir/$menu"
+    cmp -- "$menu" "$source_dir/$source_menu"
     check_dir
 fi
 if [[ -e $dir ]]; then check_dir; fi
@@ -81,13 +105,14 @@ if [[ $mode == add ]]; then
     check_dir
     if [[ ! -e $menu ]]; then
         tmp_menu=$(mktemp loader/entries/.y700-file.XXXXXXXX)
-        cat "$source_dir/$menu" > "$tmp_menu"
-        cmp -- "$tmp_menu" "$source_dir/$menu"
+        cat "$source_dir/$source_menu" > "$tmp_menu"
+        cmp -- "$tmp_menu" "$source_dir/$source_menu"
         sync -f "$tmp_menu"
         mv -nT -- "$tmp_menu" "$menu"
         [[ ! -e $tmp_menu ]] || die 'menu path appeared concurrently'
     fi
-    sha256sum --strict -c "$source_dir/SHA256SUMS"
+    if [[ $menu == "$source_menu" ]]; then sha256sum --strict -c "$source_dir/SHA256SUMS"
+    else cmp "$menu" "$source_dir/$source_menu"; check_dir; fi
 else
     if [[ -e $menu ]]; then rm -- "$menu"; sync -f .; fi
     if [[ -d $dir ]]; then
