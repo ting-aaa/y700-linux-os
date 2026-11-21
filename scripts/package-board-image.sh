@@ -32,6 +32,10 @@ case $version in
         package_count=1240
         package_sha=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
         ;;
+    dev12.10)
+        package_count=1240
+        package_sha=ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3
+        ;;
     *) echo "Unsupported board image version: $version" >&2; exit 2 ;;
 esac
 epoch=${SOURCE_DATE_EPOCH:-1795132800}
@@ -56,17 +60,31 @@ base=$bundle/base
 mkdir -- "$bundle" "$base" "$work/db" "$work/result"
 cd "$work/db"
 debugfs -R 'dump /var/lib/dpkg/status status' "$root" >/dev/null 2>&1
-if [[ $version == dev12.8 || $version == dev12.9 ]]; then
+if [[ $version == dev12.8 || $version == dev12.9 || $version == dev12.10 ]]; then
     debugfs -R 'dump /var/lib/y700/build/platform.lock.json platform.lock.json' "$root" >/dev/null 2>&1
     cmp "$repo/config/platform.lock.json" platform.lock.json
 fi
-if [[ $version == dev12.9 ]]; then
+if [[ $version == dev12.9 || $version == dev12.10 ]]; then
     [[ $4 == 495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6 ]]
-    debugfs -R 'dump /var/lib/y700/build/video-player.lock.json media.lock' "$root" >/dev/null 2>&1
+    original_lock=video-player.lock.json
+    if [[ $version == dev12.10 ]]; then original_lock=video-player-dev12.9.lock.json; fi
+    debugfs -R "dump /var/lib/y700/build/$original_lock media.lock" "$root" >/dev/null 2>&1
     debugfs -R 'dump /var/lib/y700/build/video-player-debian.lock.json media-packages.lock' "$root" >/dev/null 2>&1
     cmp "$repo/config/video-player.lock.json" media.lock
     cmp "$repo/tests/video-player/debian.lock.json" media-packages.lock
-    jq -er '.files | to_entries[] | [.value, .key] | @tsv' media.lock > media-files.tsv
+    media_locks=(media.lock)
+    if [[ $version == dev12.10 ]]; then
+        debugfs -R 'dump /var/lib/y700/build/video-player-update.lock.json media-update.lock' "$root" >/dev/null 2>&1
+        cmp "$repo/config/video-player-update.lock.json" media-update.lock
+        debugfs -R 'dump /var/lib/y700/build/video-player.lock.json media-active.lock' "$root" >/dev/null 2>&1
+        cmp media-update.lock media-active.lock
+        media_locks+=(media-update.lock)
+        debugfs -R 'dump /var/lib/y700/build/packages.tsv recorded-packages.tsv' "$root" >/dev/null 2>&1
+        printf '%s  recorded-packages.tsv\n' 5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce | sha256sum --strict -c -
+    fi
+    # The update replaces the player's private plugin while the Debian plugin,
+    # desktop entry, launcher and license files retain their original locks.
+    jq -ser 'map(.files) | add | to_entries[] | [.value, .key] | @tsv' "${media_locks[@]}" > media-files.tsv
     while IFS=$'\t' read -r digest path; do
         actual=$(debugfs -R "cat /$path" "$root" 2>/dev/null | sha256sum)
         [[ ${actual%% *} == "$digest" ]] || { echo "Image file mismatch: /$path" >&2; exit 1; }
@@ -76,6 +94,11 @@ dpkg-query --admindir=. -W '-f=${db:Status-Status}\t${Package}\t${Version}\t${Ar
     sed -n 's/^installed\t//p' | sort > packages.tsv
 [[ $(wc -l < packages.tsv) == "$package_count" ]]
 printf '%s  packages.tsv\n' "$package_sha" | sha256sum --strict -c -
+if [[ $version == dev12.10 ]]; then
+    # binary:Package in the guest ledger qualifies Multi-Arch:same packages.
+    # The independent status query uses Package and an explicit architecture.
+    sed -E 's/^([^[:space:]:]+):[^[:space:]]+\t/\1\t/' recorded-packages.tsv | sort | cmp packages.tsv -
+fi
 [[ $(debugfs -R 'cat /etc/y700/image-id' "$root" 2>/dev/null) == y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ]]
 [[ $(blkid -p -o value -s UUID "$root") == 171a4adb-916b-4763-9e6f-722b4a99988f ]]
 debugfs -R 'dump /etc/machine-id machine-id' "$root" >/dev/null 2>&1
@@ -118,7 +141,7 @@ cd "$work/result"
 tar --sort=name --format=gnu --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
     -cf "$name.tar" -C "$work" "$name"
 sha256sum "$name.tar" > SHA256SUMS
-if [[ $version == dev12.9 ]]; then
+if [[ $version == dev12.9 || $version == dev12.10 ]]; then
     install -m644 "$work/db/packages.tsv" packages.tsv
     sha256sum packages.tsv >> SHA256SUMS
 fi

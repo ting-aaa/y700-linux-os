@@ -14,12 +14,21 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gio, Gtk
 
 
-def main(clip):
+def main(clip, edition):
     assert os.getuid() != 0 and os.environ["XDG_CURRENT_DESKTOP"] == "XFCE"
     assert not any(key in os.environ for key in ("GST_REGISTRY_1_0", "GST_PLUGIN_PATH_1_0"))
-    lock = json.loads(Path("/var/lib/y700/build/video-player.lock.json").read_text())
+    record = Path("/var/lib/y700/build")
+    original = "video-player-dev12.9.lock.json" if edition == "dev12.10" else "video-player.lock.json"
+    lock = json.loads((record / original).read_text())
     assert lock["edition"] == "dev12.9"
-    for name, expected in lock["files"].items():
+    files = lock["files"].copy()
+    if edition == "dev12.10":
+        update = json.loads((record / "video-player-update.lock.json").read_text())
+        assert update["edition"] == edition
+        files.update(update["files"])
+    else:
+        assert edition == "dev12.9"
+    for name, expected in files.items():
         assert hashlib.sha256((Path("/") / name).read_bytes()).hexdigest() == expected, name
     for mime in ("video/mp4", "video/webm"):
         app = Gio.AppInfo.get_default_for_type(mime, False)
@@ -48,6 +57,11 @@ def main(clip):
     assert len(pids) == 1, f"Expected one Parole on the enrolled seat, found {pids}"
     pid = pids[0]
     process = Path("/proc") / str(pid)
+    if edition == "dev12.10":
+        executable = process / "exe"
+        assert executable.resolve() == Path("/usr/bin/parole")
+        assert hashlib.sha256(executable.read_bytes()).hexdigest() == files["usr/bin/parole"]
+        print(f"COMBINED_MEDIA_PROCESS installed_elf=verified pid={pid}", flush=True)
     args = (process / "cmdline").read_bytes().split(b"\0")
     assert os.fsencode(clip) in args or clip.as_uri().encode() in args
     assert observed == {"01", "12", "20"}, f"Visible colour pairs {sorted(observed)}"
@@ -75,4 +89,4 @@ def main(clip):
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]).resolve(strict=True))
+    main(Path(sys.argv[1]).resolve(strict=True), sys.argv[2] if len(sys.argv) > 2 else "dev12.9")

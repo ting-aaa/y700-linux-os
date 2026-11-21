@@ -20,6 +20,8 @@ blueman=${BLUEMAN_UPDATE:-0}
 media=${MEDIA_DESKTOP:-0}
 [[ $media == 0 || ( $media == 1 && $blueman == 1 ) ]]
 if (( media )); then
+    media_edition=${MEDIA_EDITION:-dev12.9}
+    [[ $media_edition == dev12.9 || $media_edition == dev12.10 ]]
     clip=$(realpath -e "${MEDIA_CLIP:?Provide the 24-second synthetic H.264 colour-pair MP4}")
     media_uv=$(realpath -e "${UV_ARM64:?Provide the ARM64 uv binary for the media witness}")
 fi
@@ -97,6 +99,9 @@ fi
 if (( media )); then
     sha256sum -- "$clip" > "$out/clip.sha256"
     mcopy -i test-esp.fat "$here/../../config/video-player.lock.json" ::/media-tested.lock
+    if [[ $media_edition == dev12.10 ]]; then
+        mcopy -i test-esp.fat "$here/../../config/video-player-update.lock.json" ::/media-update-tested.lock
+    fi
     mcopy -i test-esp.fat "$clip" ::/media-clip.mp4
     mcopy -i test-esp.fat "$here/media-session.py" ::/media-session.py
     mcopy -i test-esp.fat "$here/../video-player/check-x11.py" ::/media-pixels.py
@@ -198,6 +203,10 @@ if (( media )); then
     for report in "$out"/*/report.log; do
         grep -Fq 'COMBINED_MEDIA_GIO ordinary=1 mp4=parole webm=parole desktop=local' "$report"
         grep -Fq 'COMBINED_MEDIA_PLAYBACK h264=visible pairs=01,12,20 private_registry=1' "$report"
+        if [[ $media_edition == dev12.10 ]]; then
+            grep -Fxq 'COMBINED_MEDIA_UPDATE edition=dev12.10 parole=4.18.2-1+y7002 package_files=verified' "$report"
+            grep -Eq '^COMBINED_MEDIA_PROCESS installed_elf=verified pid=[0-9]+$' "$report"
+        fi
     done
 fi
 sha256sum --strict -c "$manifest" | tee "$out/after.log"

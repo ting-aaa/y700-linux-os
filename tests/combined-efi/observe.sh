@@ -72,9 +72,19 @@ if [[ $1 == setup ]]; then
     fi
     if [[ -f /boot/media-tested.lock ]]; then
         [[ $platform == '0.1.0~dev12.8' ]]
-        cmp /boot/media-tested.lock /var/lib/y700/build/video-player.lock.json
         count=1240
         expected=89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d
+        if [[ -f /boot/media-update-tested.lock ]]; then
+            cmp /boot/media-update-tested.lock /var/lib/y700/build/video-player-update.lock.json
+            cmp /boot/media-update-tested.lock /var/lib/y700/build/video-player.lock.json
+            cmp /boot/media-tested.lock /var/lib/y700/build/video-player-dev12.9.lock.json
+            expected=ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3
+            [[ $(dpkg-query -W -f='${Version} ${Architecture}' parole) == '4.18.2-1+y7002 arm64' ]]
+            [[ -z $(dpkg -V parole) ]]
+            echo 'COMBINED_MEDIA_UPDATE edition=dev12.10 parole=4.18.2-1+y7002 package_files=verified'
+        else
+            cmp /boot/media-tested.lock /var/lib/y700/build/video-player.lock.json
+        fi
     fi
     [[ $(wc -l <<<"$inventory") == "$count" ]]
     digest=$(printf '%s\n' "$inventory" | sha256sum)
@@ -214,10 +224,12 @@ if [[ -f /boot/media-tested.lock ]]; then
     install -d -m755 "$media"
     install -m755 /boot/media-uv "$media/uv"
     install -m644 /boot/media-{session.py,pixels.py,clip.mp4} "$media/"
+    media_edition=dev12.9
+    if [[ -f /boot/media-update-tested.lock ]]; then media_edition=dev12.10; fi
     mapfile -d '' -t desktop_environment < "/proc/$pid/environ"
     setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
         UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 160 "$media/uv" run --offline --no-project \
-        --python /usr/bin/python3 python -B "$media/media-session.py" "$media/media-clip.mp4"
+        --python /usr/bin/python3 python -B "$media/media-session.py" "$media/media-clip.mp4" "$media_edition"
 fi
 echo COMBINED_PASS
 systemctl --no-block poweroff
