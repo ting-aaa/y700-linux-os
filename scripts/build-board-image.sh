@@ -46,6 +46,7 @@ test -s "$base/usr/share/alsa/ucm2/ucm.conf" || {
 }
 test -f "$boot"
 for input in "$base" "$board" "$repo/reference"; do [[ "$out/" != "$input/"* ]]; done
+source "$repo/scripts/build-storage-guard.sh" board "${out%/*}"
 mkdir -m700 -- "$out"
 cd "$board"
 sha256sum --quiet -c "$repo/config/board-components.sha256"

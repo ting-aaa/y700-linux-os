@@ -7,6 +7,7 @@ repo=$(realpath -e "$(dirname "$0")/..")
 source "$repo/packaging/sd-trial/dual-release.sh"
 images=$(realpath -e "${1:?completed candidate directory}")
 out=$(realpath -m "${2:?new card output directory}")
+source "$repo/scripts/build-storage-guard.sh" card "${out%/*}"
 mkdir -m700 -- "$out"
 cd "$images"
 sha256sum -c SHA256SUMS

@@ -11,6 +11,7 @@ image=$(realpath -e -- "$2")
 parent=$(realpath -e -- "$(dirname -- "$3")")
 out=$parent/$(basename -- "$3")
 [[ -f $esp && -d $image && ! -e $out && ! -L $out ]]
+source "$(dirname "$0")/build-storage-guard.sh" esp "$parent"
 kernel=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
 dtb=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
 original=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6

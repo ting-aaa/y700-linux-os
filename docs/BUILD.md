@@ -1,5 +1,44 @@
 # Build migration status
 
+## Disk budgets for image builds
+
+The large host builders check capacity before creating their output. They reserve one build lane using an advisory lock on the existing `/var/tmp` directory inode. A concurrent guarded builder sharing that directory reports `Storage busy` and can be retried after the first job exits. Kernel release of the file descriptor also covers an interrupted build. Small package builds can continue in parallel.
+
+| Entry point | Planned additional space |
+| --- | ---: |
+| `build-board-image.sh`, `build-test-card.sh` | 16 GiB |
+| `update-sealed-root.sh` | 8 GiB |
+| `package-board-image.sh`, `build-ram-trial.sh`, `export-board-image.sh` | 4 GiB |
+| `build-camera-esp.sh`, `build-ram-receiver.sh` | 2 GiB |
+
+Allow the listed growth plus a 2 GiB free-space floor on the destination. On WSL the guard also reads the actual free space on the Windows drive holding the distro VHDX, normally `/mnt/c`, with an 8 GiB floor. A destination on another Windows drive or tmpfs consumes only the host floor in that calculation. Set `Y700_WSL_HOST_VOLUME` to the actual mounted Windows volume if the distro was moved. Linux and host floors can be configured per invocation in MiB via `Y700_STORAGE_FLOOR_MIB` and `Y700_STORAGE_HOST_FLOOR_MIB`. These budgets estimate simultaneous files in current recipes. Unrelated processes and other WSL distros can still consume disk space.
+
+```bash
+bash scripts/build-storage-guard.sh status /var/tmp check
+bash scripts/build-storage-guard.sh card /var/tmp check
+```
+
+## Keep or reclaim individual scratch products
+
+For new jobs, create a private store on a Linux filesystem supporting `flock`, `O_TMPFILE` and file leases, such as ext4. Use one Linux identity throughout. A job command starts in its own `work` directory, also exposed through `Y700_BUILD_SCRATCH`. The store records the final exit status. A killed supervisor with no remaining job lease appears as `interrupted`.
+
+```bash
+repo=$PWD
+store=/var/tmp/y700-managed-$UID
+storage() { uv run --offline --no-project --python /usr/bin/python3 python "$repo/scripts/build-storage.py" "$@"; }
+storage init "$store"
+storage run "$store" sd13 bash "$repo/scripts/build-test-card.sh" "$images" card
+storage status "$store"
+storage archive "$store" sd13 card/y700-test-card.img
+storage prune "$store" sd13 card/y700-test-card.img
+```
+
+Archiving independently decompresses and hashes the copy. Identical bytes share one object. The default limits are four objects, 4 GiB compressed per object and 8 GiB compressed in total, configured on a new store with `init --count N --single BYTES --total BYTES`. Capacity exhaustion keeps the original. The archive staging file is anonymous, so a terminated compressor releases the allocation when its descriptors close. These limits apply to managed archive objects. Existing releases, unmanaged build directories and unarchived scratch files keep their own lifecycle.
+
+Pruning takes one explicit relative filename per call. It requires the job's prior archive record, the complete readable archive, matching file bytes and metadata, an idle job, an exclusive file lease and an unmounted job tree. Files with multiple hard links or extended attributes stay in place. Failed jobs support the same verification. No timer scans or removes old output. To restore the file content, decompress `$store/objects/RAW_SHA256.zst` into a new regular file and compare its SHA-256 to `RAW_SHA256`. After copying a compressed object outside the store, `storage retire "$store" RAW_SHA256 /path/to/copy.zst` rechecks its decoded bytes before releasing the managed copy. Other files in the same job remain available.
+
+Exercise the limits, duplicate protection and concurrency with `bash tests/build-storage.sh`. On a Linux test host, `sudo env UV_BIN="$(command -v uv)" bash tests/build-storage.sh --mounts` also covers all eight build entry points and the mounted tmpfs/open loop cases in a private namespace, using disposable sparse files.
+
 The dev12.12 build starts from the sealed PRC dev12.11 root, EFI FAT and U-Boot. Supply the platform archive identified by the desktop update lock and the verified dual-refresh kernel directory. Use new output directories on a Linux filesystem. After unpacking the completed TAR, the three card commands generate ordinary files on the host. [Release hashes](DEV12.12-VERIFICATION.md) · [Unpacking](DEV12.12-IMAGE.md) · [Per-device setup](DEV12.12-PER-UNIT.md)
 
 ```sh

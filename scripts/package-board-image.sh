@@ -78,6 +78,7 @@ dest=$(realpath -m -- "$6")
 [[ $2 =~ ^[0-9a-f]{64}$ && $4 =~ ^[0-9a-f]{64}$ ]]
 [[ -f $root && -f $esp && -f $boot && ! -e $dest && ! -L $dest && -d ${dest%/*} ]]
 [[ $(stat -c %s "$root") == 6442450944 && $(stat -c %s "$esp") == 1073741824 && $(stat -c %s "$boot") == 41406464 ]]
+source "$repo/scripts/build-storage-guard.sh" release "${dest%/*}"
 boot_sha=f6c60193471b75f930f792e46aa832999d59403b9083c582a3d7e132beac34a8
 printf '%s  %s\n' "$2" "$root" "$4" "$esp" "$boot_sha" "$boot" | sha256sum --strict -c -
 e2fsck -fn "$root"

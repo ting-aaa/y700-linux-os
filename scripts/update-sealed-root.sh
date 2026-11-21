@@ -82,6 +82,7 @@ parent=$(realpath -e "$1")
 archives=$(realpath -e "$2")
 out=$(realpath -m "$3")
 [[ -f $parent && -d ${out%/*} && ! -e $out && ! -L $3 ]]
+source "$repo/scripts/build-storage-guard.sh" root "${out%/*}"
 export LC_ALL=C UV_OFFLINE=1 UV_PYTHON=${UV_PYTHON:-/usr/bin/python3}
 echo "$parent_sha  $parent" | sha256sum --strict -c -
 w=$(mktemp -d "${out%/*}/.y700-power-build.XXXXXXXX")

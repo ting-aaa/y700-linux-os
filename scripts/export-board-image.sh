@@ -19,6 +19,7 @@ else
     test "$#" = 2
 fi
 [[ ! -e $dest && ! -L $dest ]]
+source "$repo/scripts/build-storage-guard.sh" export "${dest%/*}"
 work=$(mktemp -d -- "${dest%/*}/.y700-export.XXXXXXXX")
 trap 'rm -r --one-file-system -- "$work"' EXIT
 mkdir -m700 "$work/export"
