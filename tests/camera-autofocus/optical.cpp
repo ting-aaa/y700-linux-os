@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #include "optical-metric.h"
+#include "optical-config-resources.h"
 #include <libcamera/camera.h>
 #include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
@@ -161,15 +162,58 @@ struct Trial {
 	}
 };
 
-static void capture(Camera &camera)
+static void requireBeforeConfigure(bool ok, const char *reason)
+{
+	if (!ok) {
+		std::cout << "AF_CONFIG step=configure called=0 rc=none errno=none" << std::endl;
+		throw std::runtime_error(reason);
+	}
+}
+
+static void reportStream(const char *step, const StreamConfiguration &cfg)
+{
+	std::cout << "AF_CONFIG step=" << step << " width=" << cfg.size.width
+		  << " height=" << cfg.size.height << " format=" << cfg.pixelFormat.toString()
+		  << " fourcc=0x" << std::hex << cfg.pixelFormat.fourcc() << std::dec
+		  << " stride=" << cfg.stride << std::endl;
+}
+
+static std::unique_ptr<CameraConfiguration> configureRear(Camera &camera)
 {
 	auto config = camera.generateConfiguration({StreamRole::Viewfinder});
-	require(config && config->size() == 1, "no_viewfinder");
+	std::cout << "AF_CONFIG step=generate streams=" << (config ? config->size() : 0)
+		  << " available=" << static_cast<bool>(config) << std::endl;
+	requireBeforeConfigure(config && config->size() == 1, "no_viewfinder");
 	auto &cfg = config->at(0);
+	reportStream("generated", cfg);
 	cfg.size = {width, height};
 	cfg.pixelFormat = formats::ABGR8888;
-	require(config->validate() != CameraConfiguration::Invalid && cfg.size == Size(width, height) &&
-		cfg.pixelFormat == formats::ABGR8888 && camera.configure(config.get()) == 0, "no_cpu_rgb_mode");
+	reportStream("requested", cfg);
+
+	const auto status = config->validate();
+	const char *name = "invalid";
+	if (status == CameraConfiguration::Valid) name = "valid";
+	if (status == CameraConfiguration::Adjusted) name = "adjusted";
+	std::cout << "AF_CONFIG step=validate status=" << name << " streams=" << config->size() << std::endl;
+	if (!config->empty())
+		reportStream("validated", config->at(0));
+	requireBeforeConfigure(status != CameraConfiguration::Invalid && config->size() == 1 &&
+			       config->at(0).size == Size(width, height) &&
+			       config->at(0).pixelFormat == formats::ABGR8888, "no_cpu_rgb_mode");
+
+	const int rc = camera.configure(config.get());
+	std::cout << "AF_CONFIG step=configure called=1 rc=" << rc << " errno=" << (rc < 0 ? -rc : 0)
+		  << std::endl;
+	if (!config->empty())
+		reportStream(rc == 0 ? "configured" : "after_configure_error", config->at(0));
+	require(rc == 0, "configure_failed");
+	require(config->size() == 1 && config->at(0).size == Size(width, height) &&
+		config->at(0).pixelFormat == formats::ABGR8888, "configured_stream_changed");
+	return config;
+}
+
+static void capture(Camera &camera, const StreamConfiguration &cfg)
+{
 	require(cfg.stride >= width * 4 && camera.controls().count(&controls::AfMode) &&
 		camera.controls().count(&controls::AfTrigger) && camera.controls().count(&controls::AfState),
 		"no_rear_isp_af_controls");
@@ -335,30 +379,47 @@ static void selfTest()
 int main(int argc, char **argv)
 try {
 	std::cout << std::fixed << std::setprecision(4);
-	require(argc == 2, "specify_self_test_or_rear_af");
+	require(argc == 2, "specify_mode");
 	const std::string_view mode = argv[1];
 	if (mode == "--self-test") {
 		selfTest();
 		return 0;
 	}
-	require(mode == "--rear-af", "unknown_mode");
+	const bool configOnly = mode == "--check-rear-config";
+	require(configOnly || mode == "--rear-af", "unknown_mode");
 	const rlimit noCore{0, 0};
-	require(setrlimit(RLIMIT_CORE, &noCore) == 0, "core_dump_limit");
-	require(setenv("LIBCAMERA_SOFTISP_MODE", "cpu", 1) == 0, "cpu_isp_environment");
+	requireBeforeConfigure(setrlimit(RLIMIT_CORE, &noCore) == 0, "core_dump_limit");
+	requireBeforeConfigure(setenv("LIBCAMERA_SOFTISP_MODE", "cpu", 1) == 0, "cpu_isp_environment");
+	reportConfigResources();
 	CameraManager manager;
-	require(manager.start() == 0, "camera_manager");
+	const int start = manager.start();
+	std::cout << "AF_CONFIG step=manager rc=" << start << std::endl;
+	requireBeforeConfigure(start == 0, "camera_manager");
 	auto camera = manager.get("/base/soc@0/cci@ac15000/i2c-bus@0/camera@20");
-	require(camera != nullptr, "no_rear_hi1339");
-	require(camera->acquire() == 0, "rear_busy_or_access_denied");
+	std::cout << "AF_CONFIG step=lookup rear=" << static_cast<bool>(camera) << std::endl;
+	requireBeforeConfigure(camera != nullptr, "no_rear_hi1339");
+	const int acquire = camera->acquire();
+	std::cout << "AF_CONFIG step=acquire rc=" << acquire << std::endl;
+	requireBeforeConfigure(acquire == 0, "rear_busy_or_access_denied");
+	auto release = [&]() {
+		const int rc = camera->release();
+		std::cout << "AF_CONFIG step=release rc=" << rc << std::endl;
+		return rc;
+	};
 	try {
-		capture(*camera);
+		auto config = configureRear(*camera);
+		if (!configOnly)
+			capture(*camera, config->at(0));
 	} catch (...) {
-		camera->release();
+		release();
 		throw;
 	}
-	require(camera->release() == 0, "release_failed");
+	require(release() == 0, "release_failed");
 	camera.reset();
 	manager.stop();
+	if (configOnly)
+		std::cout << "AF_CONFIG_ONLY result=pass allocated=0 started=0 queued=0 af_triggered=0 pixels_read=0"
+			  << std::endl;
 	return 0;
 } catch (const std::runtime_error &error) {
 	std::cerr << "AF_ERROR reason=" << error.what() << std::endl;
