@@ -1,0 +1,14 @@
+{
+  "archive": "y700-dev12.10-wifi-update-arm64.tar",
+  "size": 6737920,
+  "sha256": "bcea67e60aff2dcfa4f6354bef419610b602150da9db442d4089b3d5bb6eb18d",
+  "arm64_ledger_sha256": "a2e0146da87bf96de492cef2533c0c94a41973da115987c3fb5bd1a3d4f1f9e4",
+  "replaces": [
+    {"package": "network-manager", "version": "1.52.1-1", "architecture": "arm64"},
+    {"package": "wpasupplicant", "version": "2:2.10-24", "architecture": "arm64"}
+  ],
+  "packages": [
+    {"package": "network-manager", "version": "1.52.1-1+0y7001", "architecture": "arm64", "sha256": "25b3540fa3f6dfcd26a0c55f17938de527b7af2e4114d5124c9d979884a15c2d"},
+    {"package": "wpasupplicant", "version": "2:2.10-24+0y7001", "architecture": "arm64", "sha256": "f2f380f53cc8aa314f43c4a0a041f24eb6ef408b0f540d61a0743f99c6fc1226"}
+  ]
+}

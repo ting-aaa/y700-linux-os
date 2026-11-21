@@ -127,6 +127,19 @@ media_receipt = build / 'video-player.lock.json'
 media_packages = build / 'video-player-debian.lock.json'
 player_update = build / 'video-player-update.lock.json'
 prior_media = build / 'video-player-dev12.9.lock.json'
+wifi_receipt = build / 'wifi-sae-update.lock.json'
+wifi_lock = None
+if wifi_receipt.exists() or wifi_receipt.is_symlink():
+    wifi_source = repo / 'config/wifi-sae-update.lock.json'
+    if (wifi_receipt.is_symlink() or not wifi_receipt.is_file()
+            or wifi_receipt.read_bytes() != wifi_source.read_bytes() or not player_update.is_file()):
+        raise SystemExit('Wi-Fi retry layer requires its exact receipt and dev12.10 media parent')
+    wifi_lock = json.loads(wifi_source.read_text())
+    for original in replacements(wifi_lock):
+        if original not in wanted:
+            raise SystemExit(f'Wi-Fi retry parent differs from the locked Debian base: {original}')
+        wanted.remove(original)
+    wanted.update(map(package_tuple, wifi_lock['packages']))
 if any(path.exists() or path.is_symlink() for path in (media_receipt, media_packages, player_update, prior_media)):
     lock = json.loads((repo / 'config/video-player.lock.json').read_text())
     updated = player_update.exists() or player_update.is_symlink()
@@ -151,6 +164,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
         # Pin the ledger produced inside the ARM64 root. The independent
         # ${Package} tuple check below works on either architecture.
         ledger_digest = '5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce'
+        if wifi_lock:
+            ledger_digest = wifi_lock['arm64_ledger_sha256']
         if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
             raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
         update = json.loads(update_lock.read_text())

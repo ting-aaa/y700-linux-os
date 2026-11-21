@@ -2,7 +2,7 @@
 # Apply one locked layer to a copy of its sealed generic predecessor.
 set -euo pipefail
 if (( EUID != 0 || $# != 4 )); then
-    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update SEALED_ROOT.ext4 ARCHIVE_DIRECTORY_OR_PLAYER_TAR NEW_LINUX_DIRECTORY' >&2
+    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
     exit 2
 fi
 if [[ ${Y700_POWER_PRIVATE:-} != 1 ]]; then
@@ -42,6 +42,13 @@ case $layer in
         prior_args=()
         lock_args=()
         ;;
+    wifi-sae-update)
+        parent_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
+        prior_inventory=ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3
+        inventory_sha=2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8
+        prior_args=()
+        lock_args=()
+        ;;
     *) echo "Unsupported image layer: $layer" >&2; exit 2 ;;
 esac
 [[ $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
@@ -72,7 +79,7 @@ mount -t proc -o nosuid,nodev,noexec proc "$root/proc"
 for path in run sys dev; do mount -t tmpfs -o nosuid,mode=755 tmpfs "$root/$path"; done
 for pair in null:3 zero:5 random:8 urandom:9; do mknod -m666 "$root/dev/${pair%:*}" c 1 "${pair#*:}"; done
 ln -s /proc/self/fd "$root/dev/fd"
-if [[ $layer == video-player || $layer == video-player-update ]]; then
+if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-sae-update ]]; then
     grep -Fxq "package_digest=$prior_inventory" "$w/result/parent-inventory.log"
     lock=$repo/config/$layer.lock.json
     record=$root/var/lib/y700/build
@@ -83,23 +90,37 @@ if [[ $layer == video-player || $layer == video-player-update ]]; then
     mount -t devpts -o newinstance,ptmxmode=0666 devpts "$root/dev/pts"
     ln -s pts/ptmx "$root/dev/ptmx"
     mknod -m666 "$root/dev/tty" c 5 0
-    cp -- "$archives" "$stage/player.tar.gz"
-    [[ $(stat -c %s "$stage/player.tar.gz") == "$(jq -er .size "$lock")" ]]
-    echo "$(jq -er .sha256 "$lock")  $stage/player.tar.gz" | sha256sum --strict -c -
-    tar -xzf "$stage/player.tar.gz" -C "$stage"
+    cp -- "$archives" "$stage/layer.tar"
+    [[ $(stat -c %s "$stage/layer.tar") == "$(jq -er .size "$lock")" ]]
+    echo "$(jq -er .sha256 "$lock")  $stage/layer.tar" | sha256sum --strict -c -
+    tar -xf "$stage/layer.tar" -C "$stage"
     if [[ $layer == video-player ]]; then
         tar -xzOf "$stage/y700-parole-iris/debian-player.tar.gz" y700-video-player/debian.lock.json > "$stage/debian.lock.json"
         echo "$(jq -er .debian_lock_sha256 "$lock")  $stage/debian.lock.json" | sha256sum --strict -c -
         cmp "$repo/tests/video-player/debian.lock.json" "$stage/debian.lock.json"
         install_command=(/run/media-build/y700-parole-iris/install.sh --install)
         verify_command=(/run/media-build/y700-parole-iris/install.sh --verify)
-    else
+    elif [[ $layer == video-player-update ]]; then
         candidate_dir=$stage/y700-player-update/candidate
         deb=$(jq -er '.packages[0] | "\(.package)_\(.version)_\(.architecture).deb"' "$lock")
         echo "$(jq -er '.packages[0].sha256' "$lock")  $candidate_dir/$deb" | sha256sum --strict -c -
         cmp "$stage/y700-player-update/stock/libgstvideo4linux2.so" "$root/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so"
         install_command=(bash /run/media-build/y700-player-update/install.sh install)
         verify_command=(bash /run/media-build/y700-player-update/install.sh verify)
+    else
+        cmp "$repo/config/wifi-sae-update.sha256" "$stage/update/SHA256SUMS"
+        (cd "$stage/update" && sha256sum --strict -c SHA256SUMS)
+        install_command=(dpkg --install)
+        for deb in "$stage"/update/candidate/*.deb; do
+            package=$(dpkg-deb -f "$deb" Package)
+            version=$(dpkg-deb -f "$deb" Version)
+            arch=$(dpkg-deb -f "$deb" Architecture)
+            digest=$(sha256sum "$deb" | cut -d' ' -f1)
+            jq -e --arg pkg "$package" --arg ver "$version" --arg arch "$arch" --arg sha "$digest" \
+                '.packages | any(.package==$pkg and .version==$ver and .architecture==$arch and .sha256==$sha)' "$lock" >/dev/null
+            install_command+=("${deb#"$root"}")
+        done
+        verify_command=(dpkg --verify network-manager wpasupplicant)
     fi
     [[ ! -e $root/usr/sbin/policy-rc.d && ! -L $root/usr/sbin/policy-rc.d ]]
     printf '#!/bin/sh\nexit 101\n' > "$root/usr/sbin/policy-rc.d"
@@ -107,7 +128,12 @@ if [[ $layer == video-player || $layer == video-player-update ]]; then
     run=(chroot "$root" env TMPDIR=/run SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive)
     # Debian maintainer scripts expect the normal system umask.
     (umask 022; "${run[@]}" "${install_command[@]}") | tee "$w/result/install.log"
-    "${run[@]}" "${verify_command[@]}"
+    if [[ $layer == wifi-sae-update ]]; then
+        "${run[@]}" "${verify_command[@]}" > "$w/result/wifi-package-verify.log"
+        [[ ! -s $w/result/wifi-package-verify.log ]]
+    else
+        "${run[@]}" "${verify_command[@]}"
+    fi
     "${run[@]}" apt-get check
     [[ -z $("${run[@]}" dpkg --audit) ]]
     rm -- "$root/usr/sbin/policy-rc.d"
@@ -155,7 +181,7 @@ done
 for path in "$root"/{etc/y700/maintenance*,etc/y700/bluetooth-address,etc/y700/user-configured,etc/ssh/ssh_host_*,home/y700/.ssh,root/.ssh,var/lib/y700-ssc/registry,var/lib/y700/ssh,var/lib/systemd/random-seed,var/lib/systemd/credential.secret}; do
     [[ ! -e $path && ! -L $path ]]
 done
-if [[ $layer == video-player-update ]]; then
+if [[ $layer == video-player-update || $layer == wifi-sae-update ]]; then
     # Inspect the on-disk /run only after removing the installer staging tmpfs.
     umount "$root/run"
     [[ ! -L $root/etc/machine-id && $(readlink "$root/var/lib/dbus/machine-id") == /etc/machine-id ]]
