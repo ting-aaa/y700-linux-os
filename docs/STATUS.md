@@ -1,5 +1,7 @@
 # Hardware and system status
 
+The PRC tablet booted the dev12.12 kernel and root in RAM twice and returned automatically to daily Debian. On the fixed target the rear HI1339 delivered 419 preview frames. The GT9768 driver accepted all nine coarse focus controls, but the measured contrast variation was too small to confirm focus. Both daily filesystems remained writable with zero error counts after return. [Physical camera results](CAMERA-FOCUS-PROBE.md#diskless-rear-autofocus-on-22-november)
+
 The dev12.12 offline desktop update brings the rear-camera default, touch-sized Bluetooth controls and single-tap Pinyin selection to existing installations. The three application versions match the daily reference tablet. [Offline update and rollback](DEV12.12-DESKTOP-UPDATE.md)
 
 The reference tablet's daily dev12.11 runs Blueman `2.4.4-1+y7003`. The ordinary desktop manager started discovery on the physical WCN6855 and recovered its Search button when discovery finished. The existing Bluetooth daemon, applet, bonds and connections survived the test. A real keyboard or mouse is still needed to verify pairing, input and reconnection over the physical radio. [Touch controls and rollback](BLUETOOTH-MANAGER.md)

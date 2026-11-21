@@ -158,6 +158,23 @@ The first physical cold RAM boot received 1,351,581,696 bytes over USB, verified
 
 At the daily LightDM greeter, an ordinary user reproduced the RGB configuration failure with both the installed and the diagnostic libcamera. Logind granted the active greeter access to `/dev/udmabuf`; the background camera account could open none of the DMA-buffer providers. With access to a private copy of that single device node in the diagnostic service's mount namespace, both libraries offered 640×480 ABGR8888. The successor probe also returned successful configuration and release with a 2,560-byte stride. The ordinary case validated as 4208×3120 raw Bayer and skipped configuration. The comparison captured zero frames and added zero milliseconds to the rear sensor's active-time counter. Receipts are `out/camera-optical-qa/physical-cold-{carrier,af,daily-return,allocator-ab}.log` and `physical-private-config-v2.log`.
 
+### Diskless rear autofocus on 22 November
+
+The second cold boot used the dev12.12 RAM receiver with manifest `e06431c4839c40d93afaf8ffbe3467d337782607e1de5434136abae76166fb90`. The PC acquired U-Boot during an orderly restart, reused the CRC-checked kernel and 11 MiB common initrd prefix from the daily ESP, and uploaded the remaining 2,274,916 initrd bytes. Before starting Linux it verified all three RAM images and both disabled storage controllers. The tablet verified the 1,351,581,696-byte root over USB. The RAM system reported no disk or swap. The camera configuration check opened the private `udmabuf`, configured the requested 640×480 ABGR8888 viewfinder with stride 2560, and returned the rear sensor to suspend with zero additional active milliseconds. [Boot procedure](../tests/uboot-ram-stage/README.md) · [Diagnostic attachment](../tests/ram-af-acm/README.md)
+
+The real capture returned 419 frames on the owner's fixed target. At frame 24 the applied exposure was 14.16 ms at gain 1×. The stable baseline arrived at frame 352, at 33.28 ms and 16× gain. One AF trigger then produced 53 scanning frames. All nine coarse lens control calls succeeded, 18 samples passed the exposure timing checks and 18 were rejected on timing. The coarse scan ended with `flat-contrast` before fine search. In this build that means the highest two-frame mean gradient score reached 0.025 and was less than 1.12 times the lowest. These counts establish command acceptance; physical lens displacement was not measured. [Diagnostic decision](../packaging/camera-autofocus/scan-result-diagnostics.patch)
+
+The independent sharpness medians were 0.0573 before and 0.0642 after the scan. None of the scanning frames crossed the scene-drift limits. The outcome is `af_failed`. The stored aggregates do not include the nine individual gradient scores. The rear sensor returned to suspend after 18,482 ms of active time. The host received and acknowledged the complete numeric result. The tablet rebooted to the daily dev12.11 kernel, with both ext4 layers writable and zero reported errors, the same 1,240-package inventory, all four core services active and both idle suspend settings still zero. The capture never saved or transferred images.
+
+The raw numeric receipts are under `out/camera-optical-qa/`.
+
+| Receipt | SHA-256 |
+| --- | --- |
+| `physical-allocator-stage.log` | `ae2986202c4c2cdb092d7d43ae743a636bf86556b2d44359144251c078387ba2` |
+| `physical-allocator-config.log` | `f720e67ea605d5229402dc4e8e6572c7a2a9e2f990c5bfb5f2ba2b07795995a7` |
+| `physical-allocator-af.log` | `d10e21fc01fe8015a972bbafbd0919d17d180ec293b602b1ba343ec8b117bea2` |
+| `physical-allocator-return.log` | `01d6a3a912c900c4e659402478738e5dc8891ee3e44f211e486d55fbac4dd155` |
+
 To investigate the original stall, compare an idle run and the same AF workload on the diskless system. A separate DT with PCIe0 disabled can test whether the WCN6855 host path is needed to reproduce it. The AF service's private network namespace leaves that host path active. Keep the kernel and display mode fixed across runs. The dev12.12 diskless bundle uses the dual-refresh kernel `0c92b63a…`, while the original failure used dev12.11 kernel `b103d0fc…`. [Kernel identities](PANEL-REFRESH.md)
 
 ## Reproducing the bounded read
