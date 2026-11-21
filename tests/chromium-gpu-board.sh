@@ -6,8 +6,8 @@ umask 077
 trap 'echo "CHROMIUM_CHECK_FAILED line=$LINENO" >&2' ERR
 
 if [[ ${1:-} != --worker ]]; then
-    [[ $EUID == 0 && $# == 1 && ( $1 == product || $1 == vulkan ) ]] || {
-        echo 'Usage as root: UV_BIN=/path/to/uv bash chromium-gpu-board.sh product|vulkan' >&2
+    [[ $EUID == 0 && $# == 1 && ( $1 == product || $1 == vulkan || $1 == product-vulkan ) ]] || {
+        echo 'Usage as root: UV_BIN=/path/to/uv bash chromium-gpu-board.sh product|vulkan|product-vulkan' >&2
         exit 2
     }
     here=$(cd "$(dirname "$0")" && pwd)
@@ -22,7 +22,7 @@ if [[ ${1:-} != --worker ]]; then
     exit
 fi
 
-[[ $EUID == 0 && $$ == 1 && $# == 3 && ( $2 == product || $2 == vulkan ) ]]
+[[ $EUID == 0 && $$ == 1 && $# == 3 && ( $2 == product || $2 == vulkan || $2 == product-vulkan ) ]]
 mode=$2 stage=$3
 grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
 [[ $(id -u y700) != 0 && -x /usr/bin/chromium && -x /usr/lib/chromium/chromium ]]
@@ -35,10 +35,15 @@ install -d -o y700 -g y700 -m700 /home/y700 /home/y700/runtime
 cd /home/y700
 options=(--product-launcher)
 if [[ $mode == vulkan ]]; then options=(--backend vulkan); fi
+asuser=(setpriv --reuid=y700 --regid=y700 --init-groups env -i PATH="$PATH" HOME=/home/y700
+        XDG_RUNTIME_DIR=/home/y700/runtime GSETTINGS_BACKEND=keyfile LC_ALL=C.UTF-8)
+if [[ $mode == product-vulkan ]]; then
+    "${asuser[@]}" gsettings set org.y700.chromium hardware-acceleration true
+    [[ $("${asuser[@]}" gsettings get org.y700.chromium hardware-acceleration) == true ]]
+fi
 printf 'CHROMIUM_BOARD mode=%s uid=%s version=%s net=loopback display=headless boot=%s\n' \
     "$mode" "$(id -u y700)" "$(dpkg-query -W -f='${Version}' chromium)" "$(cat /proc/sys/kernel/random/boot_id)"
-setpriv --reuid=y700 --regid=y700 --init-groups env -i PATH="$PATH" HOME=/home/y700 \
-    XDG_RUNTIME_DIR=/home/y700/runtime LC_ALL=C.UTF-8 "$stage/uv" run --offline --no-project \
+"${asuser[@]}" "$stage/uv" run --offline --no-project \
     --python /usr/bin/python3 python -B "$stage/chromium-gpu.py" --headless --frames 60 --timeout 100 \
     "${options[@]}" > "$stage/report.json" 2>"$stage/browser.log" &
 runner=$!

@@ -69,7 +69,17 @@ if [[ $mode == candidate ]]; then
     check installed_packages_1240 test "$(printf '%s\n' "$records" | wc -l)" = 1240
     package_sha=$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)
     if [[ $edition == dev12.11 ]]; then
-        check installed_versions test "$package_sha" = be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+        case $package_sha in
+            be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
+                echo 'PASS installed_versions dev12.11' ;;
+            5e7c63ae4efdce57f57fa983038f5e37cce0ec1c763e56fdce1c2314ac50ca08)
+                echo 'PASS installed_versions dev12.11 with Chromium graphics setting'
+                check chromium_launcher_policy hash_is /etc/chromium.d/99-y700-software-rendering d6abf4aae2553dbd8fad313adc1677419f7c188ffc7ea507375ce5d64eff092a
+                check chromium_settings_entry hash_is /usr/share/applications/y700-chromium-graphics.desktop 8619926e6f99f3a3f58478f125edb04a41e6984c8502078f32aa6d3c29df748f
+                check chromium_settings_app hash_is /usr/libexec/y700-chromium-graphics 0aaf19304acea09724fd013dce7e1fe45f6ddaa964c108bddbc6e90d48c7632b
+                check chromium_settings_schema hash_is /usr/share/glib-2.0/schemas/org.y700.chromium.gschema.xml fabeb3d9625e047d8ab180f8540780dd6bb301717b5360aa097cb50934c531e2 ;;
+            *) check installed_versions false ;;
+        esac
         check camera_receipt hash_is /var/lib/y700/build/camera-autofocus.lock.json 411490734a965ca1405ca33e3b9a1fcb79a1fbad196d947cf3736cb66b1b41b1
         check image_version grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
     else

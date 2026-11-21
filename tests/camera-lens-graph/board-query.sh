@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-# Read the linked lens control limits on the counted TB320FC kernel.
+# Read the linked lens control limits without streaming or writing a control.
 set -euo pipefail
 export LC_ALL=C
-[[ $# == 1 ]] || { echo 'Usage: board-query.sh LENS_GRAPH_BINARY' >&2; exit 2; }
+installed=false
+if [[ ${1:-} == --installed ]]; then installed=true; shift; fi
+[[ $# == 1 ]] || { echo 'Usage: board-query.sh [--installed] LENS_GRAPH_BINARY' >&2; exit 2; }
 check=$(realpath -e -- "$1")
 dt=/sys/firmware/devicetree/base
 bus=$dt/soc@0/cci@ac15000/i2c-bus@0
 rail_base=$dt/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators
-grep -qw 'y700.focus_probe=gt9768' /proc/cmdline
+if $installed; then
+    grep -Fqw y700.release=dev12.11 /proc/cmdline
+    grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
+    [[ $(sha256sum /sys/kernel/notes | cut -d' ' -f1) == 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ]]
+else
+    grep -qw 'y700.focus_probe=gt9768' /proc/cmdline
+fi
 cmp -s <(printf 'PRC\0') "$dt/region_country"
 cmp -s <(printf 'lenovo,tb320fc-gt9768\0') "$bus/lens@c/compatible"
 cmp -s "$bus/lens@c/phandle" "$bus/camera@20/lens-focus"
@@ -24,6 +32,8 @@ lens=/sys/bus/i2c/devices/$nr-000c
 
 idle() {
     [[ $(cat "$sensor/power/runtime_status") == suspended ]] || return 1
+    # On the combined DT a regulator state read can wake the second CCI bus.
+    if $installed; then return 0; fi
     local rail dev matches
     for rail in ldo1 ldo4 ldo5; do
         matches=0
@@ -54,4 +64,8 @@ name=$(sed -n 's/^DEVNAME=//p' "/sys/dev/char/$interface/uevent")
 "$check" "${media[0]}" "hi1339 $nr-0020" --check-limits "/dev/$name"
 idle
 [[ $(cat "$sensor/power/runtime_active_time") == "$before" ]]
-echo 'LENS_QUERY_PASS sensor_active_time_unchanged=1 ldo1_ldo4_ldo5=disabled users=0'
+if $installed; then
+    echo 'LENS_QUERY_PASS sensor_active_time_unchanged=1 installed=dev12.11'
+else
+    echo 'LENS_QUERY_PASS sensor_active_time_unchanged=1 ldo1_ldo4_ldo5=disabled users=0'
+fi

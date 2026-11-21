@@ -30,6 +30,15 @@ sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh product
 sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh vulkan
 ```
 
+With the optional `y700-platform 0.1.0~dev12.8+gpu1` installed, the following pair exercises the same Debian launcher in both cases. Each starts with a fresh temporary home. The second run selects the installed GSettings option in that home and requires hardware WebGL, renderer sandboxing and completed GPU work.
+
+```sh
+sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh product
+sudo env UV_BIN=/absolute/path/to/uv bash chromium-gpu-board.sh product-vulkan
+```
+
+The physical dev12.11 tablet passed both controls. SwiftShader rendered 60 frames at the default setting. With the option selected, Chromium reported Turnip Adreno 730, verified four pixels in each of 60 frames and retired work on its own MSM GPU client. These two commands run headless. [Desktop setting and package](../docs/CHROMIUM-GRAPHICS.md)
+
 The product control requires the actual launcher flag, a sandboxed renderer, and a page reporting either software rendering or WebGL 2 unavailable. The Vulkan run additionally requires every sampled frame to match, a renderer string identifying Adreno 730 and Vulkan, and retired work on an MSM DRM client owned by this browser's GPU process. Both commands report renderer seccomp and sandbox-bypass flags. A software renderer, an unattributed GPU, or a timeout leaves the hardware check unverified.
 
 On 21 November 2026, the product control ran inside the ARM64 dev12.11 release in QEMU. Chromium's SwiftShader rendered all 60 frames and the page verified four pixels in each frame. The observer found the packaged disable-GPU flag, seccomp filtering with no-new-privileges in the renderer, and zero attributed MSM work. The local receipt is `out/dev12.11-chromium-gpu/pc-product.log`, SHA-256 `582245d2637108367abfeec4102a3cb94e75fdf25afd08916a04968d065a71f9`.
