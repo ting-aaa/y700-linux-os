@@ -154,7 +154,7 @@ static int restore(int fd, const struct rtc_wkalrm *original, time_t target)
            epoch(&current.time) == epoch(&original->time) ? 0 : -1;
 }
 
-static int measure(int fd, int signals, int reserve)
+static int measure(int fd, int signals, int delay)
 {
     struct rtc_time now;
     struct rtc_wkalrm saved, alarm = {.enabled=1}, current;
@@ -162,7 +162,7 @@ static int measure(int fd, int signals, int reserve)
     int irq, last_irq;
     if (irq_count(&irq, &count) || ioctl(fd, RTC_RD_TIME, &now)) return 1;
     const time_t start = epoch(&now);
-    const int delay = reserve ? 20 : 4;
+    const int reserve = delay != 4;
     if (start < 0 || start > UINT32_MAX - delay) return 1;
     time_t target = start + delay;
     struct tm tm;
@@ -189,7 +189,7 @@ static int measure(int fd, int signals, int reserve)
         goto done;
     printf("RTC_ALARM_ARMED irq=%d delay_s=%d system_minus_rtc_ms=%" PRId64 "\n", irq, delay, offset);
     if (fflush(stdout)) goto done;
-    if (poll(p, 2, reserve ? 45000 : 10000) != 1 || p[0].revents != POLLIN || p[1].revents) goto done;
+    if (poll(p, 2, reserve ? (delay + 25) * 1000 : 10000) != 1 || p[0].revents != POLLIN || p[1].revents) goto done;
     unsigned long event;
     if (read(fd, &event, sizeof(event)) != sizeof(event)
         || event != (1UL << 8 | RTC_IRQF | RTC_AF)) goto done;
@@ -217,7 +217,8 @@ static int measure(int fd, int signals, int reserve)
                " monotonic_ms=%" PRId64 " suspend_gap_ms=%" PRId64
                " suspend_success_delta=%ld first_wake_irq=%ld rtc_irq=%d\n",
                outcome, boottime, elapsed, gap, cycles, wake_irq, irq);
-        passed = end >= target && end <= target+10 && boottime >= 18000 && boottime <= 31000;
+        passed = end >= target && end <= target+10 &&
+                 boottime >= (delay-2)*1000 && boottime <= (delay+11)*1000;
     } else {
         passed = end >= target && end <= target+2 && elapsed >= 2500 && elapsed <= 7000
                  && llabs(boottime-elapsed) < 100 && llabs(final_offset-offset) < 2000;
@@ -235,9 +236,10 @@ int main(int argc, char **argv)
 {
     int arm = argc == 2 && !strcmp(argv[1], "--awake-alarm");
     int reserve = argc == 2 && !strcmp(argv[1], "--reserve-wake-alarm");
+    int key_test = argc == 2 && !strcmp(argv[1], "--key-wake-fallback");
     int read_alarm = argc == 2 && !strcmp(argv[1], "--read-alarm");
-    if (!(argc == 1 || arm || reserve || read_alarm)) {
-        fputs("Usage: awake-alarm [--awake-alarm|--reserve-wake-alarm|--read-alarm]\n", stderr);
+    if (!(argc == 1 || arm || reserve || key_test || read_alarm)) {
+        fputs("Usage: awake-alarm [--awake-alarm|--reserve-wake-alarm|--key-wake-fallback|--read-alarm]\n", stderr);
         return 2;
     }
     if (!identity()) { fputs("RTC_REFUSED rtc1_identity_or_hctosys\n", stderr); return 1; }
@@ -274,7 +276,7 @@ int main(int argc, char **argv)
         if (!result) printf("RTC_SAVED_ALARM enabled=%u pending=%u rtc_seconds=%" PRId64 "\n",
                            a.enabled, a.pending, (int64_t)epoch(&a.time));
     } else {
-        result = measure(fd, signals, reserve);
+        result = measure(fd, signals, key_test ? 90 : reserve ? 20 : 4);
     }
     close(fd);
     close(signals);

@@ -34,6 +34,8 @@ An exit status of zero verifies an alarm event and restoration. The observation 
 
 The ARM64 PL031 guest measured one alarm at 20 seconds, matched the device interrupt and reported zero time asleep. New descriptors independently confirmed restoration of a disabled nonzero timestamp after both expiry and SIGTERM. A replacement enabled by a competing writer retained its exact timestamp. The board executable refused the virtual identity. See `out/pmk8350-reserve-wake/qemu-rtc-reserve.log`.
 
+For an attended power-button test, `--key-wake-fallback` reserves the same hardware alarm for 90 seconds. The separate [board test](../suspend/board-cycle.sh) accepts `--power-key` and requires the wake IRQ to match `pmic_pwrkey`. The automatic alarm path requires `pm8xxx_rtc_alarm`. Both compare the saved alarm from independent reads and wait for the final system suspend counter.
+
 ## Reproduce the ARM64 guest checks
 
 ```sh
