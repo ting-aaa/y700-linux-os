@@ -154,3 +154,11 @@ The fixture used the dev9 QCOW2 with SHA-256 `18c58b29bad672bc0a3971f4e68b49c3c2
 ROOT_FORMAT=qcow2 WIFI_SECURITY=sae WIFI_ATTEMPT=editor WIFI_ACTOR=seat bash tests/wifi-chooser/run-vm.sh
 ROOT_FORMAT=qcow2 WIFI_SECURITY=sae WIFI_ATTEMPT=onboard WIFI_ACTOR=seat bash tests/wifi-chooser/run-vm.sh
 ```
+
+## Public HTTPS and the local peer during a round trip
+
+On November 22 two unprivileged clients on the daily dev12.11 tablet each opened one TLS connection to the Debian mirror, one over IPv4 and the other over IPv6. They fetched the same 52,660-byte ARM64 package and checked every complete response against its SHA-256. Both sockets used a WLAN source address. Automatic reconnection was disabled. Each frequency sample was taken before and after the corresponding response. [Mirror test](../tests/wifi-rejoin/mirror-continuity.py) · [Debian package pool](https://deb.debian.org/debian/pool/main/h/hello/)
+
+Both connections delivered verified responses on 2437, 5220 and again 2437 MHz. Each completed 11 downloads (579,260 bytes) in about 16.4 seconds. The longest intervals between verified responses were 2.621 seconds for IPv4 and 2.622 seconds for IPv6, including the one-second pacing interval. The station returned to its original WPA2 access point with both saved profiles and the network service invocations intact. Receipts are in `out/wifi-roam-path/first-mirror-run/{v4,v6,roam}.log`.
+
+During the same transition, an independent TCP connection from the Windows WLAN peer verified 42 bidirectional exchanges across 2437 and 5220 MHz. It reset 19.207 seconds after its last reply and yielded no verified reply on the return leg. Fresh connections from that peer using IPv4 and link-local IPv6 timed out. Both default routers still answered on the tablet. This qualifies public HTTPS on both IP families for this transition. The cause of the same-LAN peer failure remains open.
