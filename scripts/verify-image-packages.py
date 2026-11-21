@@ -69,6 +69,21 @@ if args.check_upgrade:
     raise SystemExit(0)
 control = (repo / 'packaging/control').read_text().splitlines()
 version = args.platform_version or next(line.split()[1] for line in control if line.startswith('Version: '))
+build = args.root / 'var/lib/y700/build'
+desktop_lock = None
+desktop_receipt = build / 'platform-desktop-update.lock.json'
+if desktop_receipt.exists() or desktop_receipt.is_symlink():
+    source = repo / 'config/platform-desktop-update.lock.json'
+    if desktop_receipt.is_symlink() or not desktop_receipt.is_file() or desktop_receipt.read_bytes() != source.read_bytes():
+        raise SystemExit('Desktop platform update receipt differs from the sealed build input')
+    desktop_lock = json.loads(source.read_bytes())
+    previous, = replacements(desktop_lock)
+    updated, = map(package_tuple, desktop_lock['packages'])
+    if args.sealed_dev12_5 or (args.platform_version and args.platform_version != updated[1]):
+        raise SystemExit('Requested platform version differs from the desktop update')
+    # The original platform.lock.json records the parent. Apply the qualified
+    # replacement below after checking the inherited camera and Wi-Fi receipts.
+    version = previous[1]
 if args.sealed_dev12_5:
     version = '0.1.0~dev12.5'
 elif (args.sealed_blueman_y7001 and not args.platform_version
@@ -122,7 +137,6 @@ if camera_receipt.exists():
 elif args.camera_lock:
     raise SystemExit('Integrated camera layer receipt is missing')
 
-build = args.root / 'var/lib/y700/build'
 media_receipt = build / 'video-player.lock.json'
 media_packages = build / 'video-player-debian.lock.json'
 player_update = build / 'video-player-update.lock.json'
@@ -131,6 +145,8 @@ wifi_receipt = build / 'wifi-sae-update.lock.json'
 wifi_lock = None
 af_receipt = build / 'camera-autofocus.lock.json'
 af_lock = None
+if desktop_lock and not af_receipt.is_file():
+    raise SystemExit('Desktop platform update requires its autofocus and Wi-Fi parent')
 if wifi_receipt.exists() or wifi_receipt.is_symlink():
     wifi_source = repo / 'config/wifi-sae-update.lock.json'
     if (wifi_receipt.is_symlink() or not wifi_receipt.is_file()
@@ -164,12 +180,23 @@ if af_receipt.exists() or af_receipt.is_symlink():
     release = args.root / 'etc/os-release'
     vendor = args.root / 'usr/lib/os-release'
     original = args.root / 'etc/os-release.debian'
-    edition = (b'IMAGE_ID=y700-prc-debian\nIMAGE_VERSION=dev12.11\n'
+    image_version = desktop_lock['edition'] if desktop_lock else af_lock['edition']
+    edition = (f'IMAGE_ID=y700-prc-debian\nIMAGE_VERSION={image_version}\n'.encode() +
                b'VARIANT="Lenovo Legion Y700 (2023) Xfce"\nVARIANT_ID=y700_xfce\n')
     if (not original.is_symlink() or str(original.readlink()) != '../usr/lib/os-release'
             or vendor.is_symlink() or not vendor.is_file()
             or release.is_symlink() or not release.is_file() or release.read_bytes() != vendor.read_bytes() + edition):
-        raise SystemExit('Unexpected dev12.11 product or vendor release metadata')
+        raise SystemExit(f'Unexpected {image_version} product or vendor release metadata')
+if desktop_lock:
+    original, = replacements(desktop_lock)
+    if original not in wanted:
+        raise SystemExit('Desktop update parent differs from the original platform receipt')
+    wanted.remove(original)
+    wanted.update(map(package_tuple, desktop_lock['packages']))
+    for name, digest in desktop_lock['files'].items():
+        file = args.root / name
+        if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
+            raise SystemExit(f'Desktop platform file differs from the release: {name}')
 if any(path.exists() or path.is_symlink() for path in (media_receipt, media_packages, player_update, prior_media)):
     lock = json.loads((repo / 'config/video-player.lock.json').read_text())
     updated = player_update.exists() or player_update.is_symlink()
@@ -198,6 +225,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
             ledger_digest = wifi_lock['arm64_ledger_sha256']
         if af_lock:
             ledger_digest = af_lock['arm64_ledger_sha256']
+        if desktop_lock:
+            ledger_digest = desktop_lock['arm64_ledger_sha256']
         if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
             raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
         update = json.loads(update_lock.read_text())
@@ -215,5 +244,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
 if wanted != actual:
     raise SystemExit(f'Package mismatch: missing={sorted(wanted-actual)} extra={sorted(actual-wanted)}')
 records = ''.join('\t'.join(record) + '\n' for record in sorted(actual))
+digest = hashlib.sha256(records.encode()).hexdigest()
+if desktop_lock and digest != desktop_lock['package_digest']:
+    raise SystemExit('Desktop platform package inventory differs from the sealed release')
 print(f'package_count={len(actual)}')
-print(f'package_digest={hashlib.sha256(records.encode()).hexdigest()}')
+print(f'package_digest={digest}')

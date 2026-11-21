@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "edition": "dev12.12",
+  "parent_root_sha256": "33ce23e8edac1d9c445c6b360a6355a189a151804352b032efe51320287d17a3",
+  "package_digest": "ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047",
+  "arm64_ledger_sha256": "5fa586a125d52580771c923bec05985e32906be36acf1b88dec29e5791b89ccd",
+  "replaces": [
+    {
+      "package": "y700-platform",
+      "version": "0.1.0~dev12.8",
+      "architecture": "all"
+    }
+  ],
+  "packages": [
+    {
+      "package": "y700-platform",
+      "version": "0.1.0~dev12.8+gpu1.2",
+      "architecture": "all",
+      "size": 28848,
+      "sha256": "479c59b518f42e035f9101feb5947ba972df32b1a5646f62b459bc13b5357518"
+    }
+  ],
+  "files": {
+    "etc/chromium.d/99-y700-software-rendering": "d6abf4aae2553dbd8fad313adc1677419f7c188ffc7ea507375ce5d64eff092a",
+    "usr/libexec/y700-chromium-graphics": "0aaf19304acea09724fd013dce7e1fe45f6ddaa964c108bddbc6e90d48c7632b",
+    "usr/libexec/y700-tablet-brightness": "c75de4f42fbca74868fa3bce398f0d1bb8b86ce4703e6fe0d8e63a2c421b9799",
+    "usr/share/applications/y700-chromium-graphics.desktop": "8619926e6f99f3a3f58478f125edb04a41e6984c8502078f32aa6d3c29df748f",
+    "usr/share/glib-2.0/schemas/org.y700.chromium.gschema.xml": "fabeb3d9625e047d8ab180f8540780dd6bb301717b5360aa097cb50934c531e2"
+  },
+  "recipes": {
+    "packaging/brightness-slider.patch": "b1f77eea986402b931ee5cec48a91397d081372aaa2890f8c7123e9ce866974d",
+    "packaging/chromium-graphics/99-y700-software-rendering": "d6abf4aae2553dbd8fad313adc1677419f7c188ffc7ea507375ce5d64eff092a",
+    "packaging/chromium-graphics/org.y700.chromium.gschema.xml": "fabeb3d9625e047d8ab180f8540780dd6bb301717b5360aa097cb50934c531e2",
+    "packaging/chromium-graphics/y700-chromium-graphics": "0aaf19304acea09724fd013dce7e1fe45f6ddaa964c108bddbc6e90d48c7632b",
+    "packaging/chromium-graphics/y700-chromium-graphics.desktop": "8619926e6f99f3a3f58478f125edb04a41e6984c8502078f32aa6d3c29df748f",
+    "scripts/build-brightness-slider.sh": "d9d5da04624d10d4ae0244717814db71dc3b4e216eeab05e95fbde37df7c27fd",
+    "scripts/build-chromium-graphics.sh": "6881c400a803c51e88cca950496f2db8f1217448bb611f19237561ea30edd2ad"
+  }
+}
