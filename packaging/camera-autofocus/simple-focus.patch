@@ -1,0 +1,296 @@
+--- a/include/libcamera/internal/camera_lens.h
++++ b/include/libcamera/internal/camera_lens.h
+@@ -28,6 +28,7 @@
+ 
+ 	int init();
+ 	int setFocusPosition(int32_t position);
++	void releaseFocus();
+ 
+ 	const std::string &model() const { return model_; }
+ 
+--- a/src/libcamera/camera_lens.cpp
++++ b/src/libcamera/camera_lens.cpp
+@@ -86,6 +86,12 @@
+  */
+ int CameraLens::setFocusPosition(int32_t position)
+ {
++	if (!subdev_->isOpen()) {
++		subdev_ = std::make_unique<V4L2Subdevice>(entity_);
++		int ret = subdev_->open();
++		if (ret < 0)
++			return ret;
++	}
+ 	ControlList lensCtrls(subdev_->controls());
+ 	lensCtrls.set(V4L2_CID_FOCUS_ABSOLUTE, static_cast<int32_t>(position));
+ 
+@@ -95,6 +101,14 @@
+ 	return 0;
+ }
+ 
++/**
++ * \brief Release a focus actuator held by a completed capture session
++ */
++void CameraLens::releaseFocus()
++{
++	subdev_->close();
++}
++
+ int CameraLens::validateLensDriver()
+ {
+ 	int ret = 0;
+--- a/src/libcamera/pipeline/simple/meson.build
++++ b/src/libcamera/pipeline/simple/meson.build
+@@ -2,4 +2,5 @@
+ 
+ libcamera_internal_sources += files([
+     'simple.cpp',
++    'contrast_scan.cpp',
+ ])
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -21,6 +21,8 @@
+ #include <utility>
+ #include <vector>
+ 
++#include <chrono>
++
+ #include <linux/media-bus-format.h>
+ 
+ #include <libcamera/base/log.h>
+@@ -28,18 +30,22 @@
+ #include <libcamera/camera.h>
+ #include <libcamera/color_space.h>
+ #include <libcamera/control_ids.h>
++#include <libcamera/formats.h>
+ #include <libcamera/geometry.h>
+ #include <libcamera/pixel_format.h>
+ #include <libcamera/stream.h>
+ 
+ #include "libcamera/internal/camera.h"
+ #include "libcamera/internal/camera_manager.h"
++#include "libcamera/internal/camera_lens.h"
+ #include "libcamera/internal/camera_sensor.h"
+ #include "libcamera/internal/camera_sensor_properties.h"
+ #include "libcamera/internal/converter.h"
+ #include "libcamera/internal/delayed_controls.h"
+ #include "libcamera/internal/device_enumerator.h"
+ #include "libcamera/internal/formats.h"
++#include "libcamera/internal/dma_buf_allocator.h"
++#include "libcamera/internal/mapped_framebuffer.h"
+ #include "libcamera/internal/global_configuration.h"
+ #include "libcamera/internal/media_device.h"
+ #include "libcamera/internal/pipeline_handler.h"
+@@ -48,6 +54,8 @@
+ #include "libcamera/internal/v4l2_subdevice.h"
+ #include "libcamera/internal/v4l2_videodevice.h"
+ 
++#include "contrast_scan.h"
++
+ namespace libcamera {
+ 
+ LOG_DEFINE_CATEGORY(SimplePipeline)
+@@ -292,6 +300,17 @@
+ 			 Transform transform = Transform::Identity);
+ 	void imageBufferReady(FrameBuffer *buffer);
+ 	void clearIncompleteRequests();
++	void setFocusControls(bool available);
++	void focusOutput(Request *request, FrameBuffer *buffer);
++	void resetFocus();
++	CameraLens *focusLens_ = nullptr;
++	Stream *focusStream_ = nullptr;
++	ContrastScan focus_;
++	int focusMin_ = 0;
++	int focusMax_ = 0;
++	unsigned int focusPixelBytes_ = 0;
++	bool focusRunning_ = false;
++	bool focusTouched_ = false;
+ 
+ 	unsigned int streamIndex(const Stream *stream) const
+ 	{
+@@ -629,6 +648,26 @@
+ 		}
+ 	}
+ 
++	/* Only the matched board graph supplies an EEPROM-calibrated DAC range. */
++	if (swIsp_) {
++		CameraLens *lens = sensor_->focusLens();
++		if (lens) {
++			auto it = lens->controls().find(V4L2_CID_FOCUS_ABSOLUTE);
++			if (it != lens->controls().end() && it->second.min().type() == ControlTypeInteger32 &&
++			    it->second.max().type() == ControlTypeInteger32) {
++				focusMin_ = it->second.min().get<int32_t>();
++				focusMax_ = it->second.max().get<int32_t>();
++				if (ContrastScan::supportsLens(sensor_->id(), sensor_->model(), lens->model(),
++							       focusMin_, focusMax_)) {
++					focusLens_ = lens;
++					/* An enumerating CameraManager must not pin another session's powered actuator. */
++					lens->releaseFocus();
++					setFocusControls(true);
++				}
++			}
++		}
++	}
++
+ 	video_ = pipe->video(entities_.back().entity);
+ 	ASSERT(video_);
+ 
+@@ -893,6 +932,7 @@
+ 		if (!useConversion_ || rawStream_) {
+ 			/* No conversion, just complete the request. */
+ 			Request *request = buffer->request();
++			focusOutput(request, nullptr);
+ 			pipe->completeBuffer(request, buffer);
+ 			SimpleFrameInfo *info = frameInfo_.find(request->sequence());
+ 			if (info)
+@@ -913,6 +953,7 @@
+ 			return;
+ 
+ 		const RequestOutputs &outputs = conversionQueue_.front();
++		focusOutput(outputs.request, nullptr);
+ 		for (auto &[stream, buf] : outputs.outputs)
+ 			pipe->completeBuffer(outputs.request, buf);
+ 		SimpleFrameInfo *info = frameInfo_.find(outputs.request->sequence());
+@@ -1019,9 +1060,90 @@
+ 	}
+ }
+ 
++void SimpleCameraData::setFocusControls(bool available)
++{
++	if (!focusLens_ || !!controlInfo_.count(controls::AfMode.id()) == available)
++		return;
++	ControlInfoMap::Map map(controlInfo_.begin(), controlInfo_.end());
++	if (available) {
++		const std::array<ControlValue, 2> modes = {
++			static_cast<int32_t>(controls::AfModeManual), static_cast<int32_t>(controls::AfModeAuto)
++		};
++		map.emplace(&controls::AfMode, ControlInfo(modes));
++		map.emplace(&controls::AfTrigger, ControlInfo(controls::AfTriggerValues));
++		map.emplace(&controls::AfState, ControlInfo(controls::AfStateValues));
++	} else {
++		map.erase(&controls::AfMode);
++		map.erase(&controls::AfTrigger);
++		map.erase(&controls::AfState);
++	}
++	controlInfo_ = ControlInfoMap(std::move(map), controls::controls);
++}
++
++void SimpleCameraData::resetFocus()
++{
++	focusRunning_ = false;
++	focus_.reset(focusMin_, focusMax_);
++	if (focusTouched_) {
++		focusLens_->releaseFocus();
++		focusTouched_ = false;
++	}
++}
++
++void SimpleCameraData::focusOutput(Request *request, FrameBuffer *buffer)
++{
++	if (!focusRunning_ || !request || !request->findBuffer(focusStream_) ||
++	    (buffer && request->findBuffer(focusStream_) != buffer))
++		return;
++	const ControlList &ctrls = request->controls();
++	std::optional<bool> automatic;
++	if (auto mode = ctrls.get(controls::AfMode))
++		automatic = *mode == controls::AfModeAuto;
++	auto action = ContrastScan::Trigger::None;
++	if (auto value = ctrls.get(controls::AfTrigger)) {
++		if (*value == controls::AfTriggerStart)
++			action = ContrastScan::Trigger::Start;
++		else if (*value == controls::AfTriggerCancel)
++			action = ContrastScan::Trigger::Cancel;
++	}
++	focus_.request(automatic, action);
++	const uint64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
++		std::chrono::steady_clock::now().time_since_epoch()).count();
++	const bool valid = buffer && buffer->metadata().status == FrameMetadata::FrameSuccess;
++	if (!valid) {
++		/* A failed RGB frame may not produce IPA statistics. */
++		if (auto *info = frameInfo_.find(request->sequence()))
++			info->metadataRequired = false;
++	}
++	auto state = !valid ? focus_.failedFrame() : focus_.frame(now, buffer->metadata().timestamp, [this](int position) {
++		focusTouched_ = true;
++		return focusLens_->setFocusPosition(position) == 0;
++	}, [this, buffer]() -> std::optional<double> {
++		if (buffer->planes().size() != 1 || buffer->metadata().planes().size() != 1)
++			return {};
++		DmaSyncer sync(buffer->planes()[0].fd, DmaSyncer::SyncType::Read);
++		MappedFrameBuffer mapped(buffer, MappedFrameBuffer::MapFlag::Read);
++		if (!mapped.isValid() || mapped.planes().size() != 1)
++			return {};
++		const auto plane = mapped.planes()[0];
++		const auto &cfg = focusStream_->configuration();
++		return ContrastScan::contrast(plane.data(), std::min<size_t>(plane.size(), buffer->metadata().planes()[0].bytesused),
++					      cfg.size.width, cfg.size.height, cfg.stride, focusPixelBytes_);
++	});
++	int32_t afState = controls::AfStateIdle;
++	switch (state) {
++	case ContrastScan::State::Idle: break;
++	case ContrastScan::State::Scanning: afState = controls::AfStateScanning; break;
++	case ContrastScan::State::Focused: afState = controls::AfStateFocused; break;
++	case ContrastScan::State::Failed: afState = controls::AfStateFailed; break;
++	}
++	request->_d()->metadata().set(controls::AfState, afState);
++}
++
+ void SimpleCameraData::conversionOutputDone(FrameBuffer *buffer)
+ {
+ 	SimplePipelineHandler *pipe = SimpleCameraData::pipe();
++	focusOutput(buffer->request(), buffer);
+ 
+ 	/* Complete the buffer and the request. */
+ 	Request *request = buffer->request();
+@@ -1596,6 +1718,8 @@
+ 			data->rawStream_ = &data->streams_[i];
+ 	}
+ 
++	data->focusStream_ = nullptr;
++	data->setFocusControls(false);
+ 	if (outputCfgs.empty())
+ 		return 0;
+ 
+@@ -1610,7 +1734,25 @@
+ 	} else {
+ 		ipa::soft::IPAConfigInfo configInfo;
+ 		configInfo.sensorControls = data->sensor_->controls();
+-		return data->swIsp_->configure(inputCfg, outputCfgs, configInfo);
++		ret = data->swIsp_->configure(inputCfg, outputCfgs, configInfo);
++		if (ret || !data->focusLens_)
++			return ret;
++		for (const StreamConfiguration &cfg : outputCfgs) {
++			const PixelFormat &fmt = cfg.pixelFormat;
++			if (fmt == formats::RGB888 || fmt == formats::BGR888)
++				data->focusPixelBytes_ = 3;
++			else if (fmt == formats::XRGB8888 || fmt == formats::ARGB8888 ||
++				 fmt == formats::XBGR8888 || fmt == formats::ABGR8888)
++				data->focusPixelBytes_ = 4;
++			else
++				continue;
++			if (cfg.size.width < 16 || cfg.size.height < 16)
++				continue;
++			data->focusStream_ = cfg.stream();
++			data->setFocusControls(true);
++			break;
++		}
++		return 0;
+ 	}
+ }
+ 
+@@ -1639,6 +1781,8 @@
+ 	V4L2Subdevice *frameStartEmitter = data->frameStartEmitter_;
+ 	int ret;
+ 
++	data->focus_.reset(data->focusMin_, data->focusMax_);
++	data->focusRunning_ = data->focusStream_ != nullptr;
+ 	const MediaPad *pad = acquirePipeline(data);
+ 	if (pad) {
+ 		LOG(SimplePipeline, Info)
+@@ -1714,6 +1858,7 @@
+ 	V4L2VideoDevice *video = data->video_;
+ 	V4L2Subdevice *frameStartEmitter = data->frameStartEmitter_;
+ 
++	data->resetFocus();
+ 	if (frameStartEmitter) {
+ 		frameStartEmitter->setFrameStartEnabled(false);
+ 		frameStartEmitter->frameStart.disconnect(data->delayedCtrls_.get(),
