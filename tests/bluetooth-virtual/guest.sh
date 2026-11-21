@@ -6,6 +6,9 @@ grep -zFxq 'linux,dummy-virt' /proc/device-tree/compatible
 [[ $(uname -m) == aarch64 && -z $(ls -A /sys/class/bluetooth 2>/dev/null) ]]
 cd /opt/y700-virtual-hid
 if grep -qw y700.blueman_pair=1 /proc/cmdline; then export Y700_BLUEMAN_PAIR=1; fi
+if grep -qw y700.blueman_keyboard=1 /proc/cmdline; then
+    trap 'echo "KEYBOARD_FIXTURE_ERROR line=$LINENO"' ERR
+fi
 if grep -qw y700.windows_report=1 /proc/cmdline; then export Y700_WINDOWS_REPORT=1; fi
 if grep -qw y700.virtual_typing=1 /proc/cmdline; then
     export Y700_BT_TYPING=1
@@ -35,6 +38,11 @@ cleanup() {
         for event in 'Default agent set' 'Calling Agent.RequestConfirmation' 'Calling Agent.RequestAuthorization' 'Calling Agent.RequestPasskey'; do
             echo "BLUEZ_AGENT_STAGE $event count=$(grep -Fc "$event" /run/bluez.log || :)"
         done
+        if [[ -r /run/cold-bond/agent-methods ]]; then
+            for method in DisplayPasskey RequestPasskey RequestConfirmation; do
+                echo "KEYBOARD_AGENT_STAGE $method count=$(grep -cw "$method" /run/cold-bond/agent-methods || :)"
+            done
+        fi
         if [[ -s /run/cold-bond/trace ]]; then
             btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
             grep -E 'SMP: (Pairing (Request|Response|DHKey Check|Failed)|Security Request)|IO capability:|Authentication requirement:|@ MGMT Event: User Confirmation Request' /run/cold-bond/decoded | sort -u || :
@@ -137,10 +145,25 @@ if [[ ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then
         fi
         sleep .2
     done) & pids+=("$!")
+    if grep -qw y700.blueman_keyboard=1 /proc/cmdline; then
+        grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
+        printf '%s  /sys/kernel/notes\n' c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063 | sha256sum -c -
+        mkdir -p /dev/pts
+        mount -t devpts -o mode=620,gid=5 devpts /dev/pts
+        # Profile mode records method headers only, never the displayed number.
+        stdbuf -oL dbus-monitor --system --profile "type='method_call',interface='org.bluez.Agent1'" \
+            >/run/cold-bond/agent-methods 2>/dev/null & pids+=($!)
+    fi
     timeout -k 3 145 runuser -u y700 -- dbus-run-session -- bash ./numeric-session.sh
     kill -INT "$monitor"
     wait "$monitor"
     btmon -r /run/cold-bond/trace > /run/cold-bond/decoded
+    if grep -qw y700.blueman_keyboard=1 /proc/cmdline; then
+        ./uv run --offline --no-project --python /usr/bin/python3 python -B keyboard-trace.py
+        ./uv run --offline --no-project --python /usr/bin/python3 python -B numeric-trace.py --two-connections
+        echo Y700_BLUEMAN_KEYBOARD_PASS
+        exit 0
+    fi
     for agent in /org/bluez/agent/blueman /org/y700/test/peer; do
         [[ $(grep -c "Calling Agent.RequestConfirmation: .*path=$agent," /run/bluez.log) == 1 ]]
     done

@@ -11,4 +11,6 @@ trap 'kill "$settings" 2>/dev/null || :' EXIT
 timeout 18 gdbus wait --session org.xfce.SettingsDaemon
 [[ $(dpkg-query -W -f='${Version}' blueman) == 2.4.4-1+y7002 ]]
 grep -Fxq Exec=blueman-applet /etc/xdg/autostart/blueman.desktop
-./uv run --offline --no-project --python /usr/bin/python3 python -B numeric-link.py
+observer=numeric-link.py
+if grep -qw y700.blueman_keyboard=1 /proc/cmdline; then observer=keyboard-link.py; fi
+./uv run --offline --no-project --python /usr/bin/python3 python -B "$observer"

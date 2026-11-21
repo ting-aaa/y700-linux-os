@@ -2,7 +2,7 @@
 # Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report|--blueman]' >&2
+    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report|--blueman|--blueman-keyboard]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -15,14 +15,22 @@ marker=Y700_VIRTUAL_HOG_PASS
 extra_cmdline=
 shutdown_case=
 variant=${7:-}
+image=$kernel/arch/arm64/boot/Image
 greeter=${Y700_BT_GREETER:-0}
 [[ $greeter == 0 || ( $greeter == 1 && $variant == --cold-classic ) ]] || exit 2
 if (( $# == 7 )); then
     case "$7" in
         --classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS ;;
-        --blueman)
+        --blueman|--blueman-keyboard)
             [[ -n ${XORG_DUMMY_DEB:-} && ${Y700_BT_TYPING:-0} == 0 ]] || exit 2
-            extra_cmdline=y700.blueman_pair=1; marker=Y700_BLUEMAN_HOG_PASS ;;
+            extra_cmdline=y700.blueman_pair=1; marker=Y700_BLUEMAN_HOG_PASS
+            if [[ $7 == --blueman-keyboard ]]; then
+                [[ ${Y700_BT_ROOT_FORMAT:-} == raw ]]
+                echo "5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3  $root" | sha256sum --strict -c -
+                image=$(realpath -e "${Y700_BT_RELEASE_KERNEL:?dev12.12 kernel.efi}")
+                printf '%s  %s\n' 0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60 "$image" | sha256sum -c -
+                extra_cmdline+=" y700.blueman_keyboard=1"; marker=Y700_BLUEMAN_KEYBOARD_PASS
+            fi ;;
         --windows-report)
             [[ -n ${XORG_DUMMY_DEB:-} && -n ${Y700_WINDOWS_REPORT_DIR:-} && ${Y700_BT_TYPING:-0} == 0 ]] || exit 2
             extra_cmdline=y700.windows_report=1; marker=Y700_WINDOWS_REPORT_PASS
@@ -74,8 +82,11 @@ if [[ $variant == --windows-report ]]; then
     cp "$Y700_WINDOWS_REPORT_DIR/"{report-map.bin,motion.bin} "$work/init/test/"
     cp "$fixture/../windows-ble-hid/"{verify-report.py,capture-input.py} "$work/init/test/"
 fi
-if [[ $variant == --blueman ]]; then
+if [[ $variant == --blueman* ]]; then
     cp "$fixture/../blueman-pairing/"{probe.py,numeric-link.py,numeric-session.sh,numeric-trace.py} "$work/init/test/"
+    if [[ $variant == --blueman-keyboard ]]; then
+        cp "$fixture/../blueman-pairing/"{keyboard-link.py,keyboard-trace.py} "$work/init/test/"
+    fi
 fi
 install -m755 "$busybox" "$work/init/bin/busybox"
 install -m755 "$uv" "$work/init/test/uv"
@@ -131,12 +142,12 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
 fi
 boot() {
     local ram=680 bound=190
-    if [[ $variant == --blueman ]]; then ram=1024; bound=260; fi
+    if [[ $variant == --blueman* ]]; then ram=1024; bound=260; fi
     if [[ $extra_cmdline == *y700.virtual_greeter=1* ]]; then ram=1400; bound=350; fi
     timeout -k 4 "$bound" "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
     -machine virt,gic-version=3 -cpu max -m "$ram" -smp 2 -nodefaults -no-user-config \
     -display none -monitor none -serial stdio -nic none -no-reboot \
-    -kernel "$kernel/arch/arm64/boot/Image" -initrd "$work/initrd" \
+    -kernel "$image" -initrd "$work/initrd" \
     -append "console=ttyAMA0 loglevel=4 y700.virtual_hid=1 $extra_cmdline panic=4" \
     -drive "if=none,id=root,format=$root_format,readonly=on,file=$root" -device virtio-blk-device,drive=root \
     "${state_disk[@]}" \
@@ -167,6 +178,10 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
     exit 0
 fi
 if [[ -n ${XORG_DUMMY_DEB:-} ]]; then
+    if [[ $variant == --blueman-keyboard ]]; then
+        [[ $(grep -Fxc Y700_GTK_HID_INPUT_PASS "$work/run.log") == 2 ]]
+        exit 0
+    fi
     if [[ $variant == --blueman ]]; then
         grep -Fxq Y700_GTK_HID_INPUT_PASS "$work/run.log"
         extra_cmdline+=" y700.blueman_deny=1"

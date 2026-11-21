@@ -58,7 +58,7 @@ def tap(button, dialog):
     assert Atspi.generate_mouse_event(px, py, "b1c")
 
 
-def run(bus, applet):
+def desktop_and_accessory(bus, applet):
     assert Gdk.Display.get_default().get_monitor(0).get_scale_factor() == 2
     session = Gio.bus_get_sync(Gio.BusType.SESSION)
     def is_registered():
@@ -80,7 +80,11 @@ def run(bus, applet):
     discover(bus, peer_adapter, lambda: props(bus, peer_device, DEVICE)["Address"] == desktop_address)
     assert not props(bus, peer_device, DEVICE)["Paired"] and not props(bus, peer_device, DEVICE)["Connected"]
     print("VIRTUAL_DESKTOP_DISCOVERED unbonded=1", flush=True)
+    return desktop_device, peer_device, peer_address
 
+
+def run(bus, applet):
+    desktop_device, peer_device, peer_address = desktop_and_accessory(bus, applet)
     pending, outcome = {}, {}
     owner = probe.owner(bus, BLUEZ)
     def remote_agent(conn, sender, path, interface, member, arguments, invocation):
@@ -135,13 +139,20 @@ def run(bus, applet):
     assert outcome == {"success": True}, outcome
     assert all(props(bus, path, DEVICE)["Bonded"] for path in (desktop_device, peer_device))
     print("BLUEMAN_NUMERIC_MATCH six_digits=1 clicked=confirm bonded_on_both=1", flush=True)
+    reconnect_and_test_input(bus, desktop_device, peer_address)
+
+
+def reconnect_and_test_input(bus, desktop_device, peer_address, require_unsubscribed=True):
     # The accessory initiated this link. Reconnect from the desktop for HoG.
     if props(bus, desktop_device, DEVICE)["Connected"]:
         dbus_call(bus, desktop_device, DEVICE, "Disconnect")
         probe.await_value(lambda: not props(bus, desktop_device, DEVICE)["Connected"], "link-not-disconnected")
-    probe.await_value(lambda: not list(inputs_for(peer_address)) and not control(b"ready"), "old-reports-still-active")
+    assert not props(bus, desktop_device, DEVICE)["Connected"] and props(bus, desktop_device, DEVICE)["Bonded"]
+    if require_unsubscribed:
+        probe.await_value(lambda: not list(inputs_for(peer_address)) and not control(b"ready"), "old-reports-still-active")
     control(b"advertise")
-    discover(bus, desktop_adapter, accessory_seen)
+    discover(bus, desktop_device.rsplit("/", 1)[0],
+             lambda: HID in props(bus, desktop_device, DEVICE).get("UUIDs", []))
     dbus_call(bus, desktop_device, DEVICE, "Connect")
     probe.await_value(lambda: props(bus, desktop_device, DEVICE)["ServicesResolved"], "hid-service-not-resolved", 20)
     probe.await_value(lambda: control(b"ready") and list(inputs_for(peer_address)), "hid-reports-unavailable", 20)
