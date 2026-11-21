@@ -103,7 +103,7 @@ class CameraWindow:
         print(f"QCAM_TAP {role} {name!r} x={x} y={y} "
               f"height={rect.height * self.scale}", flush=True)
 
-    def choose(self, requested, current=None):
+    def choose(self, requested, current=None, expected_first=None):
         if current:
             self.click(self.find(Atspi.Role.PUSH_BUTTON, current))
         chooser = self.find(Atspi.Role.COMBO_BOX)
@@ -113,6 +113,9 @@ class CameraWindow:
         # The address suffix matches the board's main camera but the full ID
         # does not. The chooser must leave the external camera name intact.
         self.find(Atspi.Role.LIST_ITEM, "/fixture/unknown/camera@20")
+        if expected_first:
+            first = self.find(Atspi.Role.LIST_ITEM, expected_first)
+            assert first.get_index_in_parent() == 0, (expected_first, first.get_index_in_parent())
         self.click(self.find(Atspi.Role.LIST_ITEM, requested))
         self.click(self.find(Atspi.Role.PUSH_BUTTON, self.accept))
         self.find(Atspi.Role.PUSH_BUTTON, requested)
@@ -182,7 +185,15 @@ def main(pid, version, app_locale):
     labels = {lens: data[int(modern)] for lens, data in CAMERAS.items()}
     if modern and chinese:
         labels = CHINESE_NAMES
-    if modern:
+    preselect = version.endswith(".y7007")
+    if preselect:
+        chooser = window.find(Atspi.Role.COMBO_BOX)
+        assert chooser.get_name() == labels["main"], chooser.get_name()
+        assert b"\nseq:" not in log.read_bytes()
+        window.click(window.find(Atspi.Role.PUSH_BUTTON, window.accept))
+        window.find(Atspi.Role.PUSH_BUTTON, labels["main"])
+        print("QCAM_STARTUP_CHOOSER main preselected and opened by OK", flush=True)
+    elif modern:
         window.choose(labels["main"])
         print("QCAM_STARTUP_CHOOSER main selected without --camera", flush=True)
     current = "main"
@@ -191,7 +202,7 @@ def main(pid, version, app_locale):
         ui_label = labels[lens]
         if current != lens:
             before = log.stat().st_size
-            window.choose(ui_label, labels[current])
+            window.choose(ui_label, labels[current], labels["macro"] if preselect else None)
             expected = f"Switching to camera {CAMERAS[lens][0]}".encode()
             wait_for(lambda: expected in log.read_bytes()[before:].replace(b'"', b""),
                      "backend switch to the requested camera")
@@ -199,7 +210,7 @@ def main(pid, version, app_locale):
             window.find(Atspi.Role.PUSH_BUTTON, ui_label)
         before = log.stat().st_size
         wait_for(lambda: log.read_bytes()[before:].count(b"\nseq:") >= 3, "three live frames")
-        if version.endswith((".y7005", ".y7006")):
+        if version.endswith((".y7005", ".y7006", ".y7007")):
             focus_label = "对焦" if chinese else "Focus"
             assert not any(node.get_role() == Atspi.Role.PUSH_BUTTON
                            and node.get_name() == focus_label

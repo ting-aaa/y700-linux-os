@@ -1,0 +1,28 @@
+--- a/src/apps/qcam/cam_select_dialog.cpp
++++ b/src/apps/qcam/cam_select_dialog.cpp
+@@ -23,6 +23,8 @@
+ #include <QString>
+ #include <QStyledItemDelegate>
+ 
++static constexpr QLatin1StringView kRearMainCameraId("/base/soc@0/cci@ac15000/i2c-bus@0/camera@20");
++
+ CameraSelectorDialog::CameraSelectorDialog(libcamera::CameraManager *cameraManager,
+ 					   QWidget *parent)
+ 	: QDialog(parent), cm_(cameraManager)
+@@ -36,6 +38,7 @@
+ 	cameraIdComboBox_->setItemDelegate(new QStyledItemDelegate(cameraIdComboBox_));
+ 	for (const auto &cam : cm_->cameras())
+ 		addCamera(QString::fromStdString(cam->id()));
++	selectCamera(kRearMainCameraId);
+ 
+ 	/* Set camera information labels. */
+ 	cameraLocation_ = new QLabel;
+@@ -89,7 +92,7 @@
+ QString CameraSelectorDialog::displayName(const QString &id)
+ {
+ 	const bool chinese = QLocale().language() == QLocale::Chinese;
+-	if (id == QStringLiteral("/base/soc@0/cci@ac15000/i2c-bus@0/camera@20"))
++	if (id == kRearMainCameraId)
+ 		return chinese ? QStringLiteral("后置主摄") : QStringLiteral("Rear main camera");
+ 	if (id == QStringLiteral("/base/soc@0/cci@ac15000/i2c-bus@1/camera@10"))
+ 		return chinese ? QStringLiteral("前置摄像头") : QStringLiteral("Front camera");

@@ -5,12 +5,15 @@ export LC_ALL=C
 umask 022
 
 component=runtime
-qcam_autofocus=false
-qcam_cancel_result=false
-if [[ ${1:-} == --qcam || ${1:-} == --qcam-autofocus || ${1:-} == --qcam-autofocus-result ]]; then
+qcam_revision=0
+case ${1:-} in
+    --qcam) qcam_revision=4 ;;
+    --qcam-autofocus) qcam_revision=5 ;;
+    --qcam-autofocus-result) qcam_revision=6 ;;
+    --qcam-rear-main) qcam_revision=7 ;;
+esac
+if (( qcam_revision )); then
     component=qcam
-    if [[ $1 != --qcam ]]; then qcam_autofocus=true; fi
-    if [[ $1 == --qcam-autofocus-result ]]; then qcam_cancel_result=true; fi
     shift
 fi
 autofocus=0
@@ -27,7 +30,7 @@ if [[ -n ${CAMERA_SDK_OUTPUT:-} ]]; then
     sdk_output=$(realpath -m -- "$CAMERA_SDK_OUTPUT")
 fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus|--qcam-autofocus-result] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
+    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus|--qcam-autofocus-result|--qcam-rear-main] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
@@ -81,12 +84,15 @@ tests=true
 if [[ $component == qcam ]]; then
     patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/tablet-photo.patch"
     patch -p1 --batch --forward -d source < "$repo/packaging/camera-qcam/lens-selector.patch"
-    if $qcam_autofocus; then
+    if (( qcam_revision >= 5 )); then
         patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/autofocus-ui.patch"
         cp "$repo/packaging/camera-qcam"/focus_button.{h,cpp} source/src/apps/qcam/
-        if $qcam_cancel_result; then
+        if (( qcam_revision >= 6 )); then
             patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/focus-cancel-result.patch"
         fi
+    fi
+    if (( qcam_revision >= 7 )); then
+        patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/preselect-rear-main.patch"
     fi
     export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795143600}
     export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
@@ -112,11 +118,9 @@ summary='Private libcamera runtime for the Lenovo TB320FC'
 details=$' Contains the simple pipeline, software ISP, cam and a GStreamer plugin.\n Programs and libraries in /opt/y700-camera require explicit selection.'
 if [[ $component == qcam ]]; then
     package=y700-camera-qcam
-    version=0.7.2-1~bpo13+1.y7004
+    version=0.7.2-1~bpo13+1.y700$qcam_revision
     extra_dependencies="$runtime_package (= $runtime_version), "
-    if $qcam_autofocus; then
-        version=0.7.2-1~bpo13+1.y7005
-        if $qcam_cancel_result; then version=0.7.2-1~bpo13+1.y7006; fi
+    if (( qcam_revision >= 5 )); then
         extra_dependencies="$runtime_package (= 0.7.2-1~bpo13+1.y7001) | $runtime_package (= 0.7.2-1~bpo13+1.y7002), "
     fi
     summary='Qt desktop camera app for the Lenovo TB320FC'
