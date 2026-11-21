@@ -181,7 +181,11 @@ def main(phase):
     wait("HOG_CONNECTED_AND_RESOLVED", resolved, 25)
     wait("REPORTS_SUBSCRIBED", lambda: control(b"ready"))
     wait("BT_EVDEV_CREATED " + IDS[1], lambda: list(inputs_for(IDS[1])))
-    verify_inputs(IDS[1], lambda: control(b"emit"))
+    if os.environ.get("Y700_LE_LOGIN") == "1" and phase == "resume":
+        import greeter_login
+        greeter_login.login(IDS[1])
+    else:
+        verify_inputs(IDS[1], lambda: control(b"emit"), lambda nonce: control(b"type:" + nonce.encode()))
     assert both_bonded() and stamp.read_bytes() == reciprocal_keys()
     if phase == "resume":
         print(reconnect + "_WITH_ORIGINAL_RECIPROCAL_KEYS")

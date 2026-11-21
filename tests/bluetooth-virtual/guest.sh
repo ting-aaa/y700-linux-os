@@ -25,6 +25,18 @@ if [[ -n $bond_phase ]]; then
     mount -t ext4 -o nodev,nosuid,noexec LABEL=Y700_BT_TEST /var/lib/bluetooth
     chmod 700 /var/lib/bluetooth
     echo "COLD_BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)"
+    if grep -qw y700.virtual_login=1 /proc/cmdline; then
+        grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
+        printf '%s  /sys/kernel/notes\n' c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063 | sha256sum -c -
+        secret=/var/lib/bluetooth/.qa-password
+        if [[ $bond_phase == seed ]]; then
+            (umask 077; od -An -N8 -tx1 /dev/urandom | tr -d ' \n' > "$secret")
+        fi
+        [[ $(stat -c %a "$secret") == 600 && $(wc -c < "$secret") == 16 ]]
+        printf 'y700:%s\n' "$(<"$secret")" | chpasswd
+        [[ $(/usr/libexec/y700-firstboot-drm/enroll --state) == active ]]
+        export Y700_LE_LOGIN=1
+    fi
 else
     mount -t tmpfs -o mode=700 tmpfs /var/lib/bluetooth
 fi
@@ -34,6 +46,10 @@ pids=()
 stage=kernel
 cleanup() {
     local rc=$?
+    if (( rc != 0 && greeter )) && [[ ${Y700_LE_LOGIN:-0} == 1 ]]; then
+        ps -u y700 -o comm= | sort -u | grep -E '^(xfce|xfwm|xfsettings|Thunar)' || :
+        grep -Ei 'screensaver|autostart|xfce4-session|xfwm4' /home/y700/.xsession-errors 2>/dev/null | tail -12 || :
+    fi
     if (( rc != 0 )) && [[ ${Y700_BLUEMAN_PAIR:-0} == 1 && -f /run/bluez.log ]]; then
         for event in 'Default agent set' 'Calling Agent.RequestConfirmation' 'Calling Agent.RequestAuthorization' 'Calling Agent.RequestPasskey'; do
             echo "BLUEZ_AGENT_STAGE $event count=$(grep -Fc "$event" /run/bluez.log || :)"
@@ -59,6 +75,7 @@ cleanup() {
         kill "${pids[i]}" 2>/dev/null || :
         wait "${pids[i]}" 2>/dev/null || :
     done
+    if [[ ${Y700_LE_LOGIN:-0} == 1 && $greeter == 1 ]]; then systemctl stop bluetooth; fi
     if [[ -n $bond_phase ]]; then sync; umount /var/lib/bluetooth; fi
     if (( greeter )); then
         if (( rc != 0 )); then echo "GREETER_FIXTURE_ERROR line-or-stage=$stage"; fi
@@ -68,6 +85,7 @@ cleanup() {
 trap cleanup EXIT
 wait_for() {
     local end=$((SECONDS+15))
+    if (( greeter )) && [[ ${Y700_LE_LOGIN:-0} == 1 ]]; then end=$((SECONDS+45)); fi
     until "$@"; do ((SECONDS < end)) || return 1; sleep .15; done
 }
 adapter_boolean() {
@@ -110,7 +128,13 @@ done
 echo "Guest kernel $(uname -r), BlueZ $(/usr/libexec/bluetooth/bluetoothd --version)"
 options=()
 if ((${#mode[@]})); then options+=(--compat); fi
-/usr/libexec/bluetooth/bluetoothd --nodetach --debug "${options[@]}" >/run/bluez.log 2>&1 & pids+=($!)
+if [[ ${Y700_LE_LOGIN:-0} == 1 && $greeter == 1 ]]; then
+    systemctl start bluetooth
+    systemctl is-active --quiet bluetooth
+    echo LE_LOGIN_BLUEZ_STOCK_SERVICE_ACTIVE
+else
+    /usr/libexec/bluetooth/bluetoothd --nodetach --debug "${options[@]}" >/run/bluez.log 2>&1 & pids+=($!)
+fi
 for controller in hci0 hci1; do
     path=/org/bluez/$controller
     wait_for busctl --system --no-pager get-property org.bluez "$path" org.bluez.Adapter1 Address 2>/dev/null
@@ -128,6 +152,7 @@ if ((${#mode[@]})); then
     busctl --system set-property org.bluez /org/bluez/hci1 org.bluez.Adapter1 Discoverable b true
 fi
 if [[ $bond_phase == resume ]]; then mode+=(resume); fi
+stage=peer
 ./uv run --offline --no-project --python /usr/bin/python3 python -B peer.py "${mode[@]}" >/run/peer.log 2>&1 & pids+=($!)
 wait_for grep -q '^PEER_READY$' /run/peer.log
 if [[ ${Y700_BLUEMAN_PAIR:-0} == 1 ]]; then
@@ -188,7 +213,9 @@ if (( greeter )); then
     stage=greeter-input
 fi
 if [[ -n $bond_phase ]]; then
-    timeout -k 3 150 ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "$bond_phase"
+    deadline=150
+    if [[ ${Y700_LE_LOGIN:-0} == 1 && $greeter == 1 ]]; then deadline=360; fi
+    timeout -k 3 "$deadline" ./uv run --offline --no-project --python /usr/bin/python3 python -B cold-boot.py "$bond_phase"
     kill -INT "$monitor"
     wait "$monitor"
     if grep -qw y700.virtual_classic=1 /proc/cmdline; then

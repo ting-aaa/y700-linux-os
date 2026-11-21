@@ -2,7 +2,7 @@
 # Isolated ARM VM with a read-only product root.
 set -euo pipefail
 if (( $# < 6 || $# > 7 )); then
-    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-reboot|--cold-reboot-linked|--windows-report|--blueman|--blueman-keyboard]' >&2
+    echo 'Usage: run-qemu.sh ROOT Y700_KERNEL_BUILD BUSYBOX_ARM64 UV_ARM64 BLUEZ_5.82_SRC BTVIRT_ARM64 [--classic|--cold-classic|--cold-le-login|--cold-reboot|--cold-reboot-linked|--windows-report|--blueman|--blueman-keyboard]' >&2
     exit 2
 fi
 root=$(realpath -e "$1")
@@ -17,7 +17,13 @@ shutdown_case=
 variant=${7:-}
 image=$kernel/arch/arm64/boot/Image
 greeter=${Y700_BT_GREETER:-0}
-[[ $greeter == 0 || ( $greeter == 1 && $variant == --cold-classic ) ]] || exit 2
+login=0
+if [[ $variant == --cold-le-login ]]; then
+    login=1; greeter=1; export Y700_BT_TYPING=1
+    image=$(realpath -e "${Y700_BT_RELEASE_KERNEL:?dev12.12 kernel.efi}")
+    printf '%s  %s\n' 0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60 "$image" | sha256sum -c -
+fi
+[[ $greeter == 0 || ( $greeter == 1 && ( $variant == --cold-classic || $login == 1 ) ) ]] || exit 2
 if (( $# == 7 )); then
     case "$7" in
         --classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_VIRTUAL_CLASSIC_INPUT_PASS ;;
@@ -37,6 +43,7 @@ if (( $# == 7 )); then
             if [[ ${Y700_EXPECT_LEGACY_MOUSE:-0} == 1 ]]; then extra_cmdline+=" y700.legacy_mouse=1"; fi ;;
         --cold-classic) extra_cmdline=y700.virtual_classic=1; marker=Y700_COLD_SEED_PASS ;;
         --cold-reboot) marker=Y700_COLD_SEED_PASS ;;
+        --cold-le-login) marker=Y700_COLD_SEED_PASS; extra_cmdline=y700.virtual_login=1 ;;
         --cold-reboot-linked) marker=Y700_COLD_SEED_PASS; shutdown_case=y700.virtual_linked_shutdown=1 ;;
         *) exit 2 ;;
     esac
@@ -44,7 +51,7 @@ fi
 root_format=${Y700_BT_ROOT_FORMAT:-qcow2}
 case $root_format in qcow2|raw) ;; *) echo 'Unsupported root format' >&2; exit 2 ;; esac
 if [[ ${Y700_BT_TYPING:-0} == 1 ]]; then
-    [[ -n ${XORG_DUMMY_DEB:-} && ( $marker != Y700_COLD_SEED_PASS || ${7:-} == --cold-classic ) ]] || {
+    [[ -n ${XORG_DUMMY_DEB:-} && ( $marker != Y700_COLD_SEED_PASS || ${7:-} == --cold-classic || $login == 1 ) ]] || {
         echo 'Typing requires XORG_DUMMY_DEB and a supported text profile' >&2; exit 2;
     }
     extra_cmdline+=" y700.virtual_typing=1"
@@ -71,6 +78,7 @@ fi
 if [[ $greeter == 1 ]]; then
     cp "$fixture/"{greeter.py,greeter-seat.sh,greeter.service} "$work/init/test/"
 fi
+if (( login )); then cp "$fixture/greeter_login.py" "$work/init/test/"; fi
 cp "$kernel/drivers/bluetooth/hci_vhci.c" "$work/module/"
 echo 'obj-m += hci_vhci.o' > "$work/module/Makefile"
 make -s -C "$kernel" M="$work/module" ARCH=arm64 LLVM="${LLVM:--21}" modules
@@ -112,7 +120,12 @@ mkdir -p /guest/opt/y700-virtual-hid
 if grep -qw y700.virtual_greeter=1 /proc/cmdline; then
     cp -a /test/. /guest/opt/y700-virtual-hid/
     cp /test/greeter.service /guest/etc/systemd/system/y700-hid-greeter.service
-    ln -sf /dev/null /guest/etc/systemd/system/bluetooth.service
+    if ! grep -qw y700.virtual_login=1 /proc/cmdline; then
+        ln -sf /dev/null /guest/etc/systemd/system/bluetooth.service
+    else
+        mkdir -p /guest/etc/systemd/system/y700-hid-greeter.service.d
+        printf '[Service]\nTimeoutStartSec=420\n' > /guest/etc/systemd/system/y700-hid-greeter.service.d/timeout.conf
+    fi
     exec switch_root /guest /sbin/init
 fi
 mount --bind /test /guest/opt/y700-virtual-hid
@@ -132,6 +145,10 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
         [[ $root_format == raw && ${Y700_BT_TYPING:-0} == 1 ]]
         root_sum=dd885eb7bc88e3fb87b0567ff7f382afbe079363910d6f0fd5b4bb41935e220a
     fi
+    if (( login )); then
+        [[ $root_format == raw ]]
+        root_sum=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
+    fi
     printf '%s  %s\n' "$root_sum" "$root" | sha256sum -c -
     install -m600 /dev/null "$work/bonds.ext4"
     truncate -s 16M "$work/bonds.ext4"
@@ -141,11 +158,12 @@ if [[ $marker == Y700_COLD_SEED_PASS ]]; then
     extra_cmdline="y700.virtual_bond=seed $bond_cmdline"
 fi
 boot() {
-    local ram=680 bound=190
+    local ram=680 bound=190 cpus=2
     if [[ $variant == --blueman* ]]; then ram=1024; bound=260; fi
     if [[ $extra_cmdline == *y700.virtual_greeter=1* ]]; then ram=1400; bound=350; fi
+    if [[ $extra_cmdline == *y700.virtual_greeter=1* && $login == 1 ]]; then ram=2304; cpus=4; bound=460; fi
     timeout -k 4 "$bound" "${QEMU_SYSTEM_AARCH64:-qemu-system-aarch64}" "${args[@]}" \
-    -machine virt,gic-version=3 -cpu max -m "$ram" -smp 2 -nodefaults -no-user-config \
+    -machine virt,gic-version=3 -cpu max -m "$ram" -smp "$cpus" -nodefaults -no-user-config \
     -display none -monitor none -serial stdio -nic none -no-reboot \
     -kernel "$image" -initrd "$work/initrd" \
     -append "console=ttyAMA0 loglevel=4 y700.virtual_hid=1 $extra_cmdline panic=4" \
@@ -154,6 +172,12 @@ boot() {
     </dev/null 2>&1 | tr -d '\r' | tee "$work/run.log"
     grep -Fxq "$marker" "$work/run.log"
     grep -Fxq Y700_VIRTUAL_HID_EXIT=0 "$work/run.log"
+    if [[ $login == 1 && $extra_cmdline == *y700.virtual_greeter=1* ]]; then
+        for evidence in LE_LOGIN_BLUEZ_STOCK_SERVICE_ACTIVE Y700_LE_PAM_XFCE_PASS Y700_LE_SAME_SESSION_UNLOCK_PASS \
+                        AUTOMATIC_WITH_ORIGINAL_RECIPROCAL_KEYS 'HCI_AES_CCM_VERIFIED pairing_exchange=no'; do
+            grep -Fxq "$evidence" "$work/run.log"
+        done
+    fi
     if [[ $variant == --cold-classic ]]; then
         if [[ $extra_cmdline == *y700.virtual_greeter=1* ]]; then
             grep -Fxq Y700_ARCTICA_BONDED_USERNAME_PASS "$work/run.log"

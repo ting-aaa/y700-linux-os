@@ -23,5 +23,9 @@ systemctl is-active --quiet lightdm
 session=$(loginctl show-seat seat0 -p ActiveSession --value)
 [[ $(loginctl show-session "$session" -p Class --value) == greeter ]]
 [[ $(loginctl show-session "$session" -p Type --value) == x11 ]]
-echo "CLASSIC_RECONNECT_SEAT lightdm=active greeter=arctica class=greeter seat=seat0 type=x11"
+if [[ ${Y700_LE_LOGIN:-0} == 1 ]]; then
+    echo "LE_RECONNECT_SEAT lightdm=active greeter=arctica class=greeter seat=seat0 type=x11"
+else
+    echo "CLASSIC_RECONNECT_SEAT lightdm=active greeter=arctica class=greeter seat=seat0 type=x11"
+fi
 export Y700_BT_GREETER=1

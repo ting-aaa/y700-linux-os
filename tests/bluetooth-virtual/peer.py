@@ -99,6 +99,11 @@ class HidApplication(gatt.Application):
                 else:
                     self.mouse.send([1, 7, 253, 1])
                     self.mouse.send([0, 0, 0, 0])
+            if os.environ.get("Y700_LE_LOGIN") == "1" and ready and command.startswith(b"login-"):
+                from greeter_login import credential_reports
+                for report in credential_reports(command):
+                    self.key.send(report)
+                    time.sleep(.025)
             if command.startswith(b"type:") and ready:
                 for report in keyboard.typing_reports(command[5:].decode("ascii")):
                     self.key.send(report)

@@ -9,22 +9,24 @@ import tempfile
 import time
 
 
+def greeter_environment():
+    names = subprocess.run(["pgrep", "-u", "lightdm", "-x", "arctica-greeter"],
+                           capture_output=True, text=True).stdout.split()
+    for pid in names:
+        try:
+            rows = Path(f"/proc/{pid}/environ").read_text().split("\0")
+        except FileNotFoundError:
+            continue
+        env = dict(row.split("=", 1) for row in rows if "=" in row)
+        if "DISPLAY" in env and "DBUS_SESSION_BUS_ADDRESS" in env:
+            return env
+
+
 @contextmanager
 def observer(address, nonce):
     from central import wait
 
     account = pwd.getpwnam("lightdm")
-    def greeter_environment():
-        names = subprocess.run(["pgrep", "-u", "lightdm", "-x", "arctica-greeter"],
-                               capture_output=True, text=True).stdout.split()
-        for pid in names:
-            try:
-                rows = Path(f"/proc/{pid}/environ").read_text().split("\0")
-            except FileNotFoundError:
-                continue
-            env = dict(row.split("=", 1) for row in rows if "=" in row)
-            if "DISPLAY" in env and "DBUS_SESSION_BUS_ADDRESS" in env:
-                return env
     env = wait("ARCTICA_SESSION_BUS_AVAILABLE", greeter_environment)
     args = [k + "=" + env[k] for k in ("DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "XAUTHORITY") if k in env]
     with tempfile.TemporaryDirectory(prefix="classic-greeter-", dir="/run") as temp:
