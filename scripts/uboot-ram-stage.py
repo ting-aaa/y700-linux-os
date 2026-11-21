@@ -367,11 +367,14 @@ def loady(port, addr, blob):
 
 
 def esp_partition(port, expected_uuid):
-    # Use the board's normal pre-scanned UFS LUNs and partition label. Never
-    # mount a filesystem, enumerate files, or use paths supplied by the host.
+    return labelled_partition(port, expected_uuid, "linux-boot")
+
+
+def labelled_partition(port, expected_uuid, label):
+    need(label in ("linux-boot", "linux"), "Unexpected partition label")
     matches = []
     for lun in range(8):
-        numbers = re.findall(r"^0x([0-9a-fA-F]{1,2})$", command(port, f"part number scsi {lun} linux-boot"), re.M)
+        numbers = re.findall(r"^0x([0-9a-fA-F]{1,2})$", command(port, f"part number scsi {lun} {label}"), re.M)
         if len(numbers) == 1 and int(numbers[0], 16) > 0:
             target = f"{lun}:{int(numbers[0], 16):x}"
             ids = re.findall(r"^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$",
@@ -382,10 +385,15 @@ def esp_partition(port, expected_uuid):
 
 
 def esp_read(port, target, path, addr, blob, allow_trailing_bytes=False):
+    return verified_file_read(port, target, path, addr, blob, "fat", allow_trailing_bytes)
+
+
+def verified_file_read(port, target, path, addr, blob, filesystem, allow_trailing_bytes=False):
+    need(filesystem in ("fat", "ext4") and re.fullmatch(r"/[A-Za-z0-9._/-]+", path), "Unexpected filesystem or path")
     if target is None:
         return False
     size = len(blob)
-    size_text = command(port, f"if fatsize scsi {target} {path}; then printenv filesize; fi")
+    size_text = command(port, f"if {filesystem}size scsi {target} {path}; then printenv filesize; fi")
     sizes = re.findall(r"^filesize=(?:0x)?([0-9a-fA-F]+)$", size_text, re.M)
     if len(sizes) != 1:
         return False
@@ -393,7 +401,7 @@ def esp_read(port, target, path, addr, blob, allow_trailing_bytes=False):
     if file_size < size or (not allow_trailing_bytes and file_size != size):
         return False
     # Never let unexpected file growth write beyond the authenticated image.
-    read = command(port, f"if fatload scsi {target} {addr:x} {path} {size:x}; then printenv fileaddr filesize; fi", 90)
+    read = command(port, f"if {filesystem}load scsi {target} {addr:x} {path} {size:x}; then printenv fileaddr filesize; fi", 90)
     counts = re.findall(r"^(\d+) bytes read(?: in .*)?$", read, re.M)
     try:
         if counts != [str(size)] or number("fileaddr", read) != addr or number("filesize", read) != size:
@@ -487,21 +495,29 @@ def fastboot(port, executable, blobs, address):
         raise
 
 
-def finish(port, blobs, address, cmdline, boot):
+def verify_staged_board(port, blobs, address):
     for name in SLOTS:
         addr, blob = address[name], blobs[name]
         verify_crc(command(port, f"crc32 {addr:x} {len(blob):x}", 60), addr, blob)
     select_dt(port, address["board.dtb"])
     read_board(port)
+
+
+def boot_verified(port, blobs, address, cmdline):
+    command(port, "setenv bootargs " + cmdline)
+    need(one(r"^bootargs=(.*)$", command(port, "printenv bootargs")) == cmdline, "Boot arguments differ")
+    write(port, f"booti {address['kernel.efi']:x} {address['initrd']:x}:{len(blobs['initrd']):x} {address['board.dtb']:x}\r".encode())
+    receipt(boot_requests=1)
+
+
+def finish(port, blobs, address, cmdline, boot):
+    verify_staged_board(port, blobs, address)
     for controller in CONTROLLERS:
         need(one(r'^status = "(\w+)"$', command(port, f"fdt print {controller} status")) == "disabled",
              "Staged DT enables a storage controller")
     receipt(target_crcs=3, disabled_storage_controllers=2)
     if boot:
-        command(port, "setenv bootargs " + cmdline)
-        need(one(r"^bootargs=(.*)$", command(port, "printenv bootargs")) == cmdline, "Boot arguments differ")
-        write(port, f"booti {address['kernel.efi']:x} {address['initrd']:x}:{len(blobs['initrd']):x} {address['board.dtb']:x}\r".encode())
-        receipt(boot_requests=1)
+        boot_verified(port, blobs, address, cmdline)
 
 
 def main():

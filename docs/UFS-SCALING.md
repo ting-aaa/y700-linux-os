@@ -72,3 +72,23 @@ uv run --with pyserial python tests/ufs-scaling/collect.py --port COM<n> --varia
 主机先保存并校验数字回执，再用摘要 ACK。已开始的操作可以用 `--resume` 取回缓存，设备不会为回放再读分区。正常 ACK 或等待命令约 105 秒到期后会请求重启；独立 PID 1 另有从用户态启动算起的 155 秒上限。若内核整体停止调度、控制器在内核关机阶段锁死，仍需现场恢复。此软件计时器没有硬件 watchdog 保证。[PID 1](../tests/ufs-scaling/observer-init.c)
 
 PC 在两个真实内核上均从相同 initrd 启动，以 320 MiB ARM64 QEMU、virtio 串口和一份可写的合成 GPT 文件验证正常读回、保存、ACK 与重启。GUID 错误、缺少 `boot_b`、只检查且原始设备仍可写都在分区数据读取前拒绝。已知前缀故意损坏在第一次读后拒绝。每次测试后比对整份虚拟磁盘字节。无主机命令的单独测试覆盖超时返回。该虚拟机缺少 UFS、PRC USB/电源硬件，故所有对应的时钟及错误接口报告 `-1`。各项数值收据位于 `out/ufs-scaling/observer-verified/`。[QEMU 正反例](../tests/ufs-scaling/observer-vm.sh)
+
+## 日用内核的只读基线
+
+参考平板的 dev12.11 在正常桌面运行时，UFS 主控和 UniPro 均为 75 MHz，ICE 为 300 MHz。板内 udev 规则将 `max_freq` 设为 75 MHz。驱动列出的两个可用频率分别为 75 和 850 MHz。自动 Hibern8 的配置为 150,000 µs，时钟门控延时为 150 ms。
+
+三次间隔三秒的 `O_DIRECT` 读取各取 `boot_b` 起始 65,536 字节，逐次核对电脑上已封存的板级 U-Boot 前缀。包含启动读取程序及 SHA-256 的耗时分别为 10,980、19,707、13,253 µs。独立 tracefs 实例在整个窗口记录了六对 Hibern8 进入与退出请求及对应完成事件、三次运行时挂起和三次恢复。内核报告零跟踪丢失、零新增 UFS 错误，逻辑单元复位维持为一，主机复位及命令中止为零。日用系统当时也可以主动访问存储，事件计数代表整个窗口。日志为 `out/ufs-scaling/daily-read.log`，SHA-256 `7e4c8dda9453c29b5f73baa5d1d49b73b7b51cf4bc7b2bfb2bd1b3f848c1ed6f`。[采样脚本](../tests/ufs-scaling/observe-daily.sh)
+
+## 从正常 Linux 数据分区暂存并启动观测器
+
+`prepare-stage.sh` 核对两版内核与原板树，只改动两棵树的 microSD 状态。它生成两个内核、两棵小板树和一份私有 initrd；同卷支持硬链接时直接复用输入。将这五个经验证的文件放入经分区标签与私有 PARTUUID 识别的 Linux 数据分区顶层 `/y700-ufs-observer/`，目录权限 0700。使用空的新目录，结束后按原清单核对并移除这五个临时文件。固件默认启动项始终指向原日用系统。
+
+```sh
+bash tests/ufs-scaling/prepare-stage.sh "$stock_image" "$stock_board_dtb" "$candidate_dir" "$private_initrd" "$initrd_sha" "$new_cache"
+uv run --offline tests/ufs-scaling/stage.py check "$new_cache" stock "$initrd_sha"
+uv run --offline tests/ufs-scaling/stage.py check "$new_cache" candidate "$initrd_sha"
+```
+
+主机在获准的单轮试启动前先启动 `stage.py boot "$new_cache" stock "$initrd_sha" --linux-partuuid "$private_linux_partuuid"` 等候串口，再从空闲日用系统正常重启。候选使用 `candidate`。U-Boot 只从该分区的固定路径读入三件工件，核对各自的长度、RAM 地址和 CRC、板型、UFS 启用与 microSD 禁用状态，最后发出一次启动请求。原有无盘相机工具继续要求两个存储控制器均已禁用。
+
+用真实 ARM64 QEMU U-Boot 和含校验和及 orphan file 特性的 ext4 测试盘，两套输入都通过。错误分区 UUID 和错误文件 CRC 均被拒绝，可写的合成整盘在固件读取前后 SHA-256 相同。首个平板对照试启动同样通过了 U-Boot 的三项 RAM 校验，USB 观测口未出现，平板自动返回日用 dev12.11。复机后两层 ext4 直接读回通过，临时文件清理完成。随后在独立、未绑定 USB 控制器的 configfs 测试目录内复现了旧程序的相对链接失败；使用绝对目标路径创建 ACM 链接成功。[U-Boot 对照测试](../tests/ufs-scaling/stage-qemu.py) · [固件加载入口](../tests/ufs-scaling/stage.py)
