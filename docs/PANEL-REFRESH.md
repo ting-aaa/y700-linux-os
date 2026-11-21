@@ -18,6 +18,10 @@ dev12.11 的常用内核发布 1600 × 2560、120 Hz。双刷新率内核沿用�
 
 切换期间的内核日志通过 DSI、DPU、CRTC、vblank 错误检查。约第 19 秒，平板记录到图形登录、USB 维护网络、SSH 和回退计时器均就绪。两次启动都自动返回原 dev12.11 内核。每次移除试验菜单后，外层 EFI 的同一组 32 个文件与试验前逐项相同，清单排除会按次更新的随机种子。第二次回退还核对了机内保存的原始采样与 USB 取回的副本。原始记录在 `out/panel-refresh-60/physical/`，其 `RECEIPTS.sha256` 的 SHA-256 为 `8b05847b0ffd75cd028dda3e6c6ab65365a7cc5cd4dfc5877e4f2c2c710bead7`。持续负载、切换瞬间的闪烁、光学测量、两档的功耗差另行验证。[实机测量程序](../tests/panel-refresh/board-scanout.sh) · [vblank 读数](../tests/dpu-vblank.c)
 
+## 在平板上启用双刷新率
+
+实机现有一个可手选的 `Y700 dev12.11 (60 / 120 Hz display)` 启动项。日常默认入口仍为 `y700-file-12-11.conf`。上表的实机测量使用同一双刷新率内核的限次入口。正式菜单的部署和独立回读记录位于 `out/panel-refresh-option/physical/`。[在 Xfce 选择刷新率及移除可选启动项](PANEL-REFRESH-OPTION.md)
+
 ## 原厂模式与切换
 
 TB320FC_CN_OPEN_USER 的 CN350 DTBO 第 14 项，在 `/fragment@52/__overlay__` 定义了 NT36523N TCL 视频面板。原厂 Android 的启动参数选择了同名普通面板，运行时节点位于 `/soc/qcom,mdss_mdp@ae00000/qcom,mdss_dsi_nt36523n_fhd_plus_cphy_144hz_vid`。两个来源含有相同的基础时序、双 C-PHY、DSC、120 Hz 基准和 144、120、60、30 Hz 的动态刷新率表。项目只发布此次计算和检查过的 60 Hz。[工厂及运行时设备树核对](../tests/panel-refresh/check-cn350.py) · [联想产品规格](https://psrefstuff.lenovo.com/syspool/Sys/PDF/datasheet/Final%20Lenovo%20Legion%20Tab%20Datasheet.pdf)

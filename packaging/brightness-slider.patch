@@ -1,17 +1,28 @@
 --- a/usr/libexec/y700-tablet-brightness
 +++ b/usr/libexec/y700-tablet-brightness
-@@ -37,7 +37,9 @@
+@@ -5,7 +5,8 @@
+ import gi
+ 
+ gi.require_version("Gtk", "3.0")
+-from gi.repository import Gio, GLib, Gtk
++gi.require_version("Gdk", "3.0")
++from gi.repository import Gdk, Gio, GLib, Gtk
+ 
+ 
+ DEVICE = "ktz8866-backlight"
+@@ -37,7 +38,10 @@
          self.set_position(Gtk.WindowPosition.CENTER)
          self.set_resizable(False)
          self.original = None
 -        self.pending = False
 +        self.pending = None
 +        self.queued = None
++        self.touch_sequence = None
 +        self.closed = False
          source = Gio.SettingsSchemaSource.get_default()
          schema = source.lookup("org.y700.tablet", True) if source else None
          self.settings = Gio.Settings.new_full(schema, None, None) if schema and schema.has_key(AUTO_KEY) else None
-@@ -59,7 +61,13 @@
+@@ -59,7 +63,15 @@
          self.brighter = self.button("+", label("Increase brightness", "提高亮度"), self.adjust, 1)
          controls.add(self.brighter)
  
@@ -23,10 +34,12 @@
 +        self.bar.set_size_request(-1, 56)
 +        self.bar.get_accessible().set_name(label("Screen brightness", "屏幕亮度"))
 +        self.bar_handler = self.bar.connect("value-changed", self.slide)
++        self.bar.connect("touch-event", self.touch_begin)
++        self.bar.connect("event-after", self.touch_finished)
          content.add(self.bar)
          presets = Gtk.Box(spacing=8, homogeneous=True)
          content.add(presets)
-@@ -166,6 +174,8 @@
+@@ -166,6 +178,8 @@
          self.sensor_gone()
  
      def close_monitor(self, *_):
@@ -35,7 +48,7 @@
          if self.settings:
              self.settings.disconnect(self.pref_handler)
          self.stop_monitor()
-@@ -175,7 +185,7 @@
+@@ -175,7 +189,7 @@
              current, maximum = read_level()
          except (OSError, ValueError):
              self.level.set_text("—")
@@ -44,7 +57,7 @@
              for button in (self.dimmer, self.brighter, self.restore, *(b for _, b in self.presets)):
                  button.set_sensitive(False)
              self.show_status(label("Internal backlight unavailable.", "无法读取内屏背光。"))
-@@ -183,8 +193,12 @@
+@@ -183,8 +197,13 @@
          if self.original is None:
              self.original = current
          minimum = max(1, maximum * 5 // 100)
@@ -52,19 +65,40 @@
 -        self.bar.set_value(current / maximum)
 +        preview = self.queued if self.queued is not None else self.pending
 +        percent = round((current if preview is None else preview) * 100 / maximum)
-+        self.level.set_text(f"{percent}%")
 +        self.bar.set_sensitive(True)
-+        with self.bar.handler_block(self.bar_handler):
-+            self.bar.set_value(percent)
++        if self.touch_sequence is None:
++            self.level.set_text(f"{percent}%")
++            with self.bar.handler_block(self.bar_handler):
++                self.bar.set_value(percent)
          self.dimmer.set_sensitive(not self.pending and current > minimum)
          self.brighter.set_sensitive(not self.pending and current < maximum)
          self.restore.set_sensitive(not self.pending and 0 < self.original <= maximum and current != self.original)
-@@ -199,6 +213,15 @@
+@@ -199,6 +218,35 @@
              step = max(1, round(maximum / 100))
              self.request(current, max(minimum, min(maximum, current + step * direction)))
  
++    def touch_begin(self, _scale, event):
++        if event.type == Gdk.EventType.TOUCH_BEGIN and self.touch_sequence is None:
++            self.touch_sequence = event.get_event_sequence()
++        return False
++
++    def touch_finished(self, scale, event):
++        if event.type not in (Gdk.EventType.TOUCH_END, Gdk.EventType.TOUCH_CANCEL):
++            return
++        if self.touch_sequence != event.get_event_sequence():
++            return
++        self.touch_sequence = None
++        if event.type == Gdk.EventType.TOUCH_END:
++            self.slide(scale)
++        else:
++            self.refresh()
++
 +    def slide(self, scale):
 +        percent = round(scale.get_value())
++        if self.touch_sequence is not None:
++            # Let GTK track the contact before committing the final level.
++            self.level.set_text(f"{percent}%")
++            return
 +        try:
 +            current, maximum = read_level()
 +        except (OSError, ValueError):
@@ -75,7 +109,7 @@
      def set_percent(self, _button, percent):
          values = self.refresh()
          if values:
-@@ -213,18 +236,25 @@
+@@ -213,18 +261,25 @@
                  self.request(current, self.original)
  
      def request(self, current, target):
@@ -103,7 +137,7 @@
          self.show_status("")
          self.refresh()
          # logind authorizes the active seat and the session owner. Its default
-@@ -236,14 +266,21 @@
+@@ -236,14 +291,21 @@
          )
  
      def finished(self, bus, result, target):
@@ -118,10 +152,10 @@
 +            if not self.closed:
 +                self.refresh()
 +                self.show_status(label("Could not set brightness for this session.", "当前会话无法设置亮度。"))
++            return
++        if self.closed:
              return
 -        if values and values[0] != target:
-+        if self.closed:
-+            return
 +        values = self.refresh()
 +        if values and queued is not None and not (self.settings and self.settings.get_boolean(AUTO_KEY)):
 +            self.request(values[0], queued)

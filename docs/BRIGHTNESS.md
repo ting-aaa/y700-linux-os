@@ -6,16 +6,18 @@ The Xfce Hardware settings category includes all three tablet display tools. The
 
 ### Touch slider on the installed dev12.11 tablet
 
-Drag **Screen brightness** (`屏幕亮度`) to choose any whole percentage from 5 to 100. The keyboard arrow keys move one percentage point at a time. The slider occupies 56 logical pixels vertically, or 112 display pixels at 200%. The existing small-step, preset and restore controls remain available. The settings app sends manual changes through the active session's logind service and keeps the latest drag position while an earlier request is pending.
+Drag **Screen brightness** (`屏幕亮度`) to choose any whole percentage from 5 to 100. The value follows the finger and is applied on release. A canceled touch returns to the current setting. The keyboard arrow keys move one percentage point at a time. The slider occupies 56 logical pixels vertically, or 112 display pixels at 200%. The small-step, preset and restore controls remain available. The settings app sends manual changes through the active session's logind service. [GTK touch event handling](https://docs.gtk.org/gtk3/input-handling.html)
 
-The installed platform package is `0.1.0~dev12.8+gpu1.1`. Against private light and backlight inputs on this tablet's CPU, the installed English and Chinese GTK windows both reached 79% by dragging, reached 7% with Home and the arrow keys, then restored the opening value of 400/2047. The original dev12.11 archive can first receive the [Chromium platform update](CHROMIUM-GRAPHICS.md), then the slider update. Its two packages, checksums and helper are in `out/dev12.11-brightness/`.
+The installed platform package is `0.1.0~dev12.8+gpu1.2`. Against private light and backlight inputs on the tablet's CPU, both English and Chinese windows reached 79% by mouse drag, reached 7% with Home and two arrow-key presses, then restored the exact opening value of 400/2047. In a full ARM64 guest, the normal GTK window at 200% received Linux Type-B touchscreen contacts through Xorg and libinput. A tap and drag to the same position each selected 80% (1637/2047), a reverse drag selected 5% (102/2047), and tapping restore returned to 400/2047. [Touchscreen test](../tests/brightness/slider-touch-test.md)
+
+The original dev12.11 archive can first receive the Chromium platform update. The slider helper accepts that version or the first slider package as the previous package. The `.1` → `.2` pair, helper and checksums are in `out/dev12.11-brightness-touch/`. [Chromium update](CHROMIUM-GRAPHICS.md)
 
 ```sh
 sudo bash update-brightness-slider.sh install \
-  y700-platform_0.1.0~dev12.8+gpu1_all.deb y700-platform_0.1.0~dev12.8+gpu1.1_all.deb
+  y700-platform_0.1.0~dev12.8+gpu1.1_all.deb y700-platform_0.1.0~dev12.8+gpu1.2_all.deb
 ```
 
-Use `rollback` in place of `install` to restore the preceding Chromium-enabled package. Two independent builds of the slider package produced SHA-256 `aa39b033a89c8e295df4ba29a4a4fed26c91e6d4b9928fcf2e5d9cabde74d535`. [Build recipe](../scripts/build-brightness-slider.sh)
+Use `rollback` with the same pair to reinstall the previous package. The two independent `.2` builds produced SHA-256 `479c59b518f42e035f9101feb5947ba972df32b1a5646f62b459bc13b5357518`. The installed tablet passed its 1,240-package manifest, program hash and desktop service checks after the upgrade. [Build recipe](../scripts/build-brightness-slider.sh)
 
 ## Automatic brightness
 

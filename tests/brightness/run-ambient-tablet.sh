@@ -4,7 +4,7 @@ set -euo pipefail
 [[ $# == 2 || ( $# == 3 && $3 == --slider ) ]] || { echo 'Usage: run-ambient-tablet.sh PINNED_USB_SSH DEVICE_XVFB_USR [--slider]' >&2; exit 2; }
 ssh=$(realpath -e "$1")
 helpers=$2
-[[ $helpers =~ ^/var/tmp/[A-Za-z0-9._/-]+/usr$ && $helpers != */../* ]]
+[[ $helpers =~ ^/(var/tmp|run)/[A-Za-z0-9._/-]+/usr$ && $helpers != */../* ]]
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 stage=$(bash "$ssh" 'set -eu; grep -zFxq lenovo,asphalt /proc/device-tree/compatible; test "$(findmnt -nro FSTYPE -T /run)" = tmpfs; umask 077; mktemp -d /run/y700-ambient-ui.XXXXXXXX')
 [[ $stage =~ ^/run/y700-ambient-ui\.[[:alnum:]]{8}$ ]]

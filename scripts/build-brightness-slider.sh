@@ -12,7 +12,7 @@ work=$(mktemp -d)
 trap 'rm -r -- "$work"' EXIT
 root=$work/root
 dpkg-deb -R "$base" "$root"
-version=0.1.0~dev12.8+gpu1.1
+version=0.1.0~dev12.8+gpu1.2
 sed -i "s/^Version: 0.1.0~dev12.8+gpu1$/Version: $version/" "$root/DEBIAN/control"
 grep -Fxq "Version: $version" "$root/DEBIAN/control"
 patch --batch --forward --fuzz=0 -d "$root" -p1 <"$repo/packaging/brightness-slider.patch"
