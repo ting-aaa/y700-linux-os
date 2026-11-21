@@ -8,3 +8,14 @@ unit=/newroot/etc/systemd/system/y700-ram-af-acm.service
 [ ! -e "$unit" ] && cp /run/y700-af-acm/diagnostic.service "$unit" || fail 'cannot install RAM service'
 chmod 0644 "$unit" || fail 'cannot set RAM service permissions'
 ln -s ../y700-ram-af-acm.service /newroot/etc/systemd/system/multi-user.target.wants/y700-ram-af-acm.service || fail 'cannot enable RAM service'
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    units=/newroot/etc/systemd/system
+    for src in return.timer return.service ack.timer; do
+        dst=$units/y700-ram-af-$src
+        [ ! -e "$dst" ] && cp /run/y700-af-acm/"$src" "$dst" && chmod 0644 "$dst" || fail 'cannot install RAM return units'
+    done
+    # The previous stage has already completed the USB upload and verified the carrier.
+    cut -d. -f1 /proc/uptime >/run/y700-af-acm/return-origin || fail 'cannot record RAM handover'
+    mkdir -p "$units/timers.target.wants" &&
+        ln -s ../y700-ram-af-return.timer "$units/timers.target.wants/y700-ram-af-return.timer" || fail 'cannot arm RAM return timer'
+fi

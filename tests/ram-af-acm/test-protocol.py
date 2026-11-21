@@ -18,6 +18,12 @@ link = Channel(None, sys.argv[1])
 try:
     state, token = status(link, True)
     assert state == "READY"
+    mode = os.getenv("AF_QA_RETURN", "none")
+    link.send(f"ACK {token} " + "0" * 64)
+    expect(link, "AF1 REFUSED acknowledgement")
+    if mode == "deadline":
+        print("RAM_AF_IDLE closed=1 no_start=1")
+        raise SystemExit(0)
     link.send("START incorrect")
     expect(link, "AF1 REFUSED command")
     assert status(link, True) == ("READY", token)
@@ -34,7 +40,9 @@ try:
     link.send("START " + token)
     expect(link, "AF1 REFUSED consumed")
     assert status(link, True) == ("DONE", token)
-    assert result(link, token, True, False) == 0
+    link.send(f"ACK {token} " + "0" * 64)
+    expect(link, "AF1 REFUSED acknowledgement")
+    assert result(link, token, True, False, acknowledge=(mode == "ack")) == 0
     print("RAM_AF_PROTOCOL_PASS wrong_start_rejected=1 synthetic=1 one_execution=1 replay=1")
 finally:
     link.close()

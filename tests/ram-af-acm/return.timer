@@ -1,0 +1,8 @@
+[Unit]
+Description=Return to the default boot after twelve minutes in the RAM system
+ConditionPathExists=/run/y700-af-acm/return-origin
+
+[Timer]
+OnActiveSec=12min
+AccuracySec=1s
+Unit=y700-ram-af-return.service

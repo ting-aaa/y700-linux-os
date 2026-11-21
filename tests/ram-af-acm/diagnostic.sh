@@ -44,6 +44,13 @@ healthy() {
     [[ $(findmnt -nro UUID --mountpoint "$base/lower") == 171a4adb-916b-4763-9e6f-722b4a99988f ]] || return 1
 }
 healthy
+returning=0
+if (( ! virt )) || [[ -e $payload/return-origin ]]; then
+    systemctl is-active --quiet y700-ram-af-return.timer
+    origin=$(cat "$payload/return-origin")
+    [[ $origin =~ ^[0-9]+$ ]]
+    returning=1
+fi
 stage=$(mktemp -d /run/y700-af-optical.XXXXXXXX)
 chmod 0755 "$stage"
 install -m755 y700-af-measure measure-board.sh "$stage"
@@ -104,11 +111,12 @@ if run_measurement --self-test > "$payload/self-test.log" 2>&1 &&
     test_result=pass
 fi
 # Capture receipts even when the PC closes its port. A blocked/disconnected writer cannot stop the measurement.
-publish() { timeout -k 1 1 /usr/bin/printf '%s\n' "$*" >&3 2>/dev/null || :; }
+send_line() { timeout -k 1 1 /usr/bin/printf '%s\n' "$*" >&3 2>/dev/null; }
+publish() { send_line "$*" || :; }
 status() { publish "AF1 $state $token storage=none swap=none root=ram selftest=$test_result virtual=$virt"; }
 deadline=$((SECONDS+1200))
 while (( SECONDS < deadline )); do
-    if IFS= read -r -t 2 -n 100 command <&3; then :
+    if IFS= read -r -t 2 -n 128 command <&3; then :
     else
         read_status=$?
         if (( read_status == 1 && ! virt )); then exec 3<> "$port"; fi
@@ -118,27 +126,41 @@ while (( SECONDS < deadline )); do
         STATUS) status ;;
         "RESULT $token")
             if [[ $state != DONE ]]; then publish 'AF1 REFUSED result_unavailable'; continue; fi
-            while IFS= read -r line; do publish "$line"; done < "$payload/result" ;;
+            while IFS= read -r line; do send_line "$line" || break; done < "$payload/result" ;;
+        "ACK $token "*)
+            if [[ $state != DONE || $returning != 1 || $command != "ACK $token $digest" ]]; then
+                publish 'AF1 REFUSED acknowledgement'; continue
+            fi
+            systemctl start y700-ram-af-ack.timer
+            publish 'AF1 RETURN acknowledged=1' ;;
         "START $token")
             if [[ $state == BLOCKED ]]; then publish 'AF1 REFUSED selftest'; continue; fi
             if [[ $state != READY || -d $payload/consumed ]]; then publish 'AF1 REFUSED consumed'; continue; fi
+            if (( returning )) && (( $(cut -d. -f1 /proc/uptime) - origin >= 540 )); then
+                publish 'AF1 REFUSED return_pending'; continue
+            fi
             if ! healthy; then publish 'AF1 REFUSED storage'; exit 1; fi
             mkdir "$payload/consumed"
             state=RUNNING
             publish "AF1 RUNNING $token virtual=$virt"
             set +e
             : > "$payload/result"
-            run_measurement --rear-af 2>&1 | /bin/bash "$payload/filter.sh" | while IFS= read -r line; do
-                printf '%s\n' "$line" >> "$payload/result" || exit 1
-                publish "$line"
-            done
+            run_measurement --rear-af 2>&1 | /bin/bash "$payload/filter.sh" | {
+                connected=1
+                while IFS= read -r line; do
+                    printf '%s\n' "$line" >> "$payload/result" || exit 1
+                    if (( connected )); then send_line "$line" || connected=0; fi
+                done
+            }
             codes=("${PIPESTATUS[@]}")
             set -e
             rc=${codes[0]}; [[ ${codes[1]} == 0 && ${codes[2]} == 0 ]] || rc=1
             if (( virt )); then
                 echo 'AF_TEST virtual=1 camera_access=0' >> "$payload/result"; publish 'AF_TEST virtual=1 camera_access=0'
             elif ! grep -q '^AF_CLEANUP mode=--rear-af rear=suspended ' "$payload/result"; then rc=1; fi
-            printf 'AF1 END rc=%s\n' "$rc" >> "$payload/result"; publish "AF1 END rc=$rc"
+            printf 'AF1 END rc=%s\n' "$rc" >> "$payload/result"
+            digest=$(sha256sum "$payload/result" | cut -d' ' -f1)
+            publish "AF1 END rc=$rc"
             state=DONE ;;
         *) publish 'AF1 REFUSED command' ;;
     esac

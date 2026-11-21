@@ -1,5 +1,6 @@
 """Read the RAM health receipt, or explicitly start one run for the previously observed token."""
 import argparse
+import hashlib
 import re
 import socket
 import time
@@ -57,7 +58,12 @@ class Channel:
 def status(channel, virtual):
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
-        channel.send("STATUS")
+        try:
+            channel.send("STATUS")
+        except socket.timeout:
+            if not virtual:
+                raise
+            continue  # The guest has not opened its virtio port yet.
         row = channel.line()
         if row and re.fullmatch(r"AF1 BLOCKED [0-9a-f]{32} storage=none swap=none root=ram "
                                 + f"selftest=failed virtual={int(virtual)}", row):
@@ -69,12 +75,13 @@ def status(channel, virtual):
     raise TimeoutError("No verified health and self-test receipt")
 
 
-def result(channel, token, virtual, start):
+def result(channel, token, virtual, start, acknowledge=False):
     if start:
         channel.send("START " + token)
     else:
         channel.send("RESULT " + token)
     running = not start
+    digest = hashlib.sha256()
     deadline = time.monotonic() + 100
     while time.monotonic() < deadline:
         row = channel.line()
@@ -85,11 +92,27 @@ def result(channel, token, virtual, start):
         elif row.startswith(("AF1 READY ", "AF1 DONE ")):
             continue  # A previously sent STATUS may still have a response in flight.
         elif running and re.fullmatch(r"AF1 END rc=\d{1,3}", row):
+            digest.update((row + "\n").encode("ascii"))
             print(row, flush=True)
+            if acknowledge:
+                channel.send(f"ACK {token} {digest.hexdigest()}")
+                ack_deadline = time.monotonic() + 8
+                while time.monotonic() < ack_deadline:
+                    reply = channel.line()
+                    if reply is None:
+                        continue
+                    if reply != "AF1 RETURN acknowledged=1":
+                        raise RuntimeError("Receipt confirmation failed; reconnect and retrieve RESULT")
+                    print(reply, flush=True)
+                    break
+                else:
+                    raise TimeoutError("Return confirmation missing; independent RAM timer remains armed")
             return int(row.split("=")[1])
         elif not (running and re.fullmatch(r"AF_(PREVIEW|SCAN|EXPOSURE|RESULT|ERROR|DIAG|CLEANUP|TEST)"
                                           r"( [a-z_]+=[A-Za-z0-9_./:+-]+)+", row)):
             raise RuntimeError("Unexpected diagnostic response")
+        else:
+            digest.update((row + "\n").encode("ascii"))
         print(row, flush=True)
     raise TimeoutError("No terminal measurement receipt")
 
@@ -108,10 +131,10 @@ if __name__ == "__main__":
         if args.action == "start":
             if state != "READY" or args.token != token:
                 raise SystemExit("Start requires a matching READY token from this boot")
-            raise SystemExit(result(link, token, bool(args.vm_socket), True))
+            raise SystemExit(result(link, token, bool(args.vm_socket), True, acknowledge=not args.vm_socket))
         if args.action == "result":
             if state != "DONE" or args.token != token:
                 raise SystemExit("Retrieval requires a matching DONE token from this boot")
-            raise SystemExit(result(link, token, bool(args.vm_socket), False))
+            raise SystemExit(result(link, token, bool(args.vm_socket), False, acknowledge=not args.vm_socket))
     finally:
         link.close()

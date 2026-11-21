@@ -1,0 +1,11 @@
+[Unit]
+Description=Return from the one-boot Y700 RAM diagnostic
+ConditionKernelCommandLine=y700.media=ram
+ConditionKernelCommandLine=y700.ram_af_acm=1
+ConditionPathExists=/run/y700-af-acm/return-origin
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/echo Y700_RAM_AF_RETURN orderly=1
+ExecStart=/usr/bin/systemctl --no-block reboot
+StandardOutput=journal+console

@@ -1,0 +1,8 @@
+[Unit]
+Description=Return after the host has received the complete optical result
+ConditionPathExists=/run/y700-af-acm/return-origin
+
+[Timer]
+OnActiveSec=5s
+AccuracySec=1s
+Unit=y700-ram-af-return.service

@@ -26,8 +26,8 @@ sh -n "$w/tree/y700-af-acm-init"
 install -m755 "$tool" "$w/tree/y700-af-acm/y700-af-measure"
 install -m755 "$here/../camera-lens-graph/measure-board.sh" "$here/diagnostic.sh" "$here/filter.sh" "$w/tree/y700-af-acm/"
 install -m644 "$library" "$w/tree/y700-af-acm/libcamera.so.0.7"
-install -m644 "$here/diagnostic.service" "$w/tree/y700-af-acm/"
-(cd "$w/tree/y700-af-acm"; sha256sum diagnostic.service diagnostic.sh filter.sh libcamera.so.0.7 measure-board.sh y700-af-measure > SHA256SUMS)
+install -m644 "$here/diagnostic.service" "$here/return.timer" "$here/return.service" "$here/ack.timer" "$w/tree/y700-af-acm/"
+(cd "$w/tree/y700-af-acm"; sha256sum ack.timer diagnostic.service diagnostic.sh filter.sh libcamera.so.0.7 measure-board.sh return.service return.timer y700-af-measure > SHA256SUMS)
 find "$w/tree" -exec touch -d @1795150416 {} +
 (cd "$w/tree"; find y700-af-acm y700-af-acm-init -print0 | LC_ALL=C sort -z | cpio --null --quiet -o -H newc --reproducible --owner=0:0) > "$w/result/af-acm.cpio"
 sed 's,^rdinit=/y700-ram-trial-init ,rdinit=/y700-af-acm-init y700.ram_af_acm=1 ,' "$base/cmdline.txt" > "$w/result/cmdline.txt"
