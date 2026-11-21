@@ -1,5 +1,7 @@
 # Build migration status
 
+The dev12.10 board image can be assembled from the sealed dev12.9 root and the verified ARM64 player update. The image guide covers extraction and rebuilding the RAM bundle from the distributed files. [Dev12.10 build instructions](DEV12.10-IMAGE.md)
+
 The initial import preserves selected source recipes from the local experimental work. It is not yet a clean-checkout product image builder, and no binary release is included.
 
 Implemented stages now include [the authenticated 962-package Debian base builder](DEBIAN-SNAPSHOT.md) and [desktop platform package/offline ARM64 integration](PLATFORM-BUILD.md). A fresh base built without copying the historical root, then passed integration with 30 authenticated repair archives and the platform package. Deterministic platform-package checks, private identity generation and actual ARM64 userspace verification are available. Kernel/firmware/image assembly remains separate. [Sensor defaults](HARDWARE-MAP.md) can also be generated from the exact pinned source without enabling hardware.
