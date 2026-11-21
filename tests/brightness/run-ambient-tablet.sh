@@ -6,9 +6,9 @@ ssh=$(realpath -e "$1")
 helpers=$2
 [[ $helpers =~ ^/(var/tmp|run)/[A-Za-z0-9._/-]+/usr$ && $helpers != */../* ]]
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-stage=$(bash "$ssh" 'set -eu; grep -zFxq lenovo,asphalt /proc/device-tree/compatible; test "$(findmnt -nro FSTYPE -T /run)" = tmpfs; umask 077; mktemp -d /run/y700-ambient-ui.XXXXXXXX')
+stage=$(bash "$ssh" 'set -eu; grep -zFxq lenovo,asphalt /proc/device-tree/compatible; test "$(findmnt -nro FSTYPE -T /run)" = tmpfs; umask 077; mktemp -d /run/y700-ambient-ui.XXXXXXXX' </dev/null)
 [[ $stage =~ ^/run/y700-ambient-ui\.[[:alnum:]]{8}$ ]]
-trap 'bash "$ssh" "cd / && ! grep -Fq \"$stage/\" /proc/self/mountinfo && rm -r --one-file-system -- $stage"' EXIT
+trap 'bash "$ssh" "cd / && ! grep -Fq \"$stage/\" /proc/self/mountinfo && rm -r --one-file-system -- $stage" </dev/null' EXIT
 tar -C "$repo" -cf - tests/brightness/{ambient-namespace.sh,ambient-ui.py,probe.py} \
     tests/ambient-backlight/check.py tests/rotation-session.py | bash "$ssh" "tar -xf - -C '$stage'"
 bash "$ssh" bash -s -- "$stage" "$helpers" "${@:3}" <<'BOARD'

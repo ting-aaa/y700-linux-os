@@ -10,6 +10,8 @@ Drag **Screen brightness** (`屏幕亮度`) to choose any whole percentage from 
 
 The installed platform package is `0.1.0~dev12.8+gpu1.2`. Against private light and backlight inputs on the tablet's CPU, both English and Chinese windows reached 79% by mouse drag, reached 7% with Home and two arrow-key presses, then restored the exact opening value of 400/2047. In a full ARM64 guest, the normal GTK window at 200% received Linux Type-B touchscreen contacts through Xorg and libinput. A tap and drag to the same position each selected 80% (1637/2047), a reverse drag selected 5% (102/2047), and tapping restore returned to 400/2047. [Touchscreen test](../tests/brightness/slider-touch-test.md)
 
+In the guest, both slider versions reached the same endpoints when the simulated backlight published each sysfs reading atomically. With five contact sequences, the first slider sent intermediate brightness requests during a drag. The installed revision sent one request on each release, five in total. The initial fixture could briefly expose an empty file while updating its value and produced a misleading short drag on the older version.
+
 The original dev12.11 archive can first receive the Chromium platform update. The slider helper accepts that version or the first slider package as the previous package. The `.1` → `.2` pair, helper and checksums are in `out/dev12.11-brightness-touch/`. [Chromium update](CHROMIUM-GRAPHICS.md)
 
 ```sh
@@ -21,7 +23,7 @@ Use `rollback` with the same pair to reinstall the previous package. The two ind
 
 ## Automatic brightness
 
-After a normal Xfce login with platform dev12.8 installed, open **Tablet brightness** and select **Automatic brightness** (简体中文 **自动亮度**). The setting defaults to off. The desktop follows ambient light while the internal panel is lit and the local session is unlocked. Choosing a different manual level turns the option off. If the sensor service is unavailable, the window displays a waiting message and the current brightness stays in effect. On the development tablet the sensor DSP normally stays offline between bounded hardware trials.
+After a normal Xfce login, open **Tablet brightness** and select **Automatic brightness** (简体中文 **自动亮度**). The setting defaults to off. The desktop follows ambient light while the internal panel is lit and the local session is unlocked. Choosing a different manual level turns the option off. If the sensor service is unavailable, the window displays a waiting message and keeps the current level. On the installed dev12.11 tablet the SLPI and `y700-ssc.service` were running after both panel trials. [Post-suspend sensor readings](DEV12.11-VERIFICATION.md)
 
 The Linux policy interpolates eight control points from the CN350 Android framework resources. The resource arrays map ambient light to target nits, then target nits to a backlight request on a 0–255 scale. The worker converts that request to the Linux driver's range, waits four seconds for a stable target and filters changes within four Android backlight units. These are requested brightness levels. Optical luminance and the response to changing light on the physical panel still need measurement. [AOSP display configuration](https://android.googlesource.com/platform/frameworks/base/+/5b361c07f928fd8c02a347b074a50b977e044f97/services/core/java/com/android/server/display/DisplayDeviceConfig.java) · [AOSP brightness resource definitions](https://android.googlesource.com/platform/frameworks/base/+/7951f5d173cbf3904399ebd042c771a88e894c61/core/res/res/values/config.xml)
 
