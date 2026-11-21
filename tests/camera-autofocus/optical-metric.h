@@ -110,6 +110,11 @@ inline const char *verdict(const Summary &a, const Summary &b, bool focused)
 	    sceneChange(a.average, b.average) > .08 || b.median < .012)
 		return "inconclusive";
 	const double threshold = std::max({ .006, .15 * a.median, 2 * a.drift, 2 * b.drift });
-	return b.median - a.median > threshold ? "improved" : "no_gain";
+	const double change = b.median - a.median;
+	if (change > threshold)
+		return "improved";
+	if (change < -threshold)
+		return "sharpness_decreased";
+	return "no_gain";
 }
 } /* namespace optical */

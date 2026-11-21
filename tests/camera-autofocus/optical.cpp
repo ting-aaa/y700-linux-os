@@ -256,14 +256,16 @@ static Sample chart(int fine, int lighting = 0, bool shift = false)
 
 static void selfTest()
 {
-	auto simulate = [](Sample initial, Sample final, int state, const char *expected) {
+	auto simulate = [](Sample initial, Sample final, int state, const char *expected,
+			   const Sample *scanning = nullptr) {
 		Trial trial;
 		unsigned starts = 0;
 		for (unsigned i = 0; i < Trial::warmup + 2 * groupSize; ++i)
 			starts += trial.observe(controls::AfStateIdle, initial) == Action::TriggerOnce;
 		require(starts == 1, "selftest_trigger_count");
 		for (int i = 0; i < 5; ++i)
-			require(trial.observe(controls::AfStateScanning, initial) == Action::Preview, "selftest_scan");
+			require(trial.observe(controls::AfStateScanning, scanning ? *scanning : initial) ==
+				Action::Preview, "selftest_scan");
 		for (unsigned i = 1; i <= Trial::settle + groupSize; ++i)
 			require((trial.observe(state, final) == Action::Finish) == (i == Trial::settle + groupSize),
 				"selftest_final_group");
@@ -272,6 +274,11 @@ static void selfTest()
 	Sample soft = chart(7), sharp = chart(23);
 	simulate(soft, sharp, controls::AfStateFocused, "improved");
 	simulate(sharp, sharp, controls::AfStateFocused, "no_gain");
+	simulate(sharp, soft, controls::AfStateFocused, "sharpness_decreased");
+	const Sample shifted = chart(23, 0, true);
+	simulate(sharp, soft, controls::AfStateFocused, "inconclusive", &shifted);
+	simulate(sharp, chart(7, 40), controls::AfStateFocused, "inconclusive");
+	simulate(sharp, soft, controls::AfStateFailed, "af_failed");
 	simulate(soft, chart(23, 40), controls::AfStateFocused, "inconclusive");
 	simulate(soft, chart(23, 0, true), controls::AfStateFocused, "inconclusive");
 	std::vector<uint8_t> flat(width * height * 4, 128);
@@ -279,7 +286,23 @@ static void selfTest()
 	uniform.exposureUs = soft.exposureUs;
 	uniform.gain = soft.gain;
 	simulate(uniform, uniform, controls::AfStateFocused, "inconclusive");
+	simulate(sharp, uniform, controls::AfStateFocused, "inconclusive");
 	simulate(uniform, uniform, controls::AfStateFailed, "af_failed");
+	// Both windows can set the noise threshold. These binary fractions give an exact tie.
+	for (bool spreadBefore : { false, true }) {
+		Window before, after;
+		before.fill(sharp);
+		after.fill(soft);
+		for (auto &f : before) f.sharpness = .5;
+		for (auto &f : after) f.sharpness = .375;
+		(spreadBefore ? before : after).front().sharpness += .0625;
+		const auto base = summarize(before);
+		require(std::string_view(verdict(base, summarize(after), true)) == "no_gain",
+			"selftest_decrease_at_noise_threshold");
+		for (auto &f : after) f.sharpness -= .001;
+		require(std::string_view(verdict(base, summarize(after), true)) == "sharpness_decreased",
+			"selftest_decrease_above_noise_threshold");
+	}
 	Window unstable;
 	for (unsigned i = 0; i < groupSize; ++i) unstable[i] = i % 2 ? soft : sharp;
 	require(!summarize(unstable).stable, "selftest_unstable_preview");
