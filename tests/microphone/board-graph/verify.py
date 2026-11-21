@@ -54,6 +54,11 @@ def factory_wiring(dtb, symbols, stock):
         return names(symbols, "/__symbols__", label)[0]
 
     codec = symbol("wcd938x_codec")
+    expect(cells(stock, codec, "qcom,cdc-vdd-mic-bias-current"), [30000], codec + " bias load")
+    for label, vote_set, initial_uv in (("pm8350c_bob", 3, 3296000), ("pm8350c_bob_ao", 1, 3008000)):
+        node = symbol(label)
+        expect(cells(stock, node, "qcom,set"), [vote_set], label + " vote set")
+        expect(cells(stock, node, "qcom,init-voltage"), [initial_uv], label + " initial request")
     for number in range(1, 5):
         mv, = cells(stock, codec, f"qcom,cdc-micbias{number}-mv")
         expect(cells(dtb, wcd, f"qcom,micbias{number}-microvolt"), [mv * 1000], f"MIC BIAS{number}")
@@ -122,6 +127,28 @@ def board_graph(base, dtb, variant):
     expect(new, old, "unchanged sound card properties")
 
 
+def shared_bob_consumers(dtb):
+    """Follow the two supply phandles from each board device back to BOB."""
+    regulators = soc + "rsc@17a00000/regulators-"
+    ufs = soc + "ufshc@1d84000"
+    panel = soc + "display-subsystem@ae00000/dsi@ae94000/panel@0"
+    sd = soc + "mmc@8804000"
+    cameras = ("cci@ac15000/i2c-bus@0/camera@20", "cci@ac15000/i2c-bus@1/camera@10",
+               "cci@ac16000/i2c-bus@0/camera@36")
+    routes = [
+        ("0", "vdd-l2-l7-supply", "ldo7", ufs, "vcc-supply"),
+        ("1", "vdd-l1-l12-supply", "ldo12", panel, "vddio-supply"),
+        ("1", "vdd-l6-l9-l11-supply", "ldo6", sd, "vqmmc-supply"),
+        ("1", "vdd-l6-l9-l11-supply", "ldo9", sd, "vmmc-supply"),
+        *(("1", "vdd-l3-l4-l5-l7-l13-supply", "ldo4", soc + camera, "vdd-supply")
+          for camera in cameras),
+    ]
+    for group, parent_supply, ldo, device, supply in routes:
+        provider = regulators + group
+        expect(cells(dtb, provider, parent_supply), [handle(dtb, bob)], provider + "/" + parent_supply)
+        expect(cells(dtb, device, supply), [handle(dtb, provider + "/" + ldo)], device + "/" + supply)
+
+
 def main():
     base, small, large, merged, runtime, manager = map(Path, sys.argv[1:])
     profiles = ET.parse(manager).getroot()
@@ -134,6 +161,7 @@ def main():
                ["CODEC_DMA-LPAIF_RXTX-TX-3", "2", "48000", "16", name + "-mic"], name)
     for variant, dtb in ((9380, small), (9385, large)):
         board_graph(base, dtb, variant)
+        shared_bob_consumers(dtb)
         for stock in (merged, runtime):
             factory_wiring(dtb, merged, stock)
         print(f"WCD{variant} hypothesis: TX3 capture, two factory analog routes, both SoundWire links, clock chain, GPIOs and supplies verified")
@@ -143,6 +171,7 @@ def main():
     if first.replace(b"qcom,wcd9380-codec\0", b"qcom,wcd9385-codec\0") != large.read_bytes():
         raise ValueError("Compiled hypotheses differ outside the WCD compatible")
     print("Both compiled hypotheses preserve the speaker and regulator properties. Only the WCD compatible differs.")
+    print("BOB also supplies LDOs for UFS, panel I/O, both microSD rails and all three cameras.")
 
 
 if __name__ == "__main__":
