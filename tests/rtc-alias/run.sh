@@ -86,6 +86,8 @@ for variant in plain aliased; do
         -rtc base=2010-01-02T03:04:05,clock=vm \
         -append "console=ttyAMA0,115200 nokaslr rdinit=/init rtcqa.alias=$alias_id" \
         >"$logs/$variant.qemu.log" 2>&1
-    if (( awake )); then grep '^RTC_AWAKE_QA_PASS ' "$logs/$variant.log"
+    if (( awake )); then
+        grep '^RTC_AWAKE_QA_PASS ' "$logs/$variant.log"
+        grep '^RTC_RESERVE_QA_PASS ' "$logs/$variant.log"
     else grep '^RTC_ALIAS_PASS ' "$logs/$variant.log"; fi
 done

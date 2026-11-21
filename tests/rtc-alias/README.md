@@ -14,6 +14,26 @@ The alarm uses time read from the RTC. The result includes signed system-minus-R
 
 An enabled alarm, an occupied descriptor, or a disabled nonzero alarm time prevents the measurement. Linux 7.3.4's `RTC_WKALM_RD` reports the AIE timer and supplies zero for `pending`. This interface exposes no independent PMIC latch status. The probe also checks for a readable event and samples the actual interrupt count. If interrupted, it compares the current target before restoring its own alarm. A different target is preserved. A forced process kill can leave its four-second one-shot to expire. [RTC alarm state](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/interface.c) · [RTC device ownership and events](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/dev.c)
 
+## Reserve a twenty-second alarm for an externally controlled sleep
+
+On the identified PMK8350, `--read-alarm` opens the RTC read-only and prints its disabled or enabled timestamp. The reservation mode sets a one-shot alarm relative to the RTC's own current seconds. A separate foreground controller can request sleep after `RTC_ALARM_ARMED` appears. An enabled alarm, a pending device event or an occupied descriptor prevents the reservation. Keep other alarm writers idle during the measured interval. The kernel exposes separate read and set operations and cannot identify two writers that happen to choose the same alarm second.
+
+```sh
+./awake-alarm --read-alarm | grep '^RTC_SAVED_ALARM ' > before
+./awake-alarm --reserve-wake-alarm > alarm.log 2>&1 &
+observer=$!
+# The separate controller observes RTC_ALARM_ARMED and controls the sleep cycle.
+wait "$observer"
+./awake-alarm --read-alarm | grep '^RTC_SAVED_ALARM ' > after
+cmp before after
+```
+
+The probe restores the original disabled timestamp, including a nonzero value. Catchable termination signals follow the same cleanup path. If another writer has replaced the target, its alarm is preserved and the probe exits with failure. A forced kill or power loss bypasses this userspace cleanup.
+
+An exit status of zero verifies an alarm event and restoration. The observation reports actual `CLOCK_BOOTTIME` and `CLOCK_MONOTONIC` deltas, their difference, the kernel suspend-success delta and the first reported wake IRQ. `rtc_first_wake_irq` requires exactly one recorded suspend, a clock difference of at least one second and a matching IRQ. `other_first_wake_irq` and `wake_source_unreported` record the corresponding attribution limits. `awake_event` can be reproduced entirely without sleep. The external controller records which suspend mode it requested.
+
+The ARM64 PL031 guest measured one alarm at 20 seconds, matched the device interrupt and reported zero time asleep. New descriptors independently confirmed restoration of a disabled nonzero timestamp after both expiry and SIGTERM. A replacement enabled by a competing writer retained its exact timestamp. The board executable refused the virtual identity. See `out/pmk8350-reserve-wake/qemu-rtc-reserve.log`.
+
 ## Reproduce the ARM64 guest checks
 
 ```sh
