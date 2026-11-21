@@ -1,6 +1,6 @@
 # Y700 internal panel dimensions
 
-On the TB320FC_PRC, the native 1600×2560 panel reports **118 × 190 mm** through DRM. That corresponds to about 344 horizontal and 342 vertical pixels per inch using the integer millimeter values. The installed Debian Xorg modesetting driver loses both dimensions before it exports the connector to RandR.
+On the TB320FC_PRC, the native 1600×2560 panel reports **118 × 190 mm** through DRM. That corresponds to about 344 horizontal and 342 vertical pixels per inch using the integer millimeter values. Stock Debian Xorg reports 0 × 0 mm for this connector. The Y700 package in the installed dev12.10 system reports the panel dimensions at the graphical login.
 
 ## Evidence from the tablet
 
@@ -59,4 +59,10 @@ The tested module is in the private build output `out/xorg-dsi-geometry/modesett
 
 A full ARM64 Debian package build produced the core and common packages above. The archived build used the earlier patch context. Applying the checked-in patch with zero fuzz produced the same compiled input, `drmmode_display.c` SHA-256 `3d52150e8a487c927db22b1746ebf174823a7759151fa1d643c5134353056755`. Compared with their authenticated Trixie counterparts, both packages have the same installed paths under `/usr`. The X server's 2,005 exported dynamic symbol/type pairs, the driver's two exported pairs and both binaries' direct library dependencies matched stock. The packaged driver has SHA-256 `8db0cd0e45540948fd847b601e85f1c71647461a992869f0f653d48121f206e4`. [Tested archive checksums](../config/xorg/arm64-packages.sha256)
 
-A networkless ARM64 QEMU guest first reproduced the stock 0 × 0 result. It installed both packages with dpkg into a disposable RAM overlay, passed `dpkg --audit`, `dpkg -V` and `apt-get check`, and loaded `/usr/lib/xorg/modules/drivers/modesetting_drv.so` from Xorg's default module path. All 15 RandR queries across the five cases in the table matched, including the EDID-free DSI panel at 118 × 190 mm and the EDID override at 300 × 200 mm. The guest powered off with test exit 0. The two archives, package audit, build information and serial receipt are in `out/xorg-dsi-packages/`. The packaged pair still needs an ordinary Xorg session on the physical DSI panel. [Repeat the package test](../tests/xorg-dsi/README.md)
+A networkless ARM64 QEMU guest first reproduced the stock 0 × 0 result. It installed both packages with dpkg into a disposable RAM overlay, passed `dpkg --audit`, `dpkg -V` and `apt-get check`, and loaded `/usr/lib/xorg/modules/drivers/modesetting_drv.so` from Xorg's default module path. All 15 RandR queries across the five cases in the table matched, including the EDID-free DSI panel at 118 × 190 mm and the EDID override at 300 × 200 mm. The guest powered off with test exit 0. The two archives, package audit, build information and serial receipt are in `out/xorg-dsi-packages/`. The installed packages have also been checked on the physical DSI panel below. [Repeat the package test](../tests/xorg-dsi/README.md)
+
+## Installed dev12.10 graphical login
+
+On 2026-11-21 the TB320FC_PRC booted the permanent dev12.10 entry into LightDM. Both Xorg packages were `2:21.1.16-1.3+deb13u4+y7001`. The server listening on display `:0` mapped the expected modesetting driver. Its open file's device number, inode and SHA-256 matched the running executable mapping and the packaged driver.
+
+The connected `card1-DSI-1` returned zero EDID bytes. Three consecutive queries to the same X server returned **118 × 190 mm**, **1600 × 2560 at 120 Hz**, in normal portrait orientation. The greeter’s Onboard keyboard ran with `GDK_SCALE=2`. The NT36523N input node carried the udev touchscreen tag, and its XInput transformation was the identity matrix for this orientation. These readings establish the panel metadata and configured input mapping at login. Physical finger placement was not measured in this run. [Read-only board check](../tests/xorg-dsi/board.sh)

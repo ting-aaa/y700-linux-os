@@ -1,6 +1,6 @@
 # Y700 二代的电源键与 RTC 唤醒路径
 
-TB320FC_PRC 的原 Debian 内核已经注册电源键，并提供 `s2idle` 和 `deep`。已交付的设备树沿用 PMK8350 RTC 的 `disabled` 默认值，因此当前系统缺少硬件定时唤醒设备。电脑上已用原源码编译两份独立 DTB，并验证可沿用 dev12.8 已安装的 RTC 驱动。平板的清醒状态检查中，成功和失败的系统睡眠计数均为零。电源键唤醒、RTC 唤醒以及唤醒后的屏幕、触控、Wi-Fi 和 USB 恢复均待实测。[平板清醒状态与桌面策略](STATUS.md#wake-sources-on-the-running-tablet)
+TB320FC_PRC 的日常启动项提供 `s2idle` 和 `deep`，设备树默认关闭 PMK8350 RTC。一次限次启动沿用已安装的 dev12.10，启用了这颗芯片。平板清醒时连续两次收到了真实闹钟中断。平板进入睡眠后的定时唤醒、电源键唤醒、外设恢复和待机耗电仍待实测。[平板清醒状态与桌面策略](STATUS.md#wake-sources-on-the-running-tablet)
 
 ## 从硬件到 Linux
 
@@ -36,14 +36,28 @@ bash scripts/build-rtc-dtb.sh --probe-rtc1 "$prepared_kernel" "$new_clock_probe_
 
 ## 首次注册与系统时间
 
-原配置将 `RTC_HCTOSYS_DEVICE` 与 `RTC_SYSTOHC_DEVICE` 都设为 `rtc0`。注册名匹配时，RTC 核心读取设备并调用 `do_settimeofday64()`，驱动延后加载也会触发。NTP 向硬件写时另按 `SYSTOHC_DEVICE` 选择目标。清醒的 Debian 当前运行 systemd-timesyncd，报告已同步，chrony 未运行。本机 PMIC 计数的实际纪元和 Android 校时源仍待测量。[RTC 注册逻辑](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/class.c) · [NTP 写 RTC](https://github.com/torvalds/linux/blob/v7.3/kernel/time/ntp.c)
+原配置将 `RTC_HCTOSYS_DEVICE` 与 `RTC_SYSTOHC_DEVICE` 都设为 `rtc0`。注册名匹配时，RTC 核心读取设备并调用 `do_settimeofday64()`，驱动延后加载也会触发。NTP 向硬件写时另按 `SYSTOHC_DEVICE` 选择目标。清醒的 Debian 当前运行 systemd-timesyncd，报告已同步，chrony 未运行。实机随后读到的原始计数对应 1970 年，详见下方测量。Android 如何将它映射到民用时间仍待核实。[RTC 注册逻辑](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/class.c) · [NTP 写 RTC](https://github.com/torvalds/linux/blob/v7.3/kernel/time/ntp.c)
 
 PMK8350 的驱动探测会尝试设置 `0x6146` 的启用位，读取秒数使用 `0x6148` 起的四字节小端计数。写闹钟使用 `0x6240`，启用位在 `0x6246`、清中断在 `0x6248`。两个候选均沿用原树，无 `allow-set-time`、NVMEM offset 或 `qcom,uefi-rtc-info`。在这种配置下读取的偏移为零，设置 RTC 时间的路径会返回 `ENODEV`。注册时仍会读取已有的硬件闹钟。首次探测前不应假定 PMIC 时间等于系统 UTC，也不应将 Android 时钟偏移写入未知存储。[RTC 驱动](https://github.com/torvalds/linux/blob/v7.3/drivers/rtc/rtc-pm8xxx.c)
 
 专用探测树为将来的隔离唤醒验证保留 `rtc1`。在只绑定这一个 RTC 的早期环境中，注册前检查 RTC 类为空，核对最终 DT 的 `rtc1` 指向目标 PMIC，随后核对注册设备的 OF 路径、`hctosys=0`、RTC 读数和独立的系统时间。编号已占用时，RTC 核心会退回到可用编号。无法保证独占的环境可另编隔离测试内核，关闭 `CONFIG_RTC_HCTOSYS` 和 `CONFIG_RTC_SYSTOHC`。这两项均为编译配置。探测树只针对内核按名称进行的校时，显式调用 `hwclock` 的用户空间程序仍能访问指定设备。[RTC sysfs 接口](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-rtc)
 
-在电脑上用原内核 `9afa9b69…`、512 MiB ARM64 QEMU 和测试专用 PL031 模块运行两个无盘对照。每次先将来宾系统时间设为 2024-01-02，再注册计数为 2010-01-02 的模拟 RTC。普通编号得到 `rtc0/hctosys=1`，系统时间跳至 2010。探测别名得到 `rtc1/hctosys=0`，系统时间保留在 2024，同时仍可读到 2010 的 RTC 时间。两次均正常关机，可用下列命令复测。虚拟 PL031 验证的是共同的 RTC 核心。平板的 PMIC 响应、中断归属、唤醒耗时和待机电流仍需独立实测。[无盘对照脚本](../tests/rtc-alias/run.sh)
+在电脑上用原内核 `9afa9b69…`、512 MiB ARM64 QEMU 和测试专用 PL031 模块运行两个无盘对照。每次先将来宾系统时间设为 2024-01-02，再注册计数为 2010-01-02 的模拟 RTC。普通编号得到 `rtc0/hctosys=1`，系统时间跳至 2010。探测别名得到 `rtc1/hctosys=0`，系统时间保留在 2024，同时仍可读到 2010 的 RTC 时间。两次均正常关机，可用下列命令复测。虚拟 PL031 验证的是共同的 RTC 核心。平板的芯片响应与清醒中断见下方实测。睡眠后的唤醒归因、耗时和待机电流仍需独立验证。[无盘对照脚本](../tests/rtc-alias/run.sh)
 
 ```sh
 bash tests/rtc-alias/run.sh "$prepared_kernel" "$static_arm64_busybox" "$new_logs"
 ```
+
+## 国行 dev12.10 清醒实测
+
+2026-11-21，在同一台 16 GiB / 512 GB 国行 Y700 上，限次 EFI 项使用日常安装的内核、initrd、根文件系统和原厂配置。试验 DTB 仅启用 PMK8350 RTC 并指定 `rtc1` 别名。系统实际绑定了 `rtc-pm8xxx`，设备路径、已加载的设备树和闹钟 IRQ 名称一致。内核报告 `hctosys=0`，驱动的设备唤醒开关为 `enabled`。系统日期为 2026-11-21，芯片原始秒数对应 1970-11-26。两次闹钟的目标均从芯片自身读数向后加四秒，未设置任一时钟。[限次入口构建](../scripts/build-rtc1-entry.sh) · [测量程序](../tests/rtc-alias/awake-alarm.c)
+
+| 平板清醒时的测量 | 第一次 | 第二次 |
+| --- | --- | --- |
+| 从请求至事件的单调时钟耗时 | 4.061 秒 | 4.972 秒 |
+| 芯片秒读数增量 | 5 秒 | 5 秒 |
+| Linux IRQ 237（`pm8xxx_rtc_alarm`）累计 | 0 → 1 | 1 → 2 |
+| `/dev/rtc1` 事件 | 一次，IRQF 和 AF 同时置位 | 一次，IRQF 和 AF 同时置位 |
+| 闹钟清理 | 已恢复原始禁用状态 | 已恢复原始禁用状态 |
+
+两次测量均阻止了系统睡眠，内核的挂起成功和失败计数均为零。临时启动项保留了 240 秒自动返回定时器。测量后主动恢复默认项并正常重启，固件实际选择了 `y700-recovery-12-10.conf`。外层 EFI 的文件数恢复为 29，除每次启动都会更新的 `loader/random-seed` 外，逐文件散列与试验前一致。图形登录、触控设备、蓝牙服务和传感器 DSP 均已返回，Wi-Fi 的 IPv4、IPv6 网关各应答 3/3 次。日常启动项仍使用原设备树。这轮验证覆盖清醒时的硬件闹钟；整机挂起后能否由它唤醒需单独测试。12 份本地实机记录的清单位于 `out/pmk8350-rtc-board/BOARD-SHA256SUMS`，SHA-256 为 `36cfc74d23e78fb5f0847a7188ed640b31b6f81a660b52a7efebe6c249453a59`。
