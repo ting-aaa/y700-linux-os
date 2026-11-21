@@ -1,0 +1,132 @@
+--- a/diagnostic.sh
++++ b/diagnostic.sh
+@@ -56,6 +56,10 @@
+ chmod 0755 "$stage"
+ install -m755 y700-af-measure y700-signal-measure measure-board.sh "$stage"
+ install -m644 libcamera.so.0.7 "$stage"
++install -m755 y700-bracket-measure "$stage"
++install -d -m755 "$stage/bracket-ipa"
++install -m644 ipa_bracket.so "$stage/bracket-ipa/"
++if (( virt )); then install -m755 bracket-test "$stage"; fi
+ g=/sys/kernel/config/usb_gadget/y700-ram-af
+ own=0
+ cleanup() {
+@@ -65,7 +69,8 @@
+         rmdir "$g/functions/acm.qa" "$g/configs/c.1" "$g/strings/0x409" "$g" 2>/dev/null || :
+     fi
+     rm -f -- "$stage/y700-af-measure" "$stage/y700-signal-measure" "$stage/measure-board.sh" "$stage/libcamera.so.0.7"
+-    rmdir "$stage"
++    rm -f -- "$stage/y700-bracket-measure" "$stage/bracket-test" "$stage/bracket-ipa/ipa_bracket.so"
++    rmdir "$stage/bracket-ipa" "$stage"
+ }
+ trap cleanup EXIT
+ if (( virt )); then
+@@ -98,6 +103,16 @@
+             "$payload/allocator-vm.sh"
+             return
+         fi
++        if [[ $1 == --rear-bracket ]]; then
++            local args=(--quiet --wait --collect --pipe --uid=y700 -p PrivateDevices=yes -p PrivateNetwork=yes
++                -p ProtectSystem=strict -p ProtectHome=yes -p NoNewPrivileges=yes -p LimitCORE=0 -p RuntimeMaxSec=40s
++                --setenv=LD_LIBRARY_PATH=/opt/y700-camera/lib --setenv=LIBCAMERA_SOFTISP_MODE=cpu)
++            systemd-run "${args[@]}" "$stage/y700-bracket-measure" --self-test || return 1
++            systemd-run "${args[@]}" "$stage/bracket-test" "$stage/bracket-ipa" > "$payload/bracket-qa" || return 1
++            grep -q '^BRACKET_IPA_TEST ' "$payload/bracket-qa" || return 1
++            /usr/bin/python3 -I -B "$payload/bracket_receipt.py" virtual-fixture
++            return
++        fi
+         if [[ $1 == --rear-signal ]]; then
+             systemd-run --quiet --wait --collect --pipe --uid=y700 -p PrivateDevices=yes -p PrivateNetwork=yes \
+                 -p ProtectSystem=strict -p ProtectHome=yes -p NoNewPrivileges=yes -p LimitCORE=0 -p RuntimeMaxSec=70s \
+@@ -115,6 +130,7 @@
+         healthy || return 1
+         local client="$stage/y700-af-measure"
+         if [[ $1 == --rear-signal ]]; then client="$stage/y700-signal-measure"; fi
++        if [[ $1 == --rear-bracket ]]; then client="$stage/y700-bracket-measure"; fi
+         with_private_allocator /bin/bash "$stage/measure-board.sh" "$1" "$client"
+     fi
+ }
+@@ -172,7 +188,7 @@
+             fi
+             systemctl start y700-ram-af-ack.timer
+             publish 'AF1 RETURN acknowledged=1' ;;
+-        "START $token"|"SIGNAL $token")
++        "START $token"|"SIGNAL $token"|"BRACKET $token")
+             if [[ $state == BLOCKED ]]; then publish 'AF1 REFUSED selftest'; continue; fi
+             if [[ $state != READY || -d $payload/consumed ]]; then publish 'AF1 REFUSED consumed'; continue; fi
+             if ! grep -Fxq 'AF1 CONFIG_END rc=0' "$payload/config-result" 2>/dev/null; then
+@@ -189,6 +205,10 @@
+                 selection=--rear-signal
+                 filter=(/usr/bin/python3 -I -B "$payload/signal_receipt.py" filter)
+                 if (( virt )); then filter+=(--virtual); fi
++            elif [[ $command == "BRACKET $token" ]]; then
++                selection=--rear-bracket
++                filter=(/usr/bin/python3 -I -B "$payload/bracket_receipt.py" filter)
++                if (( virt )); then filter+=(--virtual); fi
+             fi
+             state=RUNNING
+             publish "AF1 RUNNING $token virtual=$virt"
+@@ -204,7 +224,7 @@
+             codes=("${PIPESTATUS[@]}")
+             set -e
+             rc=${codes[0]}; [[ ${codes[1]} == 0 && ${codes[2]} == 0 ]] || rc=1
+-            if [[ $selection == --rear-signal ]]; then
++            if [[ $selection == --rear-signal || $selection == --rear-bracket ]]; then
+                 : # The numeric filter verified the complete measurement and cleanup rows.
+             elif (( virt )); then
+                 echo 'AF_TEST virtual=1 camera_access=0' >> "$payload/result"; publish 'AF_TEST virtual=1 camera_access=0'
+--- a/measure-board.sh
++++ b/measure-board.sh
+@@ -28,10 +28,10 @@
+ fi
+ case $mode in
+     --self-test) isolated_devices=yes ;;
+-    --rear-af|--rear-signal|--check-rear-config) isolated_devices=no ;;
++    --rear-af|--rear-signal|--rear-bracket|--check-rear-config) isolated_devices=no ;;
+     *) exit 2 ;;
+ esac
+-if [[ $mode == --rear-af || $mode == --rear-signal ]]; then
++if [[ $mode == --rear-af || $mode == --rear-signal || $mode == --rear-bracket ]]; then
+     options=,$(findmnt -nro OPTIONS -T /),
+     if [[ $options == *,ro,* || $options == *,emergency_ro,* ]]; then
+         echo 'AF_ERROR reason=root_filesystem_read_only' >&2
+@@ -72,13 +72,21 @@
+         "$diag_sha" libcamera.so.0.7 \
+         90dfdbf117fd844ead381f9ffc4f365f35e185a204e0768d70c2c5394fff1773 "$library/libcamera.so.0.7.2" \
+         7de9f8cf7eca33dc7cf4d14da83ed60d1240530f73f45c57484dc263f6ca5b8c "$library/libcamera-base.so.0.7.2" | sha256sum --quiet -c -)
+-    if [[ $mode != --rear-signal ]]; then library=$stage:$library; fi
++    if [[ $mode != --rear-signal && $mode != --rear-bracket ]]; then library=$stage:$library; fi
+     levels='*:FATAL,V4L2:ERROR,Y700Af:DEBUG'
+ fi
++ipa=()
++if [[ $mode == --rear-bracket ]]; then
++    [[ $diagnostic == 1 && ${Y700_AF_RAM_V2:-0} == 1 ]]
++    printf '%s  %s\n' \
++        7786d2709aa362f36cd56da015f8667f93501e7b072285ea729f86f8f1fb6e67 /opt/y700-camera/lib/libcamera/ipa/ipa_soft_simple.so \
++        3e7411f620957a8be6822d30ecaa238b78ef89aa8d82d5abb6bb2bd82229cb40 /opt/y700-camera/libexec/libcamera/soft_ipa_proxy | sha256sum --strict --quiet -c -
++    ipa=(--setenv="LIBCAMERA_IPA_MODULE_PATH=$stage/bracket-ipa" --setenv=LIBCAMERA_IPA_FORCE_ISOLATION=1)
++fi
+ unit=y700-optical-$(cat /proc/sys/kernel/random/uuid)
+ rc=0
+ inhibit=()
+-if [[ $mode == --rear-af || $mode == --rear-signal ]]; then
++if [[ $mode == --rear-af || $mode == --rear-signal || $mode == --rear-bracket ]]; then
+     inhibit=(systemd-inhibit --what=sleep:idle --mode=block --who=y700-optical --why="Rear camera measurement in progress")
+ fi
+ "${inhibit[@]}" systemd-run --unit="$unit" --quiet --collect --wait --pipe --uid=y700 "${bind[@]}" \
+@@ -87,13 +95,13 @@
+     -p RuntimeMaxSec=70s -p TimeoutStopSec=3s -p "RuntimeDirectory=$unit" -p RuntimeDirectoryMode=0700 \
+     --setenv="HOME=/run/$unit" --setenv="XDG_CONFIG_HOME=/run/$unit" \
+     --setenv="LD_LIBRARY_PATH=$library" --setenv=LIBCAMERA_SOFTISP_MODE=cpu \
+-    --setenv="LIBCAMERA_LOG_LEVELS=$levels" "$tool" "$mode" || rc=$?
++    "${ipa[@]}" --setenv="LIBCAMERA_LOG_LEVELS=$levels" "$tool" "$mode" || rc=$?
+ for ((i=0; i<40; i++)); do
+     [[ $(cat "$sensor/power/runtime_status") != suspended ]] || break
+     sleep 0.25
+ done
+ [[ $(cat "$sensor/power/runtime_status") == suspended ]]
+ after=$(cat "$sensor/power/runtime_active_time")
+-if [[ $mode != --rear-af && $mode != --rear-signal ]]; then [[ $before == "$after" ]]; fi
++if [[ $mode != --rear-af && $mode != --rear-signal && $mode != --rear-bracket ]]; then [[ $before == "$after" ]]; fi
+ printf 'AF_CLEANUP mode=%s rear=suspended sensor_active_ms_delta=%s exit=%s\n' "$mode" "$((after - before))" "$rc"
+ exit "$rc"

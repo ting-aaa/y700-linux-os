@@ -26,4 +26,5 @@ awk -v mode="$mode" '
 chmod 755 y700-af-acm-init
 sh -n y700-af-acm-init
 cp -- "$src" "$out"
+chmod u+w "$out"
 printf 'y700-af-acm-init\n' | cpio --quiet -o -H newc --owner=0:0 >> "$out"

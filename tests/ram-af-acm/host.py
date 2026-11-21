@@ -5,6 +5,7 @@ import re
 import socket
 import time
 
+import bracket_receipt
 import signal_receipt
 
 
@@ -81,9 +82,12 @@ def status(channel, virtual):
     raise TimeoutError("No verified health and self-test receipt")
 
 
-def result(channel, token, virtual, start, acknowledge=False, signal=False):
+def result(channel, token, virtual, start, acknowledge=False, signal=False, bracket=False):
+    schema = bracket_receipt if bracket else signal_receipt if signal else None
+    command = "BRACKET" if bracket else "SIGNAL" if signal else "START"
+    failure = bracket_receipt.is_failure if bracket else lambda row: row == signal_receipt.FAIL
     if start:
-        channel.send(("SIGNAL " if signal else "START ") + token)
+        channel.send(f"{command} {token}")
     else:
         channel.send("RESULT " + token)
     running = not start
@@ -100,10 +104,10 @@ def result(channel, token, virtual, start, acknowledge=False, signal=False):
             continue  # A previously sent STATUS may still have a response in flight.
         elif running and re.fullmatch(r"AF1 END rc=\d{1,3}", row):
             rc = int(row.split("=")[1])
-            if signal:
-                valid = signal_receipt.complete(signal_rows, virtual) if rc == 0 else signal_rows == [signal_receipt.FAIL]
+            if schema:
+                valid = schema.complete(signal_rows, virtual) if rc == 0 else len(signal_rows) == 1 and failure(signal_rows[0])
                 if not valid:
-                    raise RuntimeError("Incomplete matched-signal receipt")
+                    raise RuntimeError("Incomplete camera measurement receipt")
             digest.update((row + "\n").encode("ascii"))
             print(row, flush=True)
             if acknowledge:
@@ -120,11 +124,11 @@ def result(channel, token, virtual, start, acknowledge=False, signal=False):
                 else:
                     raise TimeoutError("Return confirmation missing; independent RAM timer remains armed")
             return rc
-        elif signal and running and (signal_receipt.valid_row(len(signal_rows), row, virtual)
-                                      or (not signal_rows and row == signal_receipt.FAIL)):
+        elif schema and running and (schema.valid_row(len(signal_rows), row, virtual)
+                                     or (not signal_rows and failure(row))):
             signal_rows.append(row)
             digest.update((row + "\n").encode("ascii"))
-        elif signal or not (running and DATA_ROW.fullmatch(row)):
+        elif schema or not (running and DATA_ROW.fullmatch(row)):
             raise RuntimeError("Unexpected diagnostic response")
         else:
             digest.update((row + "\n").encode("ascii"))
@@ -160,7 +164,8 @@ def check_config(channel, token, virtual=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["status", "check-config", "start", "result", "signal", "signal-result"])
+    parser.add_argument("action", choices=["status", "check-config", "start", "result", "signal", "signal-result",
+                                          "bracket", "bracket-result"])
     transport = parser.add_mutually_exclusive_group(required=True)
     transport.add_argument("--port")
     transport.add_argument("--vm-socket")
@@ -173,15 +178,15 @@ if __name__ == "__main__":
             if state != "READY" or args.token != token:
                 raise SystemExit("Configuration check requires the matching READY token")
             raise SystemExit(check_config(link, token, bool(args.vm_socket)))
-        if args.action in {"start", "signal"}:
+        if args.action in {"start", "signal", "bracket"}:
             if state != "READY" or args.token != token:
                 raise SystemExit("Start requires a matching READY token from this boot")
             raise SystemExit(result(link, token, bool(args.vm_socket), True, acknowledge=not args.vm_socket,
-                                    signal=args.action == "signal"))
-        if args.action in {"result", "signal-result"}:
+                                    signal=args.action == "signal", bracket=args.action == "bracket"))
+        if args.action in {"result", "signal-result", "bracket-result"}:
             if state != "DONE" or args.token != token:
                 raise SystemExit("Retrieval requires a matching DONE token from this boot")
             raise SystemExit(result(link, token, bool(args.vm_socket), False, acknowledge=not args.vm_socket,
-                                    signal=args.action == "signal-result"))
+                                    signal=args.action == "signal-result", bracket=args.action == "bracket-result"))
     finally:
         link.close()

@@ -19,7 +19,9 @@ initrd=$bundle/initrd
 protocol=$repo/tests/ram-af-acm/test-protocol.py
 if [[ -n ${AF_QA_SIGNAL:-} ]]; then
     initrd=$work/signal-qa-initrd
-    bash "$repo/tests/ram-af-acm/signal-vm-init.sh" "$bundle/initrd" "$AF_QA_SIGNAL" "$initrd"
+    mode=$AF_QA_SIGNAL
+    [[ $mode != bracket ]] || mode=ack
+    bash "$repo/tests/ram-af-acm/signal-vm-init.sh" "$bundle/initrd" "$mode" "$initrd"
     protocol=$repo/tests/ram-af-acm/test-signal-protocol.py
 fi
 "$qemu" "${args[@]}" -machine virt,gic-version=3 -cpu max -smp 3 -m 8192 \
