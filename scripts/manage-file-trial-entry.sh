@@ -4,6 +4,7 @@ set -euo pipefail
 umask 077
 die() { echo "File trial entry: $*" >&2; exit 1; }
 payload=y700-file
+dt_only=0
 manifest=c0ab1aca3a71d38000e6dda15d8730cdb7d68afc06e4cc0904ba18dd1a4184a2
 if [[ ${1:-} == --dev12.10 ]]; then
     shift
@@ -11,14 +12,20 @@ if [[ ${1:-} == --dev12.10 ]]; then
     manifest=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
 elif [[ ${1:-} == --dev12.10-rtc1 ]]; then
     shift
+    dt_only=1
     payload=y700-rtc1-12-10
     manifest=8fe4ebbca9fc20b6cd13453eb014fcf0aa48d5b6af97c4b40c0ad3d96bc0809a
+elif [[ ${1:-} == --dev12.10-cci0 ]]; then
+    shift
+    dt_only=1
+    payload=y700-cci0-12-10
+    manifest=d181c60b152378d2b8e1505277587f346f3f54601f33b2b46b04bf816db5dcfd
 elif [[ ${1:-} == --dev12.10-recovery ]]; then
     shift
     payload=y700-recovery-12-10
     manifest=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b
 fi
-[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
+[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1|--dev12.10-cci0] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
 mode=$1
 source_dir=$(realpath -e -- "$2")
 esp=$(realpath -e -- "$3")
@@ -36,10 +43,10 @@ flock -n "$guard" || die 'another menu operation is active'
 [[ -d EFI && -d loader/entries && -f loader/entries/debian.conf ]] || die 'internal Debian entry is missing'
 default=$(awk 'tolower($1)=="default" {print $2}' loader/loader.conf)
 preserved=(loader/loader.conf loader/entries/debian.conf EFI/BOOT/BOOTAA64.EFI EFI/debian/{kernel.efi,board.dtb,initrd})
-if [[ $payload == y700-rtc1-12-10 ]]; then
+if (( dt_only )); then
     [[ $default == y700-recovery-12-10.conf ]] || die 'expected permanent recovery default'
     ! compgen -G 'loader/entries/y700-installed-*.conf' >/dev/null || die 'a counted trial is active'
-    [[ ! -e loader/entries/y700-rtc1-12-10.conf ]] || die 'unexpected uncounted RTC entry'
+    [[ ! -e loader/entries/y700-rtc1-12-10.conf && ! -e loader/entries/y700-cci0-12-10.conf ]] || die 'unexpected uncounted DT probe entry'
     for prior in y700-file-12-10 y700-recovery-12-10; do
         existing=("EFI/$prior/"{kernel.efi,board.dtb,initrd} "loader/entries/$prior.conf")
         case $prior in
@@ -63,13 +70,13 @@ dir=EFI/$payload
 menu=loader/entries/$payload.conf
 source_menu=$menu
 payloads=(kernel.efi board.dtb initrd)
-if [[ $payload == y700-rtc1-12-10 ]]; then
+if (( dt_only )); then
     menu=$dir/source.conf
     payloads=(board.dtb)
 fi
 check_dir() {
     local count=${#payloads[@]}
-    if [[ $payload == y700-rtc1-12-10 && -e $menu ]]; then ((count+=1)); fi
+    if [[ $dt_only == 1 && -e $menu ]]; then ((count+=1)); fi
     [[ -d $dir && $(find "$dir" -mindepth 1 -maxdepth 1 -printf . | wc -c) == "$count" ]] || die 'unexpected contents at trial payload path'
     for file in "${payloads[@]}"; do cmp -- "$source_dir/$dir/$file" "$dir/$file"; done
 }

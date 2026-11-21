@@ -81,3 +81,21 @@ bash scripts/manage-file-trial-entry.sh --dev12.10-rtc1 remove "$work/entry" "$O
 ```
 
 The 23,671-byte archive has SHA-256 `74bd49497c80637efb43ae8b895d611fb76d2280ab73ef202c80119d8e74553c`. The FAT transaction fixture is `tests/installed-trial/rtc1-arm.sh RECOVERY_MENU_QA_DIR RTC1_ENTRY NEW_WORK`. Its armed menu can be passed to `recovery-firmware.sh --rtc1` with the same arguments as the recovery firmware test. On ARM64 QEMU the first EFI selection consumed the counter and provided a virtual PL031 RTC alias. The second selected the recovery fallback with the original virtual tree. Receipts are in `out/dev12.10-rtc1-trial/`. PMIC alarm delivery is measured separately on the tablet.
+
+## Single-boot CCI0 clock probe
+
+The installed dev12.10 recovery kernel and initrd also support a counted probe for the rear camera control bus clock. The supplied board tree adds two properties to `/soc@0/cci@ac15000`. They select clock 8 on the camera clock controller and request 37,500,000 Hz. The builder removes the two properties from a scratch copy and compares the entire decoded tree with the sealed recovery DTB. At arm and confirm time the controller checks the paths and bytes of every assigned clock, clock parent and clock rate in the running tree. There are 20 properties on the recovery tree and 22 on the probe. The applied hardware rate requires a separate measurement.
+
+```sh
+bash scripts/build-dt-probe-entry.sh --cci0 "$RECOVERY_ENTRY" out/camera-cci-clock/cci0-37500000.dtb "$work/entry"
+(cd "$work" && tar --sort=name --mtime=@1795150416 --owner=0 --group=0 --numeric-owner --mode=0700 -cf - entry | gzip -n >cci0-entry.tar.gz)
+bash scripts/manage-file-trial-entry.sh --dev12.10-cci0 add "$work/entry" "$OUTER_ESP"
+bash scripts/arm-installed-trial.sh --cci0 arm "$RUN_ID"
+# In the counted boot, with the four-minute return timer still active
+bash scripts/arm-installed-trial.sh --cci0 confirm "$RUN_ID"
+# After returning to the recovery system
+bash scripts/arm-installed-trial.sh --cci0 restore "$RUN_ID"
+bash scripts/manage-file-trial-entry.sh --dev12.10-cci0 remove "$work/entry" "$OUTER_ESP"
+```
+
+Two builds produced the same 23,663-byte archive, SHA-256 `868979edce4e53e1aefefb12b0832fed1fc4eeecee6f4638a375b8b490159968`. Repeat the FAT transaction with `tests/installed-trial/rtc1-arm.sh --cci0 RECOVERY_MENU_QA_DIR PROBE_ENTRY NEW_WORK`, then run `recovery-firmware.sh --cci0` with the five firmware fixture arguments above. The transaction rejected a tree with an additional clock assignment on CCI1. The ARM64 guest used the two CCI0 properties on an unbound node of its virtual DT. The first EFI boot consumed the attempt and the second selected the recovery tree. Local logs are in `out/dev12.10-cci0-trial/`.

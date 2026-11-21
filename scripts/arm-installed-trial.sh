@@ -10,7 +10,9 @@ baseline_entry=debian.conf
 baseline_sub=debian
 source_sub=y700-file-12-10
 recovery=0
-rtc_probe=0
+dt_probe=
+probe_dtb_sha=
+probe_option=
 trial_role=
 recovery_sha=21b05d85897a5047834766a5ae1629203d6fad6fd43d0aa614c110b1f3bfa834
 recovery_mode() {
@@ -21,15 +23,25 @@ recovery_mode() {
     source_sub=y700-recovery-12-10
     entry=$source_sub.conf
 }
-rtc1_mode() {
+dt_probe_mode() {
     recovery_mode
-    rtc_probe=1
-    trial_role=rtc1-
+    dt_probe=$1
+    trial_role=$dt_probe-
     baseline_sub=y700-recovery-12-10
     baseline_entry=$baseline_sub.conf
-    source_sub=y700-rtc1-12-10
+    source_sub=y700-$dt_probe-12-10
     entry=$source_sub.conf
-    recovery_sha=58587dee5b4e72b98b2cafdd1be382a7f73f6db1245697d93199e729ff6185f7
+    case $dt_probe in
+        rtc1)
+            probe_option=y700.rtc_probe=rtc1
+            probe_dtb_sha=501e44f89c639165aa753ecbb336d14ac38846abdfc57cc343806a3248844e51
+            recovery_sha=58587dee5b4e72b98b2cafdd1be382a7f73f6db1245697d93199e729ff6185f7 ;;
+        cci0)
+            probe_option=y700.cci_probe=cci0
+            probe_dtb_sha=b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea
+            recovery_sha=e621697a905ba34e2274d9ba2a4cacb076bf9b4d7df7f6c96f527c73a06e5635 ;;
+        *) die 'unknown DT probe' ;;
+    esac
 }
 release_lock=39cd516bc47679ba3c7980dc3ed43a43c1bac80e40fba690c85d33d9794fd5eb
 timer=y700-installed-trial-deadline.timer
@@ -161,12 +173,13 @@ check_recovery_origin() {
     [[ $(selected_entry) == "$baseline_entry" ]] || die 'booted EFI entry differs from installed fallback'
     local args
     args=$(current_cmdline)
-    if (( rtc_probe )); then
+    if [[ -n $dt_probe ]]; then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
     elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
-    if grep -Eq '(^| )(y700[.]installed_trial|y700[.]rtc_probe)(=| |$)' <<<"$args"; then
+    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci)_probe)(=| |$)' <<<"$args"; then
         die 'already running a trial or recovery'
     fi
+    if [[ $dt_probe == cci0 ]]; then verify_cci0_tree base; fi
 }
 check_recovery_runtime() {
     local action=$1 unit
@@ -200,10 +213,10 @@ recovery_payloads() {
         result=$(cd "$esp" && sha256sum "EFI/$name/"{kernel.efi,board.dtb,initrd} "loader/entries/$name.conf" | sha256sum | cut -c1-64)
         [[ $result == "$expected" ]] || die 'deployed entry or payload differs from the sealed manifest'
     done
-    if (( rtc_probe )); then
+    if [[ -n $dt_probe ]]; then
         [[ ! -e $entries/$entry &&
-           $(sha "$esp/EFI/$source_sub/board.dtb") == 501e44f89c639165aa753ecbb336d14ac38846abdfc57cc343806a3248844e51 &&
-           $(sha "$source_conf") == "$recovery_sha" ]] || die 'unexpected RTC1 staging'
+           $(sha "$esp/EFI/$source_sub/board.dtb") == "$probe_dtb_sha" &&
+           $(sha "$source_conf") == "$recovery_sha" ]] || die 'unexpected DT probe staging'
     fi
 }
 payloads() {
@@ -212,7 +225,7 @@ payloads() {
         value=$(awk -v k="$key" '$1==k {if(NF!=2)exit 1; print $2; n++} END{if(n!=1)exit 1}' "$conf") ||
             die 'invalid BLS payload declaration'
         expected_dir=$sub
-        if [[ $sub == y700-rtc1-12-10 && $key != devicetree ]]; then expected_dir=y700-recovery-12-10; fi
+        if [[ -n $dt_probe && $sub == "$source_sub" && $key != devicetree ]]; then expected_dir=y700-recovery-12-10; fi
         [[ $value =~ ^/EFI/$expected_dir/[a-zA-Z0-9_.-]+$ && ${value##*/} != . && ${value##*/} != .. ]] ||
             die 'unexpected BLS payload path'
         regular "$esp$value"
@@ -277,8 +290,8 @@ menu() {
     local action=$1 file next previous
     entries=$esp/loader/entries; conf=$esp/loader/loader.conf; prefix=y700-installed-$id
     source_conf=$entries/$entry
-    if (( rtc_probe )); then
-        [[ $action != promote ]] || die 'RTC probe is single-boot only'
+    if [[ -n $dt_probe ]]; then
+        [[ $action != promote ]] || die 'DT probe is single-boot only'
         source_conf=$esp/EFI/$source_sub/source.conf
     fi
     if (( recovery )); then prefix=y700-installed-${trial_role}$id; recovery_payloads; fi
@@ -321,7 +334,7 @@ menu() {
         fi
         if ! cmp -s "$next" "$conf"; then
             previous=$state/armed.conf
-            if [[ $action == restore && $rtc_probe == 0 ]] && cmp -s "$state/promoted.conf" "$conf"; then previous=$state/promoted.conf; fi
+            if [[ $action == restore && -z $dt_probe ]] && cmp -s "$state/promoted.conf" "$conf"; then previous=$state/promoted.conf; fi
             match "$previous" "$conf"
             if [[ $action == promote ]]; then touch "$state/promoting"; sync -f "$state"; fi
             if [[ $action == promote ]]; then promotable_boot; fi
@@ -351,9 +364,10 @@ current_trial() {
            $(tr ' ' '\n' <<<"$args" | grep '^y700\.recovery=') == y700.recovery=journal ]] &&
             [[ $(selected_entry) == "y700-installed-${trial_role}$id-trial.conf" ]] || die 'unexpected recovery selection'
     fi
-    if (( rtc_probe )); then
-        [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]rtc_probe=') == y700.rtc_probe=rtc1 ]] || die 'wrong RTC probe option'
-        verify_rtc1_tree
+    if [[ -n $dt_probe ]]; then
+        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci)_probe(=|$)') == "$probe_option" ]] ||
+            die 'wrong DT probe option'
+        case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; esac
     fi
 }
 verify_rtc1_tree() {
@@ -361,6 +375,25 @@ verify_rtc1_tree() {
     [[ $(tr -d '\0' </proc/device-tree/aliases/rtc1) == "$node" &&
        $(tr -d '\0' <"/proc/device-tree$node/status") == okay &&
        $(tr -d '\0' <"/proc/device-tree$node/compatible") == qcom,pmk8350-rtc ]] || die 'unexpected running RTC device tree'
+}
+clock_tree_path() { echo /sys/firmware/devicetree/base; }
+verify_cci0_tree() {
+    local phase=$1 tree=${2:-$(clock_tree_path)} expected digest
+    local cci=$tree/soc@0/cci@ac15000 camcc=$tree/soc@0/clock-controller@ade0000
+    case $phase in
+        base) expected=87a289c645da8122ad725f8374181eda3af2628deb5809809079b1a8db56c018 ;;
+        trial)
+            expected=ce4226ba69e43c2c5b66a7866120a8c7ba6f09c75ff4af19e0b82edf90a10b8d
+            cmp -s <(printf '\x00\x00\x00\xda') "$camcc/phandle" &&
+                cmp -s <(cat "$camcc/phandle"; printf '\0\0\0\x08') "$cci/assigned-clocks" &&
+                cmp -s <(printf '\x02\x3c\x34\x60') "$cci/assigned-clock-rates" ||
+                die 'wrong CCI0 clock provider, selector or rate' ;;
+        *) die 'unknown CCI0 tree phase' ;;
+    esac
+    [[ ! -e $tree/aliases/rtc1 ]] || die 'unexpected RTC trial alias'
+    digest=$(cd "$tree" && find . -type f \( -name assigned-clocks -o -name assigned-clock-parents -o -name assigned-clock-rates \) -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1) || die 'cannot read assigned clock properties'
+    [[ $digest == "$expected" ]] || die "unexpected $phase clock assignments ($digest)"
 }
 current_boot() { cat /proc/sys/kernel/random/boot_id; }
 no_reboot_pending() {
@@ -398,9 +431,9 @@ confirm_boot() {
         printf '%s\n' "$boot" > "$state/confirmation.new"; mv -T "$state/confirmation.new" "$state/confirmed"
         sync -f "$state"
     fi
-    if (( rtc_probe )); then
-        systemctl is-active --quiet "$timer" || die 'RTC return deadline stopped unexpectedly'
-        printf 'RTC1_TRIAL_CONFIRMED boot=%s deadline=active\n' "$boot"
+    if [[ -n $dt_probe ]]; then
+        systemctl is-active --quiet "$timer" || die 'DT probe return deadline stopped unexpectedly'
+        printf '%s_TRIAL_CONFIRMED boot=%s deadline=active\n' "${dt_probe^^}" "$boot"
         return
     fi
     systemctl stop "$timer"; promotable_boot
@@ -410,9 +443,9 @@ main() {
     [[ $EUID == 0 ]] || die 'root required'
     local -a original_args=("$@")
     if [[ ${1:-} == --recovery ]]; then shift; recovery_mode
-    elif [[ ${1:-} == --rtc1 ]]; then
-        shift; rtc1_mode
-        [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die 'usage: --rtc1 arm|confirm|restore RUN_ID'
+    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 ]]; then
+        dt_probe_mode "${1#--}"; shift
+        [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die "usage: --$dt_probe arm|confirm|restore RUN_ID"
         set -- "$@" "$recovery_sha"
     fi
     if [[ $# == 3 && ( $1 =~ ^(promote|restore)$ || $recovery == 1 ) && $(findmnt -nro SOURCE -M /) =~ ^/dev/loop[0-9]+$ ]] &&

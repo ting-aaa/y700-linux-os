@@ -7,7 +7,7 @@ import sys
 import time
 
 bios, role, mode = sys.argv[1:]
-assert mode in ("recovery", "rtc1")
+assert mode in ("recovery", "rtc1", "cci0")
 assert role in ("trial", "base")
 command = [os.getenv("QEMU_SYSTEM_AARCH64", "qemu-system-aarch64")]
 if env_dir := os.getenv("QEMU_DATA"):
@@ -20,6 +20,8 @@ command += ["-M", "virt,gic-version=3", "-cpu", "max", "-smp", "2", "-m", "2048"
 marker = f"RECOVERY_EFI selected=y700-installed-recovery-qarecovery-{role}.conf recovery={int(role == 'trial')}"
 if mode == "rtc1":
     marker = f"RTC1_EFI selected=y700-installed-rtc1-qartc-{role}.conf virtual_alias={int(role == 'trial')}"
+if mode == "cci0":
+    marker = f"CCI0_EFI selected=y700-installed-cci0-qacci-{role}.conf virtual_assignment={int(role == 'trial')}"
 with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as vm:
     try:
         buffer = b""

@@ -4,7 +4,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 mode=recovery; prefix=y700-installed-recovery-qarecovery
 if [[ ${1:-} == --rtc1 ]]; then shift; mode=rtc1; prefix=y700-installed-rtc1-qartc; fi
-[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
+if [[ ${1:-} == --cci0 ]]; then shift; mode=cci0; prefix=y700-installed-cci0-qacci; fi
+[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
 work=$(realpath -e "$1")
 bios=$(realpath -e "$2"); dt=$(realpath -e "$3"); busy=$(realpath -e "$4")
 efivarfs=$(realpath -e "$5")
@@ -51,6 +52,23 @@ case "$selected" in
         test ! -e /proc/device-tree/aliases/rtc1
         echo "RTC1_EFI selected=$selected virtual_alias=0"
         poweroff -f ;;
+    y700-installed-cci0-qacci-trial.conf)
+        grep -Fwq y700.installed_trial=qacci /proc/cmdline
+        grep -Fwq y700.recovery=journal /proc/cmdline
+        grep -Fwq y700.cci_probe=cci0 /proc/cmdline
+        node=/proc/device-tree/soc@0/cci@ac15000
+        test "$(od -An -tx1 "$node/assigned-clocks" | tr -d ' \n')" = 000000da00000008
+        test "$(od -An -tx1 "$node/assigned-clock-rates" | tr -d ' \n')" = 023c3460
+        test ! -e /proc/device-tree/soc@0/cci@ac16000/assigned-clock-rates
+        echo "CCI0_EFI selected=$selected virtual_assignment=1"
+        reboot -f ;;
+    y700-installed-cci0-qacci-base.conf)
+        if grep -Eq ' y700\.(installed_trial|cci_probe)=' /proc/cmdline; then exit 1; fi
+        grep -Fwq y700.recovery=journal /proc/cmdline
+        test ! -e /proc/device-tree/soc@0/cci@ac15000/assigned-clocks
+        test ! -e /proc/device-tree/soc@0/cci@ac15000/assigned-clock-rates
+        echo "CCI0_EFI selected=$selected virtual_assignment=0"
+        poweroff -f ;;
     *) exit 1 ;;
 esac
 GUEST
@@ -69,10 +87,18 @@ if [[ $mode == rtc1 ]]; then
     cp "$dt" rtc1-virt.dtb
     fdtput -t s rtc1-virt.dtb /aliases rtc1 /pl031@9010000
     mcopy -i esp4k.fat rtc1-virt.dtb ::/EFI/qa-rtc1-virt.dtb
+elif [[ $mode == cci0 ]]; then
+    # No compatible string or driver. Only the two board properties travel
+    # through the real EFI devicetree handoff on this unrelated virtual SoC.
+    cp "$dt" cci0-virt.dtb
+    node=/soc@0/cci@ac15000
+    fdtput -p -t x cci0-virt.dtb "$node" assigned-clocks da 8
+    fdtput -t u cci0-virt.dtb "$node" assigned-clock-rates 37500000
+    mcopy -i esp4k.fat cci0-virt.dtb ::/EFI/qa-cci0-virt.dtb
 fi
 for original in ../armed-loader/entries/y700-installed-*.conf; do
     qa_dt=/EFI/qa-virt.dtb
-    if [[ $mode == rtc1 && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-rtc1-virt.dtb; fi
+    if [[ $mode != recovery && $original == *-trial+1.conf ]]; then qa_dt=/EFI/qa-$mode-virt.dtb; fi
     awk -v dt="$qa_dt" '/^devicetree / {print "devicetree " dt;next}
          /^initrd / {print; print "initrd /EFI/qa-observer.gz"; next}
          /^options / {$0=$0 " console=ttyAMA0 rdinit=/qa-init"} {print}' "$original" > boot.conf
