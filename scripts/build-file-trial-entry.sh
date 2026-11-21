@@ -6,14 +6,22 @@ edition=dev12.5
 payload=y700-file
 root_sha=041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6
 extra=
-if [[ ${1:-} == --dev12.10 ]]; then
+recovery=false
+if [[ ${1:-} == --dev12.10 || ${1:-} == --dev12.10-recovery ]]; then
+    [[ $1 != --dev12.10-recovery ]] || recovery=true
     shift
     edition=dev12.10
     payload=y700-file-12-10
     root_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
     extra="y700.release=$edition "
 fi
-[[ $# == 2 ]] || { echo 'Usage: build-file-trial-entry.sh [--dev12.10] IMAGES NEW_DIRECTORY' >&2; exit 2; }
+title="Y700 $edition (persistent files)"
+if $recovery; then
+    payload=y700-recovery-12-10
+    extra+="y700.recovery=journal "
+    title="Y700 $edition (filesystem recovery)"
+fi
+[[ $# == 2 ]] || { echo 'Usage: build-file-trial-entry.sh [--dev12.10|--dev12.10-recovery] IMAGES NEW_DIRECTORY' >&2; exit 2; }
 images=$(realpath -e -- "$1")
 [[ ! -e $2 && ! -L $2 ]]
 dest=$(realpath -m -- "$2")
@@ -38,7 +46,7 @@ sha256sum --strict -c <<HASHES
 6d3832e03eaea523a55c6bf12f90e1cf1146a34df1a264bdeefec9c8398d00ce  original-initrd
 HASHES
 menu=loader/entries/$payload.conf
-sed -e "s|^title .*|title Y700 $edition (persistent files)|" -e "s|/EFI/debian/|/EFI/$payload/|g" \
+sed -e "s|^title .*|title $title|" -e "s|/EFI/debian/|/EFI/$payload/|g" \
     -e "/^options /{s|rdinit=/init root=PARTLABEL=linux |rdinit=/y700-file-trial-init root=UUID=171a4adb-916b-4763-9e6f-722b4a99988f y700.media=file ${extra}|;s/$/ panic=15/;}" \
     original.conf > "entry/$menu"
 grep -q '^options rdinit=/y700-file-trial-init root=UUID=171a4adb-916b-4763-9e6f-722b4a99988f y700.media=file .* panic=15$' "entry/$menu"
@@ -49,12 +57,24 @@ done
 if [[ $edition == dev12.10 ]]; then
     patch --batch --forward --fuzz=0 -p1 < "$repo/src/boot/file-trial-dev12.10.patch"
 fi
+if $recovery; then
+    install -m755 "$repo/src/boot/file-recovery-init" y700-file-trial-init
+    for helper in ext4 fat; do
+        sh -n "$repo/src/boot/file-recovery-$helper"
+        install -m644 "$repo/src/boot/file-recovery-$helper" "y700-file-recovery-$helper"
+    done
+    bash "$repo/scripts/pack-recovery-fat-tools.sh" "$images/root.ext4" "$PWD"
+fi
 for name in init shutdown; do
     sh -n "y700-file-trial-$name"
     touch -d @1795150416 "y700-file-trial-$name"
 done
-printf '%s\n' y700-file-trial-init y700-file-trial-shutdown |
-    cpio --quiet --reproducible -o -H newc --owner 0:0 | gzip -n > "$work/extra.gz"
+if $recovery; then
+    find . -mindepth 1 -exec touch -h -d @1795150416 {} +
+    find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort
+else
+    printf '%s\n' y700-file-trial-init y700-file-trial-shutdown
+fi | cpio --quiet --reproducible -o -H newc --owner 0:0 | gzip -n > "$work/extra.gz"
 cd "$work"
 cat original-initrd extra.gz > "entry/EFI/$payload/initrd"
 cmp -n "$(stat -c %s original-initrd)" original-initrd "entry/EFI/$payload/initrd"

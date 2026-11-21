@@ -1,0 +1,171 @@
+#!/bin/busybox sh
+# The separate dev12.10 entry supports native ext4 journal and orphan recovery.
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+mount -t proc proc /proc || exit 1
+mount -t sysfs sysfs /sys || exit 1
+mount -t tmpfs -o mode=0755,nodev,nosuid,strictatime tmpfs /run || exit 1
+exec </dev/console >/dev/console 2>&1
+umask 077
+exitrd=/run/initramfs
+backing=$exitrd/backing
+images=$backing/var/lib/y700-trial/dev12.10
+rootloop=
+esploop=
+outer=
+moved=
+fail() {
+    echo "y700-file-trial: $*"
+    for fs in $moved; do mount --move "/newroot/$fs" "/$fs"; done
+    for path in /newroot/boot /newroot "$backing"; do
+        if [ "$path" = "$backing" ]; then
+            for loop in "$esploop" "$rootloop"; do
+                [ -z "$loop" ] || losetup -d "$loop"
+            done
+        fi
+        grep -Fq " $path " /proc/mounts && umount "$path"
+    done
+    sync
+    case " $(cat /proc/cmdline) " in
+        *' y700.installed_trial='*) reboot -f ;;
+        *) echo "Recovery stopped. At the next power-on select Debian 13 Xfce (Lenovo Y700)."
+           sleep 5; poweroff -f ;;
+    esac
+    exit 1
+}
+hex() { dd if="$1" bs=1 skip="$2" count="$3" 2>/dev/null | hexdump -ve '1/1 "%02x"'; }
+. /y700-file-recovery-ext4 || fail 'ext4 recovery helper unavailable'
+. /y700-file-recovery-fat || fail 'FAT recovery helper unavailable'
+had_replay=0
+outer_uuid=ef30676423154235879669e2c9b61946
+inner_uuid=171a4adb916b47639e6f722b4a99988f
+case " $(cat /proc/cmdline) " in *' y700.recovery=journal '*) ;; *) fail 'recovery option missing' ;; esac
+case " $(cat /proc/cmdline) " in *' y700.media=file '*) ;; *) fail 'file media option missing' ;; esac
+case " $(cat /proc/cmdline) " in *' y700.release=dev12.10 '*) ;; *) fail 'unexpected release option' ;; esac
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    [ "$(tr -d '\000' </proc/device-tree/region_country)" = PRC ] || fail 'unexpected board region'
+    prefix=sd
+elif [ "$compat" = linux,dummy-virt ]; then
+    prefix=vd
+else
+    fail 'unexpected board'
+fi
+for tick in $(seq 1 60); do
+    for block in /sys/class/block/"$prefix"*; do
+        [ -f "$block/partition" ] && grep -qx PARTNAME=linux "$block/uevent" || continue
+        if [ "$prefix" = sd ]; then
+            case "$(readlink -f "$block")" in */1d84000.ufshc/*) ;; *) continue ;; esac
+        fi
+        dev=/dev/${block##*/}
+        [ -b "$dev" ] && [ "$(hex "$dev" 1128 16)" = ef30676423154235879669e2c9b61946 ] || continue
+        [ -z "$outer" ] || fail 'ambiguous backing partition'
+        outer=$dev
+    done
+    [ -z "$outer" ] || break
+    sleep 1
+done
+[ -n "$outer" ] || fail 'backing partition unavailable'
+if [ "$prefix" = sd ]; then
+    freq=/sys/class/devfreq/1d84000.ufshc/max_freq
+    [ -w "$freq" ] && echo 75000000 > "$freq" && [ "$(cat "$freq")" = 75000000 ] || fail 'UFS frequency limit unavailable'
+fi
+outer_state=$(ext4_state "$outer" "$outer_uuid") || fail 'backing filesystem requires attention'
+mkdir -m 700 "$exitrd" && mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs "$exitrd" || fail 'exitrd unavailable'
+mkdir -p "$exitrd"/bin "$exitrd"/dev "$exitrd"/sys "$exitrd"/proc "$exitrd"/run "$exitrd"/oldroot "$backing" || fail 'exitrd layout failed'
+cp /bin/busybox "$exitrd/bin/busybox" && cp /y700-file-trial-shutdown "$exitrd/shutdown" || fail 'exitrd copy failed'
+safe_dir() {
+    [ ! -L "$1" ] && [ -d "$1" ] && [ "$(stat -c '%u:%g' "$1")" = 0:0 ] || return 1
+    mode=$(stat -c %a "$1")
+    [ "$((0$mode & 0022))" = 0 ]
+}
+private_image() {
+    [ ! -L "$1" ] && [ -f "$1" ] && [ "$(stat -c '%u:%g:%a:%h:%s' "$1")" = "0:0:600:1:$2" ]
+}
+attach() {
+    # PID 1 is the sole userspace actor. An explicit busy loop fails the
+    # association ioctl; record a device for cleanup only after success.
+    loop=$(losetup -f) || return 1
+    losetup "$@" "$loop" "$image" || return 1
+    printf '%s\n' "$loop"
+}
+inspect_backing() {
+    mount -t ext4 -o ro,noload,noexec,nodev,nosuid "$outer" "$backing" || fail 'read-only backing mount failed'
+    verify_images
+    umount "$backing" || fail 'cannot release inspected backing'
+}
+verify_images() {
+    [ "$(readlink -f "$backing/etc/y700/image-id")" = "$backing/etc/y700/image-id" ] || fail 'unsafe backing identity path'
+    [ "$(cat "$backing/etc/y700/image-id")" = asphalt-prc-debian13-xfce-7.3.4-v1 ] || fail 'unexpected backing image identity'
+    for dir in "$backing/var" "$backing/var/lib"; do safe_dir "$dir" || fail 'unsafe trial ancestor'; done
+    for dir in "$backing/var/lib/y700-trial" "$images"; do
+        safe_dir "$dir" && [ "$(stat -c %a "$dir")" = 700 ] || fail 'unsafe trial directory'
+    done
+    if private_image "$images/root.ext4" 6442450944; then
+        expected_blocks=00001800
+    elif private_image "$images/root.ext4" 34359738368; then
+        expected_blocks=00008000
+    else
+        fail 'unsafe root image'
+    fi
+    # Require a fully resized 4 KiB ext4 filesystem inside the selected regular file.
+    [ "$(hex "$images/root.ext4" 1048 4)" = 02000000 ] &&
+    [ "$(hex "$images/root.ext4" 1028 4)" = "$expected_blocks" ] &&
+    [ "$(hex "$images/root.ext4" 1360 4)" = 00000000 ] || fail 'inner ext4 capacity mismatch'
+    private_image "$images/linux-boot.fat" 1073741824 || fail 'unsafe ESP image'
+    inner_state=$(ext4_state "$images/root.ext4" "$inner_uuid") || fail 'unexpected or unclean inner ext4'
+    [ "$(hex "$images/linux-boot.fat" 67 4)" = db4a1a17 ] &&
+    [ "$(hex "$images/linux-boot.fat" 82 8)" = 4641543332202020 ] || fail 'unexpected inner FAT'
+    image=$images/root.ext4
+    rootloop=$(attach -r) || fail 'cannot attach read-only root'
+    mount -t ext4 -o ro,noload "$rootloop" /newroot || fail 'read-only root mount failed'
+    [ "$(readlink -f /newroot/etc/y700/image-id)" = /newroot/etc/y700/image-id ] || fail 'unsafe inner identity path'
+    [ "$(cat /newroot/etc/y700/image-id)" = y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ] || fail 'unexpected inner image identity'
+    receipt=/newroot/var/lib/y700/build/video-player-update.lock.json
+    [ "$(readlink -f "$receipt")" = "$receipt" ] &&
+    [ -f "$receipt" ] && [ "$(stat -c '%u:%g:%a:%h:%s' "$receipt")" = 0:0:644:1:723 ] &&
+    [ "$(sha256sum "$receipt" | cut -d ' ' -f 1)" = 39cd516bc47679ba3c7980dc3ed43a43c1bac80e40fba690c85d33d9794fd5eb ] ||
+        fail 'unexpected inner release receipt'
+    # The verified generic root may later persist local changes, including enrollment.
+    umount /newroot && losetup -d "$rootloop" || fail 'cannot release verified root'
+    rootloop=
+}
+
+# Inspect both identities through read-only, no-replay mounts before allowing writes.
+inspect_backing
+if [ "$outer_state" = replay ]; then
+    replay_ext4 "$outer" "$backing" "$outer_uuid" backing
+    inspect_backing
+fi
+mount -t ext4 -o rw,noatime,noexec,nodev,nosuid "$outer" "$backing" || fail 'cannot open backing read-write'
+if [ "$inner_state" = replay ]; then
+    image=$images/root.ext4
+    rootloop=$(attach) || fail 'cannot attach root for replay'
+    replay_ext4 "$rootloop" /newroot "$inner_uuid" root
+    losetup -d "$rootloop" || fail 'cannot detach replayed root'
+    rootloop=
+    verify_images
+    [ "$inner_state" = clean ] || fail 'inner state changed after replay'
+fi
+recover_boot_fat "$images/linux-boot.fat" "$had_replay"
+case "$fat_access" in rw|ro) ;; *) fail 'no verified FAT access mode' ;; esac
+image=$images/root.ext4
+rootloop=$(attach) || fail 'cannot attach persistent root'
+image=$images/linux-boot.fat
+if [ "$fat_access" = ro ]; then
+    esploop=$(attach -r) || fail 'cannot attach read-only ESP'
+    echo "y700-file-trial: boot FAT needs offline checking; mounted read-only"
+    echo readonly > "$exitrd/boot-fat-status" || fail 'cannot record FAT status'
+else
+    esploop=$(attach) || fail 'cannot attach persistent ESP'
+fi
+mount -t ext4 -o rw "$rootloop" /newroot || fail 'cannot mount persistent root'
+mount -t vfat -o "$fat_access",umask=0077 "$esploop" /newroot/boot || fail 'cannot mount persistent ESP'
+printf '%s\n' "$rootloop" "$esploop" > "$exitrd/loops" || fail 'cannot record loops'
+echo "y700-file-trial: verified persistent root=$rootloop esp=$esploop backing=$outer"
+for fs in dev proc sys run; do
+    mount --move "/$fs" "/newroot/$fs" || fail "cannot move $fs"
+    moved="$fs $moved"
+done
+exec switch_root /newroot /sbin/init

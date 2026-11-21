@@ -1,0 +1,38 @@
+# Sourced by the dev12.10 recovery init after the BusyBox applets are installed.
+# The callers pass an unmounted file or block device, and the expected ext4 UUID.
+ext4_state() {
+    local dev="$1" state compat incompat orphan last_orphan
+    [ "$(hex "$dev" 1080 2)" = 53ef ] && [ "$(hex "$dev" 1128 16)" = "$2" ] || return 1
+    state=$(hex "$dev" 1082 2)
+    compat=$(hex "$dev" 1116 1)
+    incompat=$(hex "$dev" 1120 1)
+    orphan=$(hex "$dev" 1126 1)
+    last_orphan=$(hex "$dev" 1256 4)
+    [ "${#compat}:${#incompat}:${#orphan}:${#last_orphan}" = 2:2:2:8 ] || return 1
+    # These images have an internal journal (inode 8) and no external journal.
+    [ "$((0x$compat & 4))" = 4 ] && [ "$((0x$incompat & 8))" = 0 ] &&
+        [ "$(hex "$dev" 1232 16)" = 00000000000000000000000000000000 ] &&
+        [ "$(hex "$dev" 1248 8)" = 0800000000000000 ] || return 1
+    # EXT4_ERROR_FS and interrupted filesystem checks need offline attention.
+    case "$state" in 0100|0000) ;; *) return 1 ;; esac
+    if [ "$((0x$incompat & 4))" = 4 ] || [ "$((0x$orphan & 1))" = 1 ] ||
+       [ "$last_orphan" != 00000000 ]; then
+        echo replay
+    elif [ "$state" = 0100 ]; then
+        echo clean
+    else
+        return 1
+    fi
+}
+
+replay_ext4() {
+    local device="$1" at="$2" uuid="$3" name="$4"
+    # Unlike ro,noload, the normal read-only mount lets ext4 finish JBD2
+    # transactions and orphan cleanup. The media must support writes here.
+    mount -t ext4 -o ro,nodev,nosuid,noexec,errors=remount-ro "$device" "$at" ||
+        fail "could not replay $name"
+    umount "$at" || fail "could not release $name after replay"
+    [ "$(ext4_state "$device" "$uuid")" = clean ] || fail "$name still requires offline checking"
+    had_replay=1
+    echo "y700-file-trial: journal replayed: $name"
+}
