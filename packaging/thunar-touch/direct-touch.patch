@@ -1,0 +1,103 @@
+--- a/thunar/thunar-abstract-icon-view.c
++++ b/thunar/thunar-abstract-icon-view.c
+@@ -110,6 +110,11 @@
+ 
+ struct _ThunarAbstractIconViewPrivate
+ {
++  GdkEventSequence *touch_sequence;
++  guint32 touch_time;
++  gdouble touch_x, touch_y;
++  gboolean touch_cancelled;
++
+   /* mouse gesture support */
+   gint   gesture_start_x;
+   gint   gesture_start_y;
+@@ -178,6 +183,78 @@
+ 
+ 
+ 
++/* GDK delivers the final touch to the icon bin even when the scrolled
++ * window has ended its drag recognizer. Track the primary XI2 contact's
++ * actual begin/end timestamps. GTK still receives motion and button events. */
++static gboolean
++thunar_abstract_icon_view_touch_event (GtkWidget *icons, GdkEventTouch *event,
++                                       ThunarAbstractIconView *view)
++{
++  ThunarAbstractIconViewPrivate *priv = view->priv;
++  ThunarStandardView *standard = THUNAR_STANDARD_VIEW (view);
++  GtkTreePath *path;
++  ThunarFile *file = NULL;
++  gint origin_x, origin_y;
++  guint hold_ms;
++  gboolean held;
++
++  if (event->type == GDK_TOUCH_BEGIN)
++    {
++      if (event->emulating_pointer)
++        {
++          priv->touch_sequence = event->sequence;
++          priv->touch_cancelled = FALSE;
++          priv->touch_time = event->time;
++          priv->touch_x = event->x_root;
++          priv->touch_y = event->y_root;
++        }
++      else if (priv->touch_sequence != NULL)
++        priv->touch_cancelled = TRUE;
++    }
++  if (event->sequence != priv->touch_sequence)
++    return FALSE;
++
++  if ((event->state & gtk_accelerator_get_default_mod_mask ()) != 0
++      || gtk_drag_check_threshold (icons, priv->touch_x, priv->touch_y, event->x_root, event->y_root))
++    priv->touch_cancelled = TRUE;
++  if (event->type != GDK_TOUCH_END && event->type != GDK_TOUCH_CANCEL)
++    return FALSE;
++  priv->touch_sequence = NULL;
++  if (event->type == GDK_TOUCH_CANCEL || priv->touch_cancelled)
++    return FALSE;
++
++  g_object_get (gtk_widget_get_settings (icons), "gtk-long-press-time", &hold_ms, NULL);
++  held = event->time - priv->touch_time >= hold_ms;
++  /* Exo expects viewport-relative coordinates and applies its own scroll
++   * adjustment. GdkEventTouch.x/y can instead be relative to its bin window. */
++  gdk_window_get_origin (gtk_widget_get_window (icons), &origin_x, &origin_y);
++  path = exo_icon_view_get_path_at_pos (EXO_ICON_VIEW (icons),
++                                       event->x_root - origin_x, event->y_root - origin_y);
++  if (path != NULL)
++    {
++      GtkTreeIter iter;
++      if (gtk_tree_model_get_iter (GTK_TREE_MODEL (standard->model), &iter, path))
++        file = thunar_standard_view_model_get_file (standard->model, &iter);
++    }
++  if (held)
++    {
++      thunar_window_focus_view (THUNAR_WINDOW (gtk_widget_get_toplevel (icons)), GTK_WIDGET (view));
++      exo_icon_view_unselect_all (EXO_ICON_VIEW (icons));
++      if (path != NULL)
++        exo_icon_view_select_path (EXO_ICON_VIEW (icons), path);
++      thunar_standard_view_context_menu (standard);
++    }
++  else if (file != NULL && thunar_file_is_directory (file) && !exo_icon_view_get_single_click (EXO_ICON_VIEW (icons)))
++    thunar_navigator_change_directory (THUNAR_NAVIGATOR (view), file);
++
++  g_clear_object (&file);
++  if (path != NULL)
++    gtk_tree_path_free (path);
++  return held;
++}
++
++
++
+ static void
+ thunar_abstract_icon_view_init (ThunarAbstractIconView *abstract_icon_view)
+ {
+@@ -191,6 +268,9 @@
+ 
+   /* create the real view */
+   view = exo_icon_view_new ();
++  gtk_scrolled_window_set_capture_button_press (GTK_SCROLLED_WINDOW (abstract_icon_view), FALSE);
++  gtk_widget_add_events (view, GDK_TOUCH_MASK);
++  g_signal_connect (view, "touch-event", G_CALLBACK (thunar_abstract_icon_view_touch_event), abstract_icon_view);
+   g_signal_connect (G_OBJECT (view), "notify::model", G_CALLBACK (thunar_abstract_icon_view_notify_model), abstract_icon_view);
+   g_signal_connect (G_OBJECT (view), "button-press-event", G_CALLBACK (thunar_abstract_icon_view_button_press_event), abstract_icon_view);
+   g_signal_connect (G_OBJECT (view), "key-press-event", G_CALLBACK (thunar_abstract_icon_view_key_press_event), abstract_icon_view);

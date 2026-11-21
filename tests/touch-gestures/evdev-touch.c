@@ -112,13 +112,40 @@ static void frame(int fd)
     event(fd, EV_SYN, SYN_REPORT, 0);
 }
 
-static void tap(int fd, struct point point)
+static void press(int fd, struct point point, useconds_t duration)
 {
     event(fd, EV_KEY, BTN_TOUCH, 1);
     contact(fd, 0, tracking_id++, point);
     frame(fd);
-    usleep(90000);
+    usleep(duration);
     contact(fd, 0, -1, (struct point){0});
+    event(fd, EV_KEY, BTN_TOUCH, 0);
+    frame(fd);
+}
+
+static void tap(int fd, struct point point)
+{
+    press(fd, point, 90000);
+}
+
+static void swipe(int fd, struct point point, bool return_to_start)
+{
+    int offset = return_to_start ? (point.y < Y_MAX / 2 ? 800 : -800) : -(point.y < 4800 ? point.y : 4800);
+    event(fd, EV_KEY, BTN_TOUCH, 1);
+    contact(fd, 0, tracking_id++, point);
+    frame(fd);
+    usleep(90000);
+    for (int i = 1; i <= 12; ++i) {
+        contact(fd, 0, 0, (struct point){point.x, point.y + i * offset / 12});
+        frame(fd);
+        usleep(26000);
+    }
+    if (return_to_start) {
+        contact(fd, 0, 0, point);
+        frame(fd);
+        usleep(90000);
+    }
+    contact(fd, 0, -1, point);
     event(fd, EV_KEY, BTN_TOUCH, 0);
     frame(fd);
 }
@@ -170,10 +197,21 @@ int main(void)
     while (fgets(line, sizeof(line), stdin)) {
         char rotation[16], action[16], extra;
         struct point point;
-        if (sscanf(line, "tap %d %d %c", &point.x, &point.y, &extra) == 2) {
+        if (sscanf(line, "%15s %d %d %c", action, &point.x, &point.y, &extra) == 3 &&
+            (!strcmp(action, "tap") || !strcmp(action, "hold") ||
+             !strcmp(action, "drag-back") || !strcmp(action, "swipe-up") || !strcmp(action, "two-contacts"))) {
             if (point.x < 0 || point.x > X_MAX || point.y < 0 || point.y > Y_MAX)
                 return EXIT_FAILURE;
-            tap(fd, point);
+            if (!strcmp(action, "drag-back") || !strcmp(action, "swipe-up")) {
+                swipe(fd, point, !strcmp(action, "drag-back"));
+            } else if (!strcmp(action, "two-contacts")) {
+                struct point second = point;
+                second.x += point.x < X_MAX / 2 ? 400 : -400;
+                struct gesture trace = {{point, second}, {point, second}};
+                gesture(fd, &trace);
+            } else {
+                press(fd, point, !strcmp(action, "hold") ? 1100000 : 90000);
+            }
             puts("DONE");
             fflush(stdout);
             continue;
