@@ -4,6 +4,8 @@
 
 The original PRC Debian kernel, `7.3.4-asphalt-prc`, recorded three successful camera silicon-ID probes and WL2864C revision `0x1` during a November 19 boot. The private Debian libcamera runtime subsequently captured full-resolution RAW and CPU-converted colour frames from each sensor.
 
+On the installed dev12.11 desktop, `cam --list` reported that HI1339, S5K4H7 and SC202CS all use the generic `simple/uncalibrated.yaml` image-processing profile. The libcamera 0.7.2 template enables automatic white balance and gain control. It leaves the colour correction matrix disabled. Colour accuracy for these three modules still needs calibration measurements. The rear lens has separate per-unit focus calibration. [Upstream profile](https://github.com/libcamera-org/libcamera/blob/v0.7.2/src/ipa/simple/data/uncalibrated.yaml) · [Rear lens calibration](CAMERA-FOCUS-PROBE.md)
+
 | Position | Chip and observed ID | CCI path | CAMSS input | Mode from the board driver |
 | --- | --- | --- | --- | --- |
 | Main rear | HI1339 `0x1339` | `cci@ac15000/i2c-bus@0/camera@20` | CSIPHY0, four D-PHY data lanes, 608 MHz link clock | 4208×3120 GBRG10 |
