@@ -2,7 +2,7 @@
 # Apply one locked layer to a copy of its sealed generic predecessor.
 set -euo pipefail
 if (( EUID != 0 || $# != 4 )); then
-    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
+    echo 'Usage (root): update-sealed-root.sh power-desktop|blueman|platform|video-player|video-player-update|wifi-sae-update|camera-autofocus SEALED_ROOT.ext4 LAYER_DIRECTORY_OR_TAR NEW_LINUX_DIRECTORY' >&2
     exit 2
 fi
 if [[ ${Y700_POWER_PRIVATE:-} != 1 ]]; then
@@ -49,6 +49,13 @@ case $layer in
         prior_args=()
         lock_args=()
         ;;
+    camera-autofocus)
+        parent_sha=0383703eac309a64e3febc286fa6c8d9fffb9c252745bb7b1647bde647a27ca0
+        prior_inventory=2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8
+        inventory_sha=be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d
+        prior_args=()
+        lock_args=()
+        ;;
     *) echo "Unsupported image layer: $layer" >&2; exit 2 ;;
 esac
 [[ $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
@@ -79,7 +86,7 @@ mount -t proc -o nosuid,nodev,noexec proc "$root/proc"
 for path in run sys dev; do mount -t tmpfs -o nosuid,mode=755 tmpfs "$root/$path"; done
 for pair in null:3 zero:5 random:8 urandom:9; do mknod -m666 "$root/dev/${pair%:*}" c 1 "${pair#*:}"; done
 ln -s /proc/self/fd "$root/dev/fd"
-if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-sae-update ]]; then
+if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-sae-update || $layer == camera-autofocus ]]; then
     grep -Fxq "package_digest=$prior_inventory" "$w/result/parent-inventory.log"
     lock=$repo/config/$layer.lock.json
     record=$root/var/lib/y700/build
@@ -90,10 +97,12 @@ if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-
     mount -t devpts -o newinstance,ptmxmode=0666 devpts "$root/dev/pts"
     ln -s pts/ptmx "$root/dev/ptmx"
     mknod -m666 "$root/dev/tty" c 5 0
-    cp -- "$archives" "$stage/layer.tar"
-    [[ $(stat -c %s "$stage/layer.tar") == "$(jq -er .size "$lock")" ]]
-    echo "$(jq -er .sha256 "$lock")  $stage/layer.tar" | sha256sum --strict -c -
-    tar -xf "$stage/layer.tar" -C "$stage"
+    if [[ $layer != camera-autofocus ]]; then
+        cp -- "$archives" "$stage/layer.tar"
+        [[ $(stat -c %s "$stage/layer.tar") == "$(jq -er .size "$lock")" ]]
+        echo "$(jq -er .sha256 "$lock")  $stage/layer.tar" | sha256sum --strict -c -
+        tar -xf "$stage/layer.tar" -C "$stage"
+    fi
     if [[ $layer == video-player ]]; then
         tar -xzOf "$stage/y700-parole-iris/debian-player.tar.gz" y700-video-player/debian.lock.json > "$stage/debian.lock.json"
         echo "$(jq -er .debian_lock_sha256 "$lock")  $stage/debian.lock.json" | sha256sum --strict -c -
@@ -107,6 +116,20 @@ if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-
         cmp "$stage/y700-player-update/stock/libgstvideo4linux2.so" "$root/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so"
         install_command=(bash /run/media-build/y700-player-update/install.sh install)
         verify_command=(bash /run/media-build/y700-player-update/install.sh verify)
+    elif [[ $layer == camera-autofocus ]]; then
+        [[ -d $archives && ! -e $record/$layer.lock.json ]]
+        [[ $(jq -er .parent_root_sha256 "$lock") == "$parent_sha" ]]
+        install_command=(dpkg --install)
+        while IFS=$'\t' read -r name version arch size digest; do
+            deb=${name}_${version}_${arch}.deb
+            cp -- "$archives/$deb" "$stage/$deb"
+            [[ $(stat -c %s "$stage/$deb") == "$size" ]]
+            echo "$digest  $stage/$deb" | sha256sum --strict -c -
+            [[ $(dpkg-deb -W --showformat='${Package}_${Version}_${Architecture}.deb' "$stage/$deb") == "$deb" ]]
+            install_command+=("/run/media-build/$deb")
+        done < <(jq -r '.packages[] | [.package,.version,.architecture,.size,.sha256] | @tsv' "$lock")
+        [[ ${#install_command[@]} == 5 ]]
+        verify_command=(dpkg --verify y700-camera-runtime y700-camera-pipewire y700-camera-qcam)
     else
         cmp "$repo/config/wifi-sae-update.sha256" "$stage/update/SHA256SUMS"
         (cd "$stage/update" && sha256sum --strict -c SHA256SUMS)
@@ -128,9 +151,11 @@ if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-
     run=(chroot "$root" env TMPDIR=/run SYSTEMD_OFFLINE=1 DEBIAN_FRONTEND=noninteractive)
     # Debian maintainer scripts expect the normal system umask.
     (umask 022; "${run[@]}" "${install_command[@]}") | tee "$w/result/install.log"
-    if [[ $layer == wifi-sae-update ]]; then
-        "${run[@]}" "${verify_command[@]}" > "$w/result/wifi-package-verify.log"
-        [[ ! -s $w/result/wifi-package-verify.log ]]
+    if [[ $layer == wifi-sae-update || $layer == camera-autofocus ]]; then
+        verify_log=wifi-package-verify.log
+        if [[ $layer == camera-autofocus ]]; then verify_log=camera-package-verify.log; fi
+        "${run[@]}" "${verify_command[@]}" > "$w/result/$verify_log"
+        [[ ! -s $w/result/$verify_log ]]
     else
         "${run[@]}" "${verify_command[@]}"
     fi
@@ -138,6 +163,24 @@ if [[ $layer == video-player || $layer == video-player-update || $layer == wifi-
     [[ -z $("${run[@]}" dpkg --audit) ]]
     rm -- "$root/usr/sbin/policy-rc.d"
     install -m644 "$lock" "$record/$layer.lock.json"
+    if [[ $layer == camera-autofocus ]]; then
+        [[ $(readlink "$root/etc/os-release") == ../usr/lib/os-release && ! -e $root/etc/os-release.debian ]]
+        [[ -z $(chroot "$root" dpkg-divert --list /etc/os-release) ]]
+        chroot "$root" dpkg-divert --local --rename --add --divert /etc/os-release.debian /etc/os-release
+        install -m644 "$root/usr/lib/os-release" "$root/etc/os-release"
+        printf '%s\n' 'IMAGE_ID=y700-prc-debian' 'IMAGE_VERSION=dev12.11' \
+            'VARIANT="Lenovo Legion Y700 (2023) Xfce"' 'VARIANT_ID=y700_xfce' >> "$root/etc/os-release"
+        [[ $(chroot "$root" dpkg-divert --truename /etc/os-release) == /etc/os-release.debian ]]
+        [[ $(readlink "$root/etc/systemd/system/graphical.target.wants/y700-firstboot.service") == /etc/systemd/system/y700-firstboot.service ]]
+        grep -Fxq 'ConditionPathExists=!/etc/y700/user-configured' "$root/etc/systemd/system/y700-firstboot.service"
+        grep -Fxq 'ExecStart=/usr/libexec/y700-firstboot-drm/firstboot' \
+            "$root/usr/lib/systemd/system/y700-firstboot.service.d/60-drm-keyboard.conf"
+        [[ -x $root/usr/libexec/y700-firstboot-drm/firstboot && -f $root/etc/y700/base-configured ]]
+        [[ $(readlink "$root/etc/systemd/system/display-manager.service") == /lib/systemd/system/lightdm.service ]]
+        [[ $(readlink "$root/etc/systemd/system/default.target") == /usr/lib/systemd/system/graphical.target ]]
+        grep -Fxq 'y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f' "$root/etc/y700/image-id"
+        echo 'Firstboot DRM entry enabled, enrollment marker absent, LightDM graphical target selected.' > "$w/result/firstboot-check.log"
+    fi
     if [[ $layer == video-player ]]; then
         install -m644 "$stage/debian.lock.json" "$record/video-player-debian.lock.json"
     fi
@@ -181,7 +224,7 @@ done
 for path in "$root"/{etc/y700/maintenance*,etc/y700/bluetooth-address,etc/y700/user-configured,etc/ssh/ssh_host_*,home/y700/.ssh,root/.ssh,var/lib/y700-ssc/registry,var/lib/y700/ssh,var/lib/systemd/random-seed,var/lib/systemd/credential.secret}; do
     [[ ! -e $path && ! -L $path ]]
 done
-if [[ $layer == video-player-update || $layer == wifi-sae-update ]]; then
+if [[ $layer == video-player-update || $layer == wifi-sae-update || $layer == camera-autofocus ]]; then
     # Inspect the on-disk /run only after removing the installer staging tmpfs.
     umount "$root/run"
     [[ ! -L $root/etc/machine-id && $(readlink "$root/var/lib/dbus/machine-id") == /etc/machine-id ]]

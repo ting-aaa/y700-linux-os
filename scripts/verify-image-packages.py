@@ -129,6 +129,8 @@ player_update = build / 'video-player-update.lock.json'
 prior_media = build / 'video-player-dev12.9.lock.json'
 wifi_receipt = build / 'wifi-sae-update.lock.json'
 wifi_lock = None
+af_receipt = build / 'camera-autofocus.lock.json'
+af_lock = None
 if wifi_receipt.exists() or wifi_receipt.is_symlink():
     wifi_source = repo / 'config/wifi-sae-update.lock.json'
     if (wifi_receipt.is_symlink() or not wifi_receipt.is_file()
@@ -140,6 +142,34 @@ if wifi_receipt.exists() or wifi_receipt.is_symlink():
             raise SystemExit(f'Wi-Fi retry parent differs from the locked Debian base: {original}')
         wanted.remove(original)
     wanted.update(map(package_tuple, wifi_lock['packages']))
+if af_receipt.exists() or af_receipt.is_symlink():
+    source = repo / 'config/camera-autofocus.lock.json'
+    if (not wifi_lock or af_receipt.is_symlink() or not af_receipt.is_file()
+            or af_receipt.read_bytes() != source.read_bytes()):
+        raise SystemExit('Autofocus requires the exact camera update receipt and Wi-Fi parent')
+    af_lock = json.loads(source.read_text())
+    for original in replacements(af_lock):
+        if original not in wanted:
+            raise SystemExit(f'Unexpected camera autofocus parent: {original}')
+        wanted.remove(original)
+    wanted.update(map(package_tuple, af_lock['packages']))
+    for name, digest in af_lock['files'].items():
+        file = args.root / name
+        if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
+            raise SystemExit(f'Autofocus package file differs from the release: {name}')
+    for name, target in af_lock['links'].items():
+        link = args.root / name
+        if not link.is_symlink() or str(link.readlink()) != target:
+            raise SystemExit(f'Autofocus package symlink differs from the release: {name}')
+    release = args.root / 'etc/os-release'
+    vendor = args.root / 'usr/lib/os-release'
+    original = args.root / 'etc/os-release.debian'
+    edition = (b'IMAGE_ID=y700-prc-debian\nIMAGE_VERSION=dev12.11\n'
+               b'VARIANT="Lenovo Legion Y700 (2023) Xfce"\nVARIANT_ID=y700_xfce\n')
+    if (not original.is_symlink() or str(original.readlink()) != '../usr/lib/os-release'
+            or vendor.is_symlink() or not vendor.is_file()
+            or release.is_symlink() or not release.is_file() or release.read_bytes() != vendor.read_bytes() + edition):
+        raise SystemExit('Unexpected dev12.11 product or vendor release metadata')
 if any(path.exists() or path.is_symlink() for path in (media_receipt, media_packages, player_update, prior_media)):
     lock = json.loads((repo / 'config/video-player.lock.json').read_text())
     updated = player_update.exists() or player_update.is_symlink()
@@ -166,6 +196,8 @@ if any(path.exists() or path.is_symlink() for path in (media_receipt, media_pack
         ledger_digest = '5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce'
         if wifi_lock:
             ledger_digest = wifi_lock['arm64_ledger_sha256']
+        if af_lock:
+            ledger_digest = af_lock['arm64_ledger_sha256']
         if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
             raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
         update = json.loads(update_lock.read_text())

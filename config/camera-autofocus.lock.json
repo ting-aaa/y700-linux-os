@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "edition": "dev12.11",
+  "parent_root_sha256": "0383703eac309a64e3febc286fa6c8d9fffb9c252745bb7b1647bde647a27ca0",
+  "package_digest": "be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d",
+  "arm64_ledger_sha256": "17473ab98cdf1190d573276bba00ceca7e0cee05688b8b496de37df8fc600d82",
+  "replaces": [
+    {
+      "package": "y700-camera-pipewire",
+      "version": "1.4.2-1+y700.3",
+      "architecture": "arm64"
+    },
+    {
+      "package": "y700-camera-qcam",
+      "version": "0.7.2-1~bpo13+1.y7004",
+      "architecture": "arm64"
+    },
+    {
+      "package": "y700-camera-runtime",
+      "version": "0.7.2-1~bpo13+1.y7001",
+      "architecture": "arm64"
+    }
+  ],
+  "packages": [
+    {
+      "package": "y700-camera-pipewire",
+      "version": "1.4.2-1+y700.4",
+      "architecture": "arm64",
+      "size": 53936,
+      "sha256": "9de518b05da6d4fafc26a6a284dd30d484eb47801c947c814bcfa3fe772b3e52"
+    },
+    {
+      "package": "y700-camera-qcam",
+      "version": "0.7.2-1~bpo13+1.y7005",
+      "architecture": "arm64",
+      "size": 115712,
+      "sha256": "4e79033cc61128049b32c0265b09c00a7930a1f6bb45d48f97849709cf497d56"
+    },
+    {
+      "package": "y700-camera-runtime",
+      "version": "0.7.2-1~bpo13+1.y7002",
+      "architecture": "arm64",
+      "size": 765632,
+      "sha256": "5b6a99e434e3ceb2de22a5c199439542325abc8f890241ccedddc5833ceb0a8e"
+    }
+  ],
+  "files": {
+    "etc/chromium.d/zz-y700-camera": "045ec9dc6dbb44b1396860e5281daf99cc4d152e27a5adfd02caade4566ac643",
+    "opt/y700-camera/bin/cam": "e21854cd83fe512478ad2f9028251101062de55464a2fc768ea5dd4c850caaa9",
+    "opt/y700-camera/bin/libcamera-bug-report": "11aa06fb18270647f41d6f9a73b99842ab1787dc9b7eee1d9f5c1082a2a4b1ae",
+    "opt/y700-camera/bin/qcam": "6e768a9d33b193cbec85d898985bf35dc0ddd0e0d953646b74b34c0d9a4f43b5",
+    "opt/y700-camera/etc/libcamera/configuration.yaml": "5bff056cbde180ae56e77b1a8fbb7de14fe08568fbeb9f37487084b35477f2e5",
+    "opt/y700-camera/lib/gstreamer-1.0/libgstlibcamera.so": "a42d0246cbcee4dca12e4a3a13ca0c84cf5d48637c0c57441aa5768b8e4c566c",
+    "opt/y700-camera/lib/libcamera-base.so.0.7.2": "7de9f8cf7eca33dc7cf4d14da83ed60d1240530f73f45c57484dc263f6ca5b8c",
+    "opt/y700-camera/lib/libcamera.so.0.7.2": "90dfdbf117fd844ead381f9ffc4f365f35e185a204e0768d70c2c5394fff1773",
+    "opt/y700-camera/lib/libcamera/ipa/ipa_soft_simple.so": "7786d2709aa362f36cd56da015f8667f93501e7b072285ea729f86f8f1fb6e67",
+    "opt/y700-camera/lib/libcamera/ipa/ipa_soft_simple.so.sign": "962c1ef8c1adf3632c754426fe18670ae270fa79358cc110a66895c72b140e61",
+    "opt/y700-camera/lib/libcamera/ipa/ipa_vimc.so": "ba7cdeaf846dbf12b8c9d117fc15e02840a5e0af5f29bbfa803b99514ca2c6d9",
+    "opt/y700-camera/lib/libcamera/ipa/ipa_vimc.so.sign": "3aac9211ebdb394dbe19532b0a0c26f33f6b146879c82cde612790db1eb8dca9",
+    "opt/y700-camera/libexec/libcamera/soft_ipa_proxy": "3e7411f620957a8be6822d30ecaa238b78ef89aa8d82d5abb6bb2bd82229cb40",
+    "opt/y700-camera/libexec/libcamera/vimc_ipa_proxy": "54bef85a54a57824499d347672634b4f10b616aad4038f277bf4cf34d5c35667",
+    "opt/y700-camera/share/libcamera/ipa/simple/uncalibrated.yaml": "0689579ca79036bbd31d104deafca70fb8b267c4c8f8492e07bd6f6e875ee1ac",
+    "opt/y700-camera/share/libcamera/ipa/vimc/vimc.conf": "5a3cd4be1209cd46caf9f24d6c1136df6847b0235747344c89200a09b35b63b4",
+    "usr/bin/y700-camera": "129c0986b5154dd7ed8620bece62c003990e6ec0f944d6de92c170c9c5df1c24",
+    "usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so": "d97795a04897c69ee265bc01a643f94e35ec0a5921be3ad1e961d6b9f68a0ceb",
+    "usr/share/applications/org.y700.Camera.desktop": "edaeb59110f15033e0d0b96f9734c6af99f9feb67e8ac8e68c6c47b03478c8f1",
+    "usr/share/doc/y700-camera-pipewire/copyright": "37d79c7152551eb1d04f69534d26b48257a6162443f7924a8896052d6f393932",
+    "usr/share/doc/y700-camera-qcam/copyright": "bd62695a90528eb299889feb23ee4a37066654a35c1e93440484a26a88f3e5e9",
+    "usr/share/doc/y700-camera-runtime/copyright": "bd62695a90528eb299889feb23ee4a37066654a35c1e93440484a26a88f3e5e9",
+    "usr/share/wireplumber/wireplumber.conf.d/65-y700-camera.conf": "d591665ee4446f06d34bc7a40e3e3634c1c8d1f110ecb8610105d320ffa0b23d"
+  },
+  "links": {
+    "opt/y700-camera/lib/libcamera-base.so": "libcamera-base.so.0.7",
+    "opt/y700-camera/lib/libcamera-base.so.0.7": "libcamera-base.so.0.7.2",
+    "opt/y700-camera/lib/libcamera.so": "libcamera.so.0.7",
+    "opt/y700-camera/lib/libcamera.so.0.7": "libcamera.so.0.7.2"
+  }
+}
