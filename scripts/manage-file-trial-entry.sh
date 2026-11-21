@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
-# Add or remove the four reviewed dev12.5 files on the mounted baseline ESP.
+# Add or remove the four reviewed files for an edition on the mounted baseline ESP.
 set -euo pipefail
 umask 077
 die() { echo "File trial entry: $*" >&2; exit 1; }
-[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
+payload=y700-file
+manifest=c0ab1aca3a71d38000e6dda15d8730cdb7d68afc06e4cc0904ba18dd1a4184a2
+if [[ ${1:-} == --dev12.10 ]]; then
+    shift
+    payload=y700-file-12-10
+    manifest=dd6f4174b3a2f17d8332d0d511d1806c8e826715abd8735e30973bedeee93d0d
+fi
+[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
 mode=$1
 source_dir=$(realpath -e -- "$2")
 esp=$(realpath -e -- "$3")
 [[ $(findmnt -nro FSTYPE -M "$esp") == vfat ]] || die 'expected a mounted FAT ESP'
 [[ $(findmnt -nro UUID -M "$esp") != 171A-4ADB ]] || die 'target is the trial ESP image'
+if [[ $payload == y700-file-12-10 ]]; then
+    [[ $(findmnt -nro UUID -M "$esp") == B6D4-FA81 ]] || die 'unexpected internal ESP UUID'
+fi
 cd "$source_dir"
-manifest=c0ab1aca3a71d38000e6dda15d8730cdb7d68afc06e4cc0904ba18dd1a4184a2
 printf '%s  SHA256SUMS\n' "$manifest" | sha256sum --strict -c -
 sha256sum --quiet --strict -c SHA256SUMS
 cd "$esp"
@@ -19,8 +28,8 @@ cd "$esp"
 original=$(sha256sum loader/loader.conf loader/entries/debian.conf EFI/BOOT/BOOTAA64.EFI EFI/debian/{kernel.efi,board.dtb,initrd})
 exec {guard}<.
 flock -n "$guard" || die 'another menu operation is active'
-dir=EFI/y700-file
-menu=loader/entries/y700-file.conf
+dir=EFI/$payload
+menu=loader/entries/$payload.conf
 payloads=(kernel.efi board.dtb initrd)
 check_dir() {
     [[ -d $dir && $(find "$dir" -mindepth 1 -maxdepth 1 -printf . | wc -c) == 3 ]] || die 'unexpected contents at trial payload path'
