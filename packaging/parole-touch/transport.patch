@@ -1,0 +1,26 @@
+--- a/src/parole-player.c
++++ b/src/parole-player.c
+@@ -3110,2 +3110,10 @@
+ static void
++parole_size_transport_control(GtkWidget *widget, GParamSpec *pspec, gpointer data) {
++    /* GTK size requests are logical pixels. Leave the desktop theme's natural
++     * size in charge at 1x, and let a larger themed control win at any scale. */
++    gint minimum = gtk_widget_get_scale_factor(widget) >= 2 ? 48 : -1;
++    gtk_widget_set_size_request(widget, GTK_IS_BUTTON(widget) ? minimum : -1, minimum);
++}
++
++static void
+ parole_player_init(ParolePlayer *player) {
+@@ -3555,2 +3563,12 @@
+     g_signal_connect(player->priv->control, "draw", G_CALLBACK(parole_overlay_expose_event), NULL);
++    static const gchar *const transport_controls[] = {
++        "media_previous", "media_playpause", "media_next", "media_progress_slider",
++        "media_volumebutton", "media_fullscreen", "media_playlist"
++    };
++    for (guint i = 0; i < G_N_ELEMENTS(transport_controls); i++) {
++        GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, transport_controls[i]));
++        parole_size_transport_control(widget, NULL, NULL);
++        g_signal_connect(widget, "notify::scale-factor", G_CALLBACK(parole_size_transport_control), NULL);
++    }
++
+     /* End Media Controls */

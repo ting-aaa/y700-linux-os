@@ -1,0 +1,5 @@
+parole (4.18.2-1+y7001) trixie; urgency=medium
+
+  * Give playback controls a 48 logical pixel minimum at HiDPI scales.
+
+ -- Y700 Linux OS Contributors <y700@localhost>  Sat, 21 Nov 2026 00:00:00 +0000
