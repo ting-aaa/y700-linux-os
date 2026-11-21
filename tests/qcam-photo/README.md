@@ -32,3 +32,17 @@ The runner boots an offline ARM64 guest with its root disk read-only. The test-o
 Debian's unmodified virtual backend can fail as a client recycles a completed preview request. In the ARM64 trace the faulting thread was in `VirtualCameraData::processRequest()`. The test-only patch saves the list of buffers before delivering completion. The Y700 camera runtime used on the tablet builds the simple pipeline and does not contain that virtual handler.
 
 At 200%, the verifier uses AT-SPI to locate widgets and sends X11 pointer clicks to the toolbar, chooser, list row, confirmation and shutter. One process takes photos in main, front, macro and main order. Each save must add exactly one complete JPEG. The verifier checks its dimensions and pixel pattern, checks that preview continues and removes all four files. The `y7004` checks also require the chooser to remember the active lens and its controls to measure at least 96 device pixels high. Set `QCAM_VIRTUAL_LANGUAGE=zh` to exercise the Chinese UI. There is no hardware passthrough.
+
+## Orientation of the raster preview and saved photos
+
+The desktop launcher uses the Qt raster renderer. Build `y700-camera-qcam` revision 8 with `scripts/build-camera-backport.sh --qcam-orientation`. On lens selection it reads the output orientation selected by libcamera after configuration. On X11 it subscribes to RandR output and CRTC events and reads the active internal `DSI-1` rotation. The preview rotates during rendering. The shutter applies the same quarter turns to the full-resolution photo pixels. These operations preserve horizontal mirroring.
+
+At the reference board's negotiated `Rotate270`, the rear lenses need clockwise rotations of 90°, 180°, 270° and 0° for RandR normal, left, inverted and right. The front lens uses 90°, 0°, 270° and 180° because its optical axis points in the opposite direction. External cameras keep their own negotiated correction as the tablet rotates. [libcamera orientation conventions](https://libcamera.org/api-html/namespacelibcamera.html) · [AndroidX front/rear relative rotation](https://github.com/androidx/androidx/blob/androidx-main/camera/camera-core/src/main/java/androidx/camera/core/impl/utils/CameraOrientationUtil.java)
+
+On the matching Debian ARM64 Qt development image, run the raster regression with the fully patched source, including the packaged `camera_orientation.{h,cpp}`, and installed libcamera development files.
+
+```sh
+bash tests/qcam-photo/run-orient-raster.sh "$qcam_source"
+```
+
+The fixture maps a synthetic four-color frame into the raster renderer, then checks pixels in the actual widget and in the decoded JPEG from qcam's photo writer. It supplies each panel angle directly to the same slot used by RandR. Its cases include all eight libcamera orientations, front, rear, external, and Qt scale factors 1 and 2.

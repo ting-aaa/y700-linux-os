@@ -11,6 +11,7 @@ case ${1:-} in
     --qcam-autofocus) qcam_revision=5 ;;
     --qcam-autofocus-result) qcam_revision=6 ;;
     --qcam-rear-main) qcam_revision=7 ;;
+    --qcam-orientation) qcam_revision=8 ;;
 esac
 if (( qcam_revision )); then
     component=qcam
@@ -30,7 +31,7 @@ if [[ -n ${CAMERA_SDK_OUTPUT:-} ]]; then
     sdk_output=$(realpath -m -- "$CAMERA_SDK_OUTPUT")
 fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus|--qcam-autofocus-result|--qcam-rear-main] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
+    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus|--qcam-autofocus-result|--qcam-rear-main|--qcam-orientation] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
@@ -93,6 +94,10 @@ if [[ $component == qcam ]]; then
     fi
     if (( qcam_revision >= 7 )); then
         patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/preselect-rear-main.patch"
+    fi
+    if (( qcam_revision >= 8 )); then
+        patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/rotate-viewfinder.patch"
+        install -m644 "$repo/packaging/camera-qcam"/camera_orientation.{h,cpp} source/src/apps/qcam/
     fi
     export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795143600}
     export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"

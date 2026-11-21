@@ -1,0 +1,168 @@
+Subject: [PATCH] qcam: orient preview and shutter on the tablet display
+
+--- a/src/apps/qcam/meson.build
++++ b/src/apps/qcam/meson.build
+@@ -16,6 +16,7 @@
+ 
+ qcam_sources = files([
+     'cam_select_dialog.cpp',
++    'camera_orientation.cpp',
+     'focus_button.cpp',
+     'format_converter.cpp',
+     'main.cpp',
+@@ -28,6 +29,7 @@
+ 
+ qcam_moc_headers = files([
+     'cam_select_dialog.h',
++    'camera_orientation.h',
+     'main_window.h',
+     'viewfinder_gl.h',
+     'viewfinder_qt.h',
+@@ -68,6 +70,8 @@
+                        libcamera_public,
+                        libtiff,
+                        qt6_dep,
++                       dependency('x11'),
++                       dependency('xrandr'),
+                    ],
+                    cpp_args : qt6_cpp_args)
+ 
+--- a/src/apps/qcam/main_window.cpp
++++ b/src/apps/qcam/main_window.cpp
+@@ -450,6 +450,10 @@
+ 		return ret;
+ 	}
+ 
++	if (auto *raster = qobject_cast<ViewFinderQt *>(centralWidget()))
++		raster->setCameraOrientation(config_->orientation,
++			camera_->properties().get(properties::Location).value_or(properties::CameraLocationExternal));
++
+ 	/* Store stream allocation. */
+ 	vfStream_ = config_->at(0).stream();
+ 	if (config_->size() == 2)
+--- a/src/apps/qcam/viewfinder_qt.h
++++ b/src/apps/qcam/viewfinder_qt.h
+@@ -18,6 +18,7 @@
+ #include <libcamera/framebuffer.h>
+ #include <libcamera/pixel_format.h>
+ 
++#include "camera_orientation.h"
+ #include "format_converter.h"
+ #include "viewfinder.h"
+ 
+@@ -34,6 +35,8 @@
+ 	int setFormat(const libcamera::PixelFormat &format, const QSize &size,
+ 		      const libcamera::ColorSpace &colorSpace,
+ 		      unsigned int stride) override;
++	void setDisplayRotation(int degrees);
++	void setCameraOrientation(libcamera::Orientation orientation, int location);
+ 	void render(libcamera::FrameBuffer *buffer, Image *image) override;
+ 	void stop() override;
+ 
+@@ -44,7 +47,6 @@
+ 
+ protected:
+ 	void paintEvent(QPaintEvent *) override;
+-	void resizeEvent(QResizeEvent *) override;
+ 	QSize sizeHint() const override;
+ 
+ private:
+@@ -52,7 +54,10 @@
+ 
+ 	libcamera::PixelFormat format_;
+ 	QSize size_;
+-	QRect place_;
++	PanelRotation panel_;
++	libcamera::Orientation orientation_ = libcamera::Orientation::Rotate0;
++	int location_ = -1;
++	int rotation_ = 0;
+ 
+ 	/* Camera stopped icon */
+ 	QSize vfSize_;
+--- a/src/apps/qcam/viewfinder_qt.cpp
++++ b/src/apps/qcam/viewfinder_qt.cpp
+@@ -37,8 +37,9 @@
+ };
+ 
+ ViewFinderQt::ViewFinderQt(QWidget *parent)
+-	: QWidget(parent), place_(rect()), buffer_(nullptr)
++	: QWidget(parent), panel_(this), buffer_(nullptr)
+ {
++	connect(&panel_, &PanelRotation::changed, this, [this]() { setDisplayRotation(panel_.degrees()); });
+ 	icon_ = QIcon(":camera-off.svg");
+ 
+ 	QPalette pal = palette();
+@@ -150,7 +151,9 @@
+ {
+ 	QMutexLocker locker(&mutex_);
+ 
+-	return image_.copy();
++	if (!rotation_)
++		return image_.copy();
++	return image_.transformed(QTransform().rotate(rotation_));
+ }
+ 
+ void ViewFinderQt::paintEvent(QPaintEvent *)
+@@ -161,19 +164,15 @@
+ 
+ 	/* If we have an image, draw it, with black letterbox rectangles. */
+ 	if (!image_.isNull()) {
+-		if (place_.width() < width()) {
+-			QRect rect{ 0, 0, (width() - place_.width()) / 2, height() };
+-			painter.drawRect(rect);
+-			rect.moveLeft(place_.right());
+-			painter.drawRect(rect);
+-		} else {
+-			QRect rect{ 0, 0, width(), (height() - place_.height()) / 2 };
+-			painter.drawRect(rect);
+-			rect.moveTop(place_.bottom());
+-			painter.drawRect(rect);
+-		}
+-
+-		painter.drawImage(place_, image_, image_.rect());
++		painter.fillRect(rect(), palette().window());
++		QSize area = size();
++		if (rotation_ % 180)
++			area.transpose();
++		const QSize fitted = size_.scaled(area, Qt::KeepAspectRatio);
++		painter.translate(width() / 2.0, height() / 2.0);
++		painter.rotate(rotation_);
++		painter.drawImage(QRectF(-fitted.width() / 2.0, -fitted.height() / 2.0,
++					 fitted.width(), fitted.height()), image_, image_.rect());
+ 		return;
+ 	}
+ 
+@@ -201,18 +200,25 @@
+ 	painter.drawPixmap(point, pixmap_);
+ }
+ 
+-QSize ViewFinderQt::sizeHint() const
++void ViewFinderQt::setCameraOrientation(libcamera::Orientation orientation, int location)
+ {
+-	return size_.isValid() ? size_ : QSize(640, 480);
++	orientation_ = orientation;
++	location_ = location;
++	setDisplayRotation(panel_.degrees());
+ }
+ 
+-void ViewFinderQt::resizeEvent(QResizeEvent *event)
++void ViewFinderQt::setDisplayRotation(int degrees)
+ {
+-	if (!size_.isValid())
++	int rotation = cameraDisplayRotation(orientation_, location_, degrees);
++	if (rotation == rotation_)
+ 		return;
++	rotation_ = rotation;
++	updateGeometry();
++	update();
++}
+ 
+-	place_.setSize(size_.scaled(event->size(), Qt::KeepAspectRatio));
+-	place_.moveCenter(rect().center());
+-
+-	QWidget::resizeEvent(event);
++QSize ViewFinderQt::sizeHint() const
++{
++	QSize hint = size_.isValid() ? size_ : QSize(640, 480);
++	return rotation_ % 180 ? hint.transposed() : hint;
+ }
