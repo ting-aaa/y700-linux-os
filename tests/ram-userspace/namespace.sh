@@ -54,6 +54,17 @@ LC_ALL=C chroot root dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Versio
 printf '%s  inventory\n' "$package_sha" | sha256sum --strict -c
 [[ $(wc -l <inventory) == "$package_count" ]]
 echo "RAM_USERSPACE machine=$(uname -m) kernel=$(uname -r) packages=$package_count root=overlay upper=tmpfs lower=ext4-ro carrier=squashfs-ro"
+if [[ -f check-lifecycle.sh ]]; then
+    [[ $release == dev12.10 ]]
+    install -d -m700 root/run/wifi-update
+    cp -r -- SHA256SUMS candidate stock check-lifecycle.sh root/run/wifi-update/
+    mount -t sysfs -o ro,nodev,nosuid,noexec sysfs root/sys
+    chroot root setpriv --bounding-set=-sys_module,-sys_admin,-sys_boot,-sys_rawio,-sys_time \
+        env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C DEBIAN_FRONTEND=noninteractive \
+        bash /run/wifi-update/check-lifecycle.sh
+    umount root/sys
+    exit
+fi
 chroot root setpriv --reuid="$user_id" --regid="$group_id" --clear-groups --no-new-privs env -i \
     PATH=/qa/bin:/usr/local/bin:/usr/bin:/bin LD_LIBRARY_PATH=/qa/lib HOME=/home/y700 USER=y700 LOGNAME=y700 \
     XDG_RUNTIME_DIR="/run/user/$user_id" XDG_CURRENT_DESKTOP=XFCE XDG_SESSION_TYPE=x11 XDG_SESSION_DESKTOP=xfce \

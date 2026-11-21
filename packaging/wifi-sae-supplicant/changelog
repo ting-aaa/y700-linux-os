@@ -1,0 +1,5 @@
+wpa (2:2.10-24+0y7001) trixie; urgency=medium
+
+  * Backport the per-interface D-Bus indication for a rejected SAE confirm.
+
+ -- Y700 Linux OS contributors <maintainers@example.invalid>  Sat, 21 Nov 2026 04:00:00 +0000

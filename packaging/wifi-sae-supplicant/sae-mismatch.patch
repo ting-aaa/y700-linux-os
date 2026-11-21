@@ -1,0 +1,115 @@
+From: Mitchell Augustin <mitchell.augustin@canonical.com>
+Date: Fri, 3 Oct 2025 12:57:58 -0500
+Subject: dbus: Add SaePasswordMismatch signal on AP indication of failed SAE
+ auth
+
+Per the IEEE 802.11 standard, status code 15
+(WLAN_STATUS_CHALLENGE_FAIL), when returned in an Authentication frame
+of an SAE exchange, is indicative of a password mismatch.
+
+Add a new dbus signal "SaePasswordMismatch" and emit it when a password
+mismatch is detected as defined by that scenario.
+
+Discussion: https://lists.infradead.org/pipermail/hostap/2025-October/043817.html
+
+(cherry picked from commit 446a274b89e32dac8934f64822e5a3acee190dad)
+Signed-off-by: Mitchell Augustin <mitchell.augustin@canonical.com>
+
+Author: Mitchell Augustin <mitchell.augustin@canonical.com>
+Bug-Ubuntu: https://launchpad.net/bugs/2125203
+Origin: upstream, 446a274b89e32dac8934f64822e5a3acee190dad
+Forwarded: not-needed
+Backport: Adjust context to the Debian trixie wpa 2.10 sources.
+
+--- a/wpa_supplicant/dbus/dbus_new.c
++++ b/wpa_supplicant/dbus/dbus_new.c
+@@ -1098,6 +1098,29 @@
+ 		wpa_printf(MSG_ERROR, "dbus: Failed to construct signal");
+ 	else
+ 		dbus_connection_send(iface->con, msg, NULL);
++	dbus_message_unref(msg);
++}
++
++
++void wpas_dbus_signal_sae_password_mismatch(struct wpa_supplicant *wpa_s)
++{
++	struct wpas_dbus_priv *iface;
++	DBusMessage *msg;
++
++	iface = wpa_s->global->dbus;
++
++	/* Do nothing if the control interface is not turned on */
++	if (!iface || !wpa_s->dbus_new_path)
++		return;
++
++	msg = dbus_message_new_signal(wpa_s->dbus_new_path,
++				      WPAS_DBUS_NEW_IFACE_INTERFACE,
++				      "SaePasswordMismatch");
++	if (!msg)
++		return;
++
++	dbus_connection_send(iface->con, msg, NULL);
++
+ 	dbus_message_unref(msg);
+ }
+ 
+--- a/wpa_supplicant/dbus/dbus_new.h
++++ b/wpa_supplicant/dbus/dbus_new.h
+@@ -252,6 +252,7 @@
+ 			   const u8 *ie, size_t ie_len, u32 ssi_signal);
+ void wpas_dbus_signal_eap_status(struct wpa_supplicant *wpa_s,
+ 				 const char *status, const char *parameter);
++void wpas_dbus_signal_sae_password_mismatch(struct wpa_supplicant *wpa_s);
+ void wpas_dbus_signal_sta_authorized(struct wpa_supplicant *wpa_s,
+ 				     const u8 *sta);
+ void wpas_dbus_signal_sta_deauthorized(struct wpa_supplicant *wpa_s,
+@@ -583,6 +584,11 @@
+ {
+ }
+ 
++static inline void
++wpas_dbus_signal_sae_password_mismatch(struct wpa_supplicant *wpa_s)
++{
++}
++
+ static inline
+ void wpas_dbus_signal_sta_authorized(struct wpa_supplicant *wpa_s,
+ 				     const u8 *sta)
+--- a/wpa_supplicant/notify.c
++++ b/wpa_supplicant/notify.c
+@@ -864,6 +864,12 @@
+ }
+ 
+ 
++void wpas_notify_sae_password_mismatch(struct wpa_supplicant *wpa_s)
++{
++	wpas_dbus_signal_sae_password_mismatch(wpa_s);
++}
++
++
+ void wpas_notify_network_bssid_set_changed(struct wpa_supplicant *wpa_s,
+ 					   struct wpa_ssid *ssid)
+ {
+--- a/wpa_supplicant/notify.h
++++ b/wpa_supplicant/notify.h
+@@ -141,6 +141,7 @@
+ void wpas_notify_eap_status(struct wpa_supplicant *wpa_s, const char *status,
+ 			    const char *parameter);
+ void wpas_notify_eap_error(struct wpa_supplicant *wpa_s, int error_code);
++void wpas_notify_sae_password_mismatch(struct wpa_supplicant *wpa_s);
+ void wpas_notify_network_bssid_set_changed(struct wpa_supplicant *wpa_s,
+ 					   struct wpa_ssid *ssid);
+ void wpas_notify_network_type_changed(struct wpa_supplicant *wpa_s,
+--- a/wpa_supplicant/sme.c
++++ b/wpa_supplicant/sme.c
+@@ -1566,6 +1566,10 @@
+ 				   data->auth.status_code, data->auth.ies,
+ 				   data->auth.ies_len, 0, data->auth.peer);
+ 		if (res < 0) {
++			if (data->auth.auth_transaction == 2 &&
++			    data->auth.status_code ==
++			    WLAN_STATUS_CHALLENGE_FAIL)
++				wpas_notify_sae_password_mismatch(wpa_s);
+ 			wpas_connection_failed(wpa_s, wpa_s->pending_bssid);
+ 			wpa_supplicant_set_state(wpa_s, WPA_DISCONNECTED);
+ 

@@ -1,8 +1,8 @@
 #!/bin/bash
 # Exercise the sealed desktop on the running board's CPU using only RAM.
 set -euo pipefail
-if (( $# != 3 )); then
-    echo 'Usage: run.sh PINNED_USB_SSH SEALED_RAM_BUNDLE DEVICE_XVFB_USR' >&2
+if (( $# != 3 && $# != 4 )); then
+    echo 'Usage: run.sh PINNED_USB_SSH SEALED_RAM_BUNDLE DEVICE_XVFB_USR [WIFI_UPDATE_DIRECTORY]' >&2
     exit 2
 fi
 ssh=$(realpath -e "$1")
@@ -13,6 +13,12 @@ here=$(cd "$(dirname "$0")" && pwd)
 source "$here/profiles.sh"
 initrd_sha=$(sha256sum "$bundle/initrd" | cut -d' ' -f1)
 ram_profile "$initrd_sha"
+if (( $# == 4 )); then
+    [[ $release == dev12.10 ]]
+    update=$(realpath -e "$4")
+    cmp "$here/../../config/wifi-sae-update.sha256" "$update/SHA256SUMS"
+    (cd "$update" && sha256sum --strict -c SHA256SUMS)
+fi
 stage=$(bash "$ssh" bash -s <<'CHECK'
 set -eu
 test "$(uname -m)" = aarch64
@@ -34,6 +40,10 @@ cleanup() {
 trap cleanup EXIT
 actors=(-C "$here" device.sh namespace.sh desktop.sh thunar.sh profiles.sh)
 if [[ $release == dev12.8 || $release == dev12.9 || $release == dev12.10 ]]; then actors+=(brightness.py -C "$here/../brightness" probe.py); fi
+if [[ -n ${update:-} ]]; then
+    mapfile -t members < <(awk '{print $2}' "$update/SHA256SUMS")
+    actors+=(-C "$here/../wifi-sae-update" check-lifecycle.sh -C "$update" SHA256SUMS "${members[@]}")
+fi
 tar -cf - "${actors[@]}" |
     bash "$ssh" "umask 077; tar -xf - -C '$stage'"
 start=$SECONDS
