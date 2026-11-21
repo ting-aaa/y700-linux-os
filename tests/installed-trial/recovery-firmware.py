@@ -7,7 +7,7 @@ import sys
 import time
 
 bios, role, mode = sys.argv[1:]
-assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768", "dev1211", "panel60")
+assert mode in ("recovery", "rtc1", "cci0", "ldo5", "gt9768", "dev1211", "panel60", "display-option")
 assert role in ("trial", "base")
 command = [os.getenv("QEMU_SYSTEM_AARCH64", "qemu-system-aarch64")]
 if env_dir := os.getenv("QEMU_DATA"):
@@ -31,6 +31,9 @@ if mode == "dev1211":
     marker = f"DEV1211_EFI selected=y700-installed-dev1211-qafallback-{role}.conf release={version}"
 if mode == "panel60":
     marker = f"PANEL60_EFI selected=y700-installed-panel60-qapanel-{role}.conf notes="
+if mode == "display-option":
+    name = "display" if role == "trial" else "file"
+    marker = f"DISPLAY_OPTION_EFI selected=y700-{name}-12-11.conf notes="
 with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as vm:
     try:
         buffer = b""
@@ -53,6 +56,13 @@ with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, st
                     vm.stdin.write(b"virtio scan; fatload virtio 0:1 ${kernel_addr_r} /EFI/BOOT/BOOTAA64.EFI; bootefi ${kernel_addr_r}\r")
                     vm.stdin.flush()
                     phase = 2
+                if mode == "display-option" and role == "trial" and phase == 2 and b"60 / 120 Hz display" in buffer:
+                    vm.stdin.write(b"\x1b[B")
+                    vm.stdin.flush()
+                    time.sleep(.2)
+                    vm.stdin.write(b"\r")
+                    vm.stdin.flush()
+                    phase = 3
         assert marker.encode() in buffer and vm.wait(timeout=3) == 0, f"{role} failed, inspect {role}.log"
         print(marker, flush=True)
     finally:
