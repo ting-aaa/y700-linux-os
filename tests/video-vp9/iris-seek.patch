@@ -1,0 +1,80 @@
+--- a/sys/v4l2/gstv4l2videodec.c
++++ b/sys/v4l2/gstv4l2videodec.c
+@@ -357,6 +357,37 @@
+   gst_v4l2_object_unlock_stop (self->v4l2output);
+   gst_v4l2_object_unlock_stop (self->v4l2capture);
+ 
++  /* On the SM8475 Iris, restarting only the queues after a seek can leave
++   * CAPTURE waiting indefinitely for a new picture. OUTPUT becomes active
++   * first, so also restart a seek interrupted before CAPTURE negotiation. */
++  if (self->iris_flush_state == IRIS_FLUSH_STOP && GST_V4L2_IS_ACTIVE (self->v4l2output) &&
++      (self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_HEVC ||
++          self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_VP9) &&
++      !strcmp ((const char *) self->v4l2output->vcap.driver, "iris_driver") &&
++      !strcmp ((const char *) self->v4l2output->vcap.card, "Iris Decoder") &&
++      g_str_has_prefix ((const char *) self->v4l2output->vcap.bus_info,
++          "platform:aa00000.video-codec:")) {
++    GST_INFO_OBJECT (self, "Opening a new Iris decoder session after flush");
++    /* An outstanding old allocator must not issue REQBUFS on the new fd. */
++    if (!gst_v4l2_buffer_pool_orphan (self->v4l2output) ||
++        !gst_v4l2_buffer_pool_orphan (self->v4l2capture)) {
++      GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
++          ("Could not release Iris buffers before seek"), (NULL));
++      goto restart_failed;
++    }
++    gst_v4l2_object_stop (self->v4l2output);
++    gst_v4l2_object_stop (self->v4l2capture);
++    gst_v4l2_video_dec_close (decoder);
++    self->draining = FALSE;
++    self->wait_for_source_change = FALSE;
++    if (!gst_v4l2_video_dec_open (decoder)) {
++      GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
++          ("Could not reopen Iris decoder after seek"), (NULL));
++      goto restart_failed;
++    }
++    return TRUE;
++  }
++
+   gst_v4l2_buffer_pool_flush (self->v4l2output);
+ 
+   /* gst_v4l2_buffer_pool_flush() calls streamon the capture pool and must be
+@@ -369,6 +400,14 @@
+     gst_v4l2_object_stop (self->v4l2capture);
+ 
+   return TRUE;
++
++restart_failed:
++  /* GstVideoDecoder does not propagate the flush vmethod return. Prevent
++   * handle_frame from touching a partially orphaned or closed device. */
++  self->iris_flush_state = IRIS_FLUSH_FAILED;
++  self->output_flow = GST_FLOW_ERROR;
++  g_atomic_int_set (&self->active, FALSE);
++  return FALSE;
+ }
+ 
+ static gboolean
+@@ -1236,7 +1275,14 @@
+       break;
+   }
+ 
++  if (type == GST_EVENT_FLUSH_STOP)
++    self->iris_flush_state = IRIS_FLUSH_STOP;
+   ret = GST_VIDEO_DECODER_CLASS (parent_class)->sink_event (decoder, event);
++  if (type == GST_EVENT_FLUSH_STOP) {
++    if (self->iris_flush_state == IRIS_FLUSH_FAILED)
++      ret = FALSE;
++    self->iris_flush_state = IRIS_FLUSH_IDLE;
++  }
+ 
+   switch (type) {
+     case GST_EVENT_FLUSH_START:
+--- a/sys/v4l2/gstv4l2videodec.h
++++ b/sys/v4l2/gstv4l2videodec.h
+@@ -66,6 +66,7 @@
+   /* Source Change Events */
+   gboolean wait_for_source_change;
+   gboolean draining;
++  enum { IRIS_FLUSH_IDLE, IRIS_FLUSH_STOP, IRIS_FLUSH_FAILED } iris_flush_state;
+ 
+   /* Capabilities */
+   gboolean supports_source_change;
