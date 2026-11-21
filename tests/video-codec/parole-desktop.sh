@@ -18,8 +18,18 @@ trap 'kill "$xserver" 2>/dev/null || :' EXIT
 for _ in {1..60}; do xdpyinfo >/dev/null 2>&1 && break; kill -0 "$xserver"; sleep .1; done
 xdpyinfo | awk '/dimensions:/ {ok=($2=="2560x1600")} END {exit !ok}'
 export GST_DEBUG_NO_COLOR=1 GST_DEBUG='GST_ELEMENT_FACTORY:4,decodebin:6,h264parse:5,h265parse:5,v4l2:5,v4l2videodec:7,v4l2bufferpool:4'
+if [[ -f /qa/save-player-trace ]]; then
+    GST_DEBUG+=',v4l2allocator:7,v4l2bufferpool:7'
+fi
 export GST_DEBUG_FILE="$XDG_RUNTIME_DIR/media-%p.log"
 probe_args=(--opener thunar)
+if [[ -f /qa/parole-transport.py ]]; then probe_args+=(--transport /qa/parole-transport.py); fi
+codec=all
+if [[ -f /qa/transport-codec ]]; then
+    read -r codec </qa/transport-codec
+    [[ $codec == h264 || $codec == hevc || $codec == vp9 ]]
+    probe_args+=(--codec "$codec")
+fi
 gst_activation_env=()
 if [[ -d /qa/plugin ]]; then
     export GST_REGISTRY_1_0="$XDG_RUNTIME_DIR/player-registry.bin"
@@ -49,6 +59,7 @@ fi
 hardware_result=0
 for item in h264.mp4:v4l2h264dec hevc.mp4:v4l2h265dec vp9.webm:v4l2vp9dec; do
     file=${item%:*}
+    [[ $codec == all || $codec == "${file%.*}" ]] || continue
     decoder=${item#*:}
     pid=$(awk -v file="file=$file" '$1=="PLAYER_OPEN" && $2==file {for (i=3;i<=NF;i++) if ($i ~ /^pid=[0-9]+$/) print substr($i,5)}' "$receipt")
     [[ $pid =~ ^[0-9]+$ ]]
@@ -69,4 +80,4 @@ if [[ $hardware_result != 0 ]]; then
         sed -E 's/0x[0-9a-f]{8,}/<ptr>/g' | head -16 || :
     exit 1
 fi
-echo 'IRIS_PAROLE_VP9 first_keyframe=confirmed'
+if [[ $codec == all || $codec == vp9 ]]; then echo 'IRIS_PAROLE_VP9 first_keyframe=confirmed'; fi

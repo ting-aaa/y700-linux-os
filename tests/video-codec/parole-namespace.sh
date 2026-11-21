@@ -37,11 +37,14 @@ install -d -m755 root/qa/{bin,clips} root/home/y700
 install -d -m700 -o 1000 -g 1000 root/run/user/1000
 install -m755 "$helper/bin/Xvfb" "$(command -v uv)" root/qa/bin/
 install -m644 parole-desktop.sh check-x11.py root/qa/
+if [[ -f parole-transport.py ]]; then install -m644 parole-transport.py root/qa/; fi
+if [[ -f transport-codec ]]; then install -m644 transport-codec root/qa/; fi
+if [[ -f save-player-trace ]]; then touch root/qa/save-player-trace; fi
 install -m644 h264.mp4 hevc.mp4 vp9.webm root/qa/clips/
 chroot root dbus-uuidgen >root/etc/machine-id
 player_env=()
 if [[ $release == dev12.9 ]]; then
-    [[ ! -e player.tgz && ! -e plugin.so ]]
+    [[ ! -e player.tgz ]]
     chroot root dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
         sed -n 's/^installed\t//p' | sort > inventory
     [[ $(wc -l <inventory) == "$package_count" ]]
@@ -49,6 +52,12 @@ if [[ $release == dev12.9 ]]; then
     chroot root dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\n' |
         cmp - lower/var/lib/y700/build/packages.tsv
     echo "PLAYER_PREINSTALLED edition=$release packages=$package_count package_sha=$package_sha"
+    if [[ -f plugin.so ]]; then
+        target=/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
+        echo "7c3e57f206c81fa0af09a3cf34d9836a686527212c7738dc4657d6c315ec9962  root$target" | sha256sum -c --status
+        install -m644 plugin.so "root$target"
+        echo "PLAYER_TRIAL_PLUGIN storage=tmpfs sha256=$(sha256sum "root$target" | cut -d' ' -f1)"
+    fi
 else
     printf '#!/bin/sh\nexit 101\n' > root/usr/sbin/policy-rc.d
     chmod 755 root/usr/sbin/policy-rc.d
@@ -63,6 +72,15 @@ else
     grep -E 'Preflight passed|Installed 1240 packages' install.log
 fi
 [[ $(chroot root dpkg-query -W -f='${Version}' parole) == 4.18.2-1 ]]
+if [[ -f upgrade.tgz ]]; then
+    [[ $release == dev12.9 && ! -e plugin.so ]]
+    tar --no-same-owner -xzf upgrade.tgz -C root/run
+    installer=/run/y700-player-update/install.sh
+    if ! chroot root bash "$installer" install >install-upgrade.log 2>&1; then tail -25 install-upgrade.log; exit 1; fi
+    chroot root bash "$installer" verify
+    [[ $(chroot root dpkg-query -W -f='${db:Status-Status} ${Version}' parole) == 'installed 4.18.2-1+y7001' ]]
+    echo "PLAYER_TRIAL_UPGRADE storage=tmpfs sha256=$(sha256sum upgrade.tgz | cut -d' ' -f1)"
+fi
 touch "root/dev/$dev"
 mount --bind "/dev/$dev" "root/dev/$dev"
 devnum=$(cat "/sys/class/video4linux/$dev/dev")
@@ -79,7 +97,7 @@ chroot root setpriv --reuid=y700 --regid=y700 --init-groups --no-new-privs \
 runtime=root/run/user/1000
 if [[ -f save-player-trace && -s $runtime/player-open.log ]]; then
     mkdir -m700 player-trace
-    for pid in $(sed -nE 's/^PLAYER_OPEN .* pid=([0-9]+) .*$/\1/p' "$runtime/player-open.log"); do
+    for pid in $(sed -nE 's/^(PLAYER_OPEN|PAROLE_TRANSPORT_START) .* pid=([0-9]+)( .*)?$/\2/p' "$runtime/player-open.log" | sort -u); do
         log="$runtime/media-$pid.log"
         if [[ -f $log && ! -L $log && $(stat -c %s "$log") -le 16777216 ]]; then
             cp -- "$log" player-trace/
@@ -95,4 +113,18 @@ if grep -Ei '(iris|vpu|video-codec|iommu|arm-smmu).*(fatal|retained|fault|watchd
     exit 1
 fi
 [[ $player_rc == 0 ]] || exit "$player_rc"
+if [[ -f upgrade.tgz && -f parole-transport.py ]]; then
+    expected=3
+    if [[ -f transport-codec ]]; then expected=1; fi
+    awk -v expected="$expected" '
+        /^PAROLE_TRANSPORT_CONTROLS / {
+            if (!sub(/^slider_px=/, "", $4) || !sub(/^play_pause_px=/, "", $5)) exit 1
+            if (split($4, slider, "x") != 2 || split($5, button, "x") != 2) exit 1
+            if (slider[2]+0 < 96 || button[1]+0 < 96 || button[2]+0 < 96) exit 1
+            count++
+        }
+        END { if (count != expected) exit 1 }
+    ' "$runtime/player-open.log"
+    echo "PAROLE_TOUCH_PASS tested=$expected min_logical_pixels=48 gtk_scale=2"
+fi
 echo 'IRIS_PAROLE_PASS packages=1240 storage=tmpfs decoder=runtime_suspended'

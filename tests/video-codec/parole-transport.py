@@ -203,6 +203,7 @@ def main():
     cli.add_argument("clip", type=Path)
     cli.add_argument("--already-open", action="store_true")
     cli.add_argument("--pointer", action="store_true", help="tap and drag the visible X11 transport controls")
+    cli.add_argument("--seek-cycles", type=int, choices=range(1, 6), default=1)
     cli.add_argument("--require-iris", choices=("v4l2h264dec", "v4l2h265dec", "v4l2vp9dec"))
     args = cli.parse_args()
     clip = args.clip.resolve(strict=True)
@@ -273,13 +274,15 @@ def main():
     if args.pointer:
         tap(PLAY)
     assert widgets[1].get_name() == PLAY, "Parole did not pause"
-    for target, direction, colour in ((13, "seek-forward", "yellow"), (6, "seek-back", "green")):
-        previous = checkpoint()
-        if args.pointer:
-            seek(target, drag_from=13 if direction == "seek-back" else None)
-        else:
-            assert widgets[2].set_current_value(target), "Accessible GtkScale refused seek"
-        progress(direction, colour, previous)
+    for cycle in range(1, args.seek_cycles + 1):
+        for target, direction, colour in ((13, "seek-forward", "yellow"), (6, "seek-back", "green")):
+            previous = checkpoint()
+            if args.pointer:
+                seek(target, drag_from=13 if direction == "seek-back" else None)
+            else:
+                assert widgets[2].set_current_value(target), "Accessible GtkScale refused seek"
+            progress(direction, colour, previous)
+        print(f"PAROLE_SEEK_CYCLE file={clip.name} pid={pid} completed={cycle}", flush=True)
 
     # A key-unit seek may land before second 6. Even from the first green
     # frame at 4 s an advancing clock must cross the 8 s boundary in 4 s.

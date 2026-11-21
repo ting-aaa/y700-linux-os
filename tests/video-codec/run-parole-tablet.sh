@@ -2,13 +2,25 @@
 # Exercise the sealed desktop plus the offline player layer entirely in RAM.
 set -euo pipefail
 umask 077
-[[ $# == 5 || $# == 6 ]] || { echo 'Usage: run-parole-tablet.sh USB_SSH RAM_BUNDLE PLAYER_TAR_GZ|--preinstalled SYNTHETIC_CLIPS DEVICE_XVFB_USR [SEPARATE_V4L2_SO]' >&2; exit 2; }
+observers=()
+codec=all
+if [[ ${1:-} == --transport || ${1:-} == --transport=* ]]; then
+    case $1 in
+        --transport) ;;
+        --transport=h264|--transport=hevc|--transport=vp9) codec=${1#*=} ;;
+        *) echo 'Unknown transport codec' >&2; exit 2 ;;
+    esac
+    observers=(parole-transport.py)
+    shift
+fi
+[[ $# == 5 || $# == 6 ]] || { echo 'Usage: run-parole-tablet.sh [--transport[=h264|hevc|vp9]] USB_SSH RAM_BUNDLE PLAYER_TAR_GZ|--preinstalled SYNTHETIC_CLIPS DEVICE_XVFB_USR [SEPARATE_V4L2_SO]' >&2; exit 2; }
 access=$(realpath -e "$1")
 bundle=$(realpath -e "$2")
 player=
 clips=$(realpath -e "$4")
 helper=$5
 plugin=
+upgrade=
 trace=${IRIS_PAROLE_TRACE:-}
 [[ -z $trace || (! -e $trace && -d $(dirname "$trace")) ]]
 [[ $helper =~ ^/var/tmp/[A-Za-z0-9._/-]+/usr$ && $helper != */../* ]]
@@ -18,7 +30,7 @@ source "$ramtests/profiles.sh"
 initrd_sha=$(sha256sum "$bundle/initrd" | cut -d' ' -f1)
 ram_profile "$initrd_sha"
 if [[ $3 == --preinstalled ]]; then
-    [[ $release == dev12.9 && $# == 5 ]]
+    [[ $release == dev12.9 ]]
 else
     [[ $release == dev12.8 && ${PAROLE_BUNDLE_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
     player=$(realpath -e "$3")
@@ -28,6 +40,11 @@ if [[ $# == 6 ]]; then
     plugin=$(realpath -e "$6")
     [[ ${IRIS_V4L2_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
     printf '%s  %s\n' "$IRIS_V4L2_SHA256" "$plugin" | sha256sum -c --strict --status -
+fi
+if [[ -n ${PAROLE_UPGRADE_ARCHIVE:-} ]]; then
+    [[ $release == dev12.9 && -z $plugin && ${PAROLE_UPGRADE_SHA256:-} =~ ^[0-9a-f]{64}$ ]]
+    upgrade=$(realpath -e "$PAROLE_UPGRADE_ARCHIVE")
+    printf '%s  %s\n' "$PAROLE_UPGRADE_SHA256" "$upgrade" | sha256sum -c --strict --status -
 fi
 stage=$(bash "$access" bash -s <<'PREFLIGHT'
 set -eu
@@ -46,14 +63,18 @@ cleanup() {
         { echo 'Failed to verify cleanup of the player RAM directory' >&2; exit 1; }
 }
 trap cleanup EXIT
-tar -cf - -C "$ramtests" device.sh profiles.sh -C "$here" parole-namespace.sh parole-desktop.sh \
+tar -cf - -C "$ramtests" device.sh profiles.sh -C "$here" parole-namespace.sh parole-desktop.sh "${observers[@]}" \
     -C "$clips" h264.mp4 hevc.mp4 vp9.webm |
     bash "$access" "tar -xf - -C '$stage' && mv '$stage/parole-namespace.sh' '$stage/namespace.sh'"
+if [[ $codec != all ]]; then printf '%s\n' "$codec" | bash "$access" "cat >'$stage/transport-codec'"; fi
 if [[ -n $plugin ]]; then
     bash "$access" "cd '$stage' && cat >plugin.so && echo '$IRIS_V4L2_SHA256  plugin.so' | sha256sum -c --strict --status -" <"$plugin"
 fi
 if [[ -n $player ]]; then
     bash "$access" "cd '$stage' && cat >player.tgz && echo '$PAROLE_BUNDLE_SHA256  player.tgz' | sha256sum -c --strict --status -" <"$player"
+fi
+if [[ -n $upgrade ]]; then
+    bash "$access" "cd '$stage' && cat >upgrade.tgz && echo '$PAROLE_UPGRADE_SHA256  upgrade.tgz' | sha256sum -c --strict --status -" <"$upgrade"
 fi
 timeout 150 bash "$access" "cat >'$stage/initrd'" <"$bundle/initrd"
 probe="$here/../video-player/check-x11.py"
