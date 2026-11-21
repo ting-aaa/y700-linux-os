@@ -37,3 +37,30 @@ bash scripts/build-dt-probe-entry.sh --panel60 "$dev1211_permanent_entry" "$new_
 一次完整 U-Boot → systemd-boot → Debian ARM64 启动验证了新内核 notes 和原 dev12.11 根的 1,240 个软件包。另一组独立的真实 EFI 启动使用正式 initrd 加小型观察器，第一次选中限次内核、消耗唯一计数，第二次返回原 dev12.11 内核并验证两次的不同 notes。QEMU 使用 virt 设备树。真实 FAT 事务还逐个篡改载荷以验证拒绝路径，检查原菜单在恢复后完全一致。记录保存在本地 `out/panel-refresh-60/`。[限次菜单与恢复测试](../tests/installed-trial/panel60-arm.sh)
 
 板端包中的 `board-entry.sh arm entry RUN_ID` 在正式 dev12.11 上安装独立条目并武装一次尝试，重启由操作者发起。系统沿用原文件根和原 initrd，启动原有 4 分钟回退定时器。`--panel60 confirm` 保留定时器，控制器拒绝晋升。回到原内核后，`board-entry.sh restore entry RUN_ID` 恢复原默认配置并移除此次测试文件。定时器依赖内核和 systemd 继续运行。若设备在更早阶段失去响应，下次复位由已消耗的固件计数选择原内核。[板端事务入口](../tests/panel-refresh/board-entry.sh)
+
+### 从电脑打包，在平板私有目录解包
+
+早期 `board.tar` 的根目录成员 `./` 带有 Windows 挂载映射的 0777 权限。以 root 解包时，这个成员会放宽接收目录的权限。新版 `board-private.tar` 只收录具名的子目录和文件，目录与脚本为 0700，数据及清单为 0600，所有成员的 UID/GID 为 0。回归测试分别从实际 DrvFS 输入与全树 0777 的副本打包，比较整包字节，并用 root 默认解包核对接收目录和全部成员的权限。[打包脚本](../tests/panel-refresh/package-board.sh) · [权限回归](../tests/panel-refresh/check-board-package.sh)
+
+```bash
+# 电脑上的 Linux 或 WSL，新归档路径须空闲。
+bash tests/panel-refresh/package-board.sh "$new_entry" "$new_tar"
+bash tests/panel-refresh/check-board-package.sh "$new_entry"
+```
+
+将归档传入平板后，在 root 的 Bash 中把 `archive` 设置为收到的绝对路径。以下命令校验本次归档，在私有临时目录里解包并逐文件核验。后续从打印的目录运行本轮的 `board-entry.sh`。
+
+```bash
+set -euo pipefail
+umask 077
+: "${archive:?请先设置收到的 board-private.tar 绝对路径}"
+[[ $EUID == 0 && $archive == /* ]]
+printf '%s  %s\n' 80c5e0a9ecf9dd6c81ab6fe21ea6fb36c54e922567585882025f78f8fc71ee96 "$archive" | sha256sum --strict -c -
+stage=$(mktemp -d /var/tmp/y700-panel-entry.XXXXXXXX)
+tar --no-same-owner --no-same-permissions -xf "$archive" -C "$stage"
+[[ $(stat -c '%u:%g:%a' "$stage") == 0:0:700 && -z $(find "$stage" -perm /077 -print -quit) ]]
+(cd "$stage"; sha256sum --strict -c SHA256SUMS; cd entry; sha256sum --strict -c SHA256SUMS)
+printf '入口目录 %s\n' "$stage"
+```
+
+观察器把检查结果写入另一个已准备好的 root 私有目录 `/var/tmp/y700-panel60-run-a`。它以服务身份读取 `/run/lightdm/root/:0` 并连接本机 X11 套接字，使用 `journalctl -k` 游标检查本轮内核信息。PC 已在相同的 systemd 沙箱选项下通过独立 Xvfb 的认证、RandR 修改及回读、无凭据拒绝、内核日志读取和目录写权限测试。安装与移除观察器由服务外的管理脚本执行。[观察器](../tests/panel-refresh/local-observer.sh) · [服务配置](../tests/panel-refresh/manage-local-observer.sh) · [systemd 文件系统沙箱说明](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#ProtectSystem=)
