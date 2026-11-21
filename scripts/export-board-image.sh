@@ -44,19 +44,32 @@ if [[ -n ${card:-} ]]; then
     (cd "$card" && sha256sum -c SHA256SUMS)
     members=(EFI loader SHA256SUMS)
     if $card_only; then
-        files=(EFI/y700-test/kernel.efi EFI/y700-test/board.dtb EFI/y700-test/initrd loader/entries/y700-test.conf)
+        root_image=$candidate/root.ext4
+        entry_options=(--bounded-return)
+        readme=$repo/packaging/sd-trial/README.zh_CN.md
+        if grep -Fxq 'package_digest=ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047' "$candidate/identity.txt"; then
+            files=(EFI/y700-sd-12-12/{kernel.efi,kernel-120.efi,board.dtb,initrd} loader/entries/{y700-sd-12-12,y700-sd-12-12-120}.conf)
+            cmp "$candidate/SHA256SUMS" "$card/SOURCE-SHA256SUMS"
+            root_image=$card/card-root.ext4
+            entry_options=()
+            readme=$repo/packaging/sd-trial/dev12.12.zh_CN.md
+            [[ $(stat -c %s "$root_image") == 6442450944 ]]
+            debugfs -R 'cat /etc/os-release' "$root_image" 2>/dev/null | grep -Fxq IMAGE_VERSION=dev12.12
+            debugfs -R 'cat /var/lib/y700/build/packages.tsv' "$root_image" 2>/dev/null |
+                sha256sum | grep -Eq '^5fa586a125d52580771c923bec05985e32906be36acf1b88dec29e5791b89ccd '
+        else
+            files=(EFI/y700-test/kernel.efi EFI/y700-test/board.dtb EFI/y700-test/initrd loader/entries/y700-test.conf)
+        fi
         members=("${files[@]}" SHA256SUMS)
         for file in "${members[@]}"; do [[ -f $entry/$file && ! -L $entry/$file ]]; done
-        (cd "$entry" && sha256sum "${files[@]}") | cmp - "$entry/SHA256SUMS"
-        # Rebuild from the encoded card so all four supplied files match this release.
-        bash "$repo/scripts/build-trial-entry.sh" --bounded-return "$card" "$work/expected-entry"
-        cmp --silent "$entry/SHA256SUMS" "$work/expected-entry/SHA256SUMS" || {
-            echo 'Build the trial entry with --bounded-return from this card' >&2; exit 1;
-        }
+        # Derive the exact filenames and digests independently from the encoded card.
+        bash "$repo/scripts/build-trial-entry.sh" "${entry_options[@]}" "$card" "$work/expected-entry"
+        cmp "$entry/SHA256SUMS" "$work/expected-entry/SHA256SUMS"
+        (cd "$entry" && sha256sum --strict -c SHA256SUMS)
         # Bind this export to the unpacked candidate, including its optional per-unit files.
-        [[ -f $card/y700-test-card.img && -f $card/card-esp.fat && -f $candidate/root.ext4 ]]
+        [[ -f $card/y700-test-card.img && -f $card/card-esp.fat && -f $root_image ]]
         cmp --silent -n 1073741824 "$card/card-esp.fat" "$card/y700-test-card.img" 0 1048576
-        cmp --silent -n 6442450944 "$candidate/root.ext4" "$card/y700-test-card.img" 0 1074790400
+        cmp --silent -n 6442450944 "$root_image" "$card/y700-test-card.img" 0 1074790400
     else
         (cd "$entry" && sha256sum --strict -c SHA256SUMS)
     fi
@@ -67,7 +80,7 @@ if [[ -n ${card:-} ]]; then
     tar -C "$entry" -dzf trial-entry.tar.gz
     sha256sum y700-test-card.img.zst trial-entry.tar.gz >> TRANSPORT-SHA256SUMS
     if $card_only; then
-        install -m644 "$repo/packaging/sd-trial/README.zh_CN.md" README.md
+        install -m644 "$readme" README.md
         sha256sum SHA256SUMS SOURCE-SHA256SUMS PROBE-SHA256SUMS identity.txt verify-physical-boot.sh README.md >> TRANSPORT-SHA256SUMS
     fi
 fi

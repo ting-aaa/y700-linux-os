@@ -33,6 +33,20 @@ test "$(uname -r)" = 7.3.4-asphalt-prc || fail 'Unexpected kernel'
 if [ -f "$identity" ]; then
     notes_digest=$(sed -n 's/^kernel_notes_sha256=//p' "$identity")
     fbdev=$(sed -n 's/^fbdev_emulation=//p' "$identity")
+    if [ "$expected_digest" = ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047 ]; then
+        grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release || fail 'Unexpected SD release'
+        test "$(findmnt -nro UUID /boot)" = 12DC-1212 || fail 'Unexpected SD FAT serial'
+        selected=/sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+        test -r "$selected" || fail 'Cannot read selected EFI entry'
+        entry=$(tail -c +5 "$selected" | iconv -f UTF-16LE -t UTF-8 | tr -d '\000')
+        case "$entry" in
+            y700-sd-12-12.conf|debian.conf)
+                test "$notes_digest" = c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063 || fail 'Incorrect primary kernel identity' ;;
+            y700-sd-12-12-120.conf|debian-120.conf)
+                notes_digest=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ;;
+            *) fail 'Unexpected EFI entry for this card' ;;
+        esac
+    fi
     case "$fbdev" in
         '') ;;
         0) test "$(cat /sys/module/drm_kms_helper/parameters/fbdev_emulation)" = N && test ! -c /dev/fb0 || fail 'Expected the KMS enrollment boot profile' ;;

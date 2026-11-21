@@ -9,6 +9,11 @@ here=$(cd "$(dirname "$0")" && pwd)
 board=$(realpath -e "$1")
 qemu=$(realpath -e "$2")
 entry=$(realpath -e "$3")
+new_sd=0
+if [[ -f $entry/loader/entries/y700-sd-12-12.conf ]]; then
+    (( ! file_trial ))
+    new_sd=1
+fi
 out=$(realpath -m "$4")
 mkdir -- "$out"
 t=$(mktemp -d /var/tmp/y700-menu-return.XXXXXXXX)
@@ -57,6 +62,10 @@ INIT
 chmod 755 root/sbin/init
 printf '%s\n' 2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066 > root/etc/y700/kernel-notes.sha256
 printf '%s\n' intentional-test-mismatch > other/etc/y700/image-id
+if (( new_sd )); then
+    printf '%s\n' y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f >other/etc/y700/image-id
+    printf '%s\n' IMAGE_VERSION=dev12.11 >other/etc/os-release
+fi
 truncate -s 32M root.ext4
 make_baseline() {
     mkfs.ext4 -Fq -d root -U ef306764-2315-4235-8796-69e2c9b61946 root.ext4
@@ -83,6 +92,7 @@ mcopy -i internal.fat "$board/efi/esp/loader/loader.conf" ::/loader/
 mcopy -i internal.fat "$board/efi/esp/loader/entries/debian.conf" ::/loader/entries/
 name=y700-test
 if (( file_trial )); then name=y700-file; fi
+if (( new_sd )); then name=y700-sd-12-12; fi
 mcopy -s -i internal.fat "$entry/EFI/$name" ::/EFI/
 # Two real Linux menu entries; only the first boot receives a manual selection.
 sed '/^options /s/$/ console=ttyAMA0/' "$entry/loader/entries/$name.conf" > "$name.conf"
@@ -99,8 +109,23 @@ dd if=internal.fat of=internal.img bs=1M seek=1 conv=sparse,notrunc status=none
 dd if=root.ext4 of=internal.img bs=1M seek=305 conv=sparse,notrunc status=none
 scenarios=(wrong-identity absent)
 if (( file_trial )); then scenarios=(file-absent file-symlink file-identity); fi
+if (( new_sd )); then scenarios=(sd12-old-release sd12-wrong-fat sd12-absent); fi
 for scenario in "${scenarios[@]}"; do
     case $scenario in
+        sd12-wrong-fat)
+            mkdir -p other/var/lib/y700/build
+            cp "$here/../../config/platform-desktop-update.lock.json" other/var/lib/y700/build/
+            printf '%s\n' IMAGE_VERSION=dev12.12 >other/etc/os-release
+            printf '%s\n' 'PARTLABEL=y700-test-root / ext4 defaults 0 1' 'UUID=12DC-1212 /boot vfat umask=0077 0 2' >other/etc/fstab
+            mkfs.ext4 -Fq -d other -U 171a4adb-916b-4763-9e6f-722b4a99988f other.ext4
+            truncate -s 64M other.fat
+            mkfs.fat -F 32 -i 171A4ADB other.fat >/dev/null
+            truncate -s 83M wrong-card.img
+            printf 'label: gpt\nstart=2048,size=131072,type=uefi,name=y700-test-esp\nstart=133120,size=32768,type=linux,name=y700-test-root\n' |
+                sfdisk --sector-size 512 wrong-card.img >/dev/null
+            dd if=other.fat of=wrong-card.img bs=1M seek=1 conv=notrunc status=none
+            dd if=other.ext4 of=wrong-card.img bs=1M seek=65 conv=notrunc status=none
+            ;;
         file-symlink)
             private=root/var/lib/y700-trial/dev12.5
             mkdir -p "$private"
@@ -124,4 +149,6 @@ for scenario in "${scenarios[@]}"; do
     "${UV_BIN:-uv}" run --offline --no-project --python /usr/bin/python3 python "$here/firmware.py" "$qemu" "$board/efi/qemu-uboot/u-boot.bin" "$out" "$scenario" "$title"
     sha256sum --strict -c originals.sha256
 done
-if (( file_trial )); then echo FILE_TRIAL_THREE_RETURNS_PASS; else echo SD_TRIAL_BOTH_RETURNS_PASS; fi
+if (( file_trial )); then echo FILE_TRIAL_THREE_RETURNS_PASS
+elif (( new_sd )); then echo DEV1212_SD_THREE_RETURNS_PASS
+else echo SD_TRIAL_BOTH_RETURNS_PASS; fi

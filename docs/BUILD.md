@@ -1,5 +1,19 @@
 # Build migration status
 
+The dev12.12 build starts from the sealed PRC dev12.11 root, EFI FAT and U-Boot. Supply the platform archive identified by the desktop update lock and the verified dual-refresh kernel directory. Use new output directories on a Linux filesystem. After unpacking the completed TAR, the three card commands generate ordinary files on the host. [Release hashes](DEV12.12-VERIFICATION.md) · [Unpacking](DEV12.12-IMAGE.md) · [Per-device setup](DEV12.12-PER-UNIT.md)
+
+```sh
+sudo env UV_BIN="$(command -v uv)" bash scripts/update-sealed-root.sh platform-desktop-update \
+    "$dev1211/root.ext4" "$desktop_packages" "$work/root"
+bash scripts/build-camera-esp.sh --dev12.12 "$dev1211/linux-boot.fat" "$dual_refresh" "$work/linux-boot.fat"
+bash scripts/package-board-image.sh dev12.12 "$work/root/root.ext4" \
+    "$(sha256sum "$work/root/root.ext4" | cut -d' ' -f1)" "$work/linux-boot.fat" \
+    "$(sha256sum "$work/linux-boot.fat" | cut -d' ' -f1)" "$dev1211/asphalt-prc-u-boot.img" "$work/release"
+bash scripts/build-test-card.sh "$unpacked_dev1212" "$work/card"
+bash scripts/build-trial-entry.sh "$work/card" "$work/entry"
+bash scripts/export-board-image.sh --card-only "$unpacked_dev1212" "$work/export" "$work/card" "$work/entry"
+```
+
 The dev12.10 board image can be assembled from the sealed dev12.9 root and the verified ARM64 player update. The image guide covers extraction and rebuilding the RAM bundle from the distributed files. [Dev12.10 build instructions](DEV12.10-IMAGE.md)
 
 The initial import preserves selected source recipes from the local experimental work. It is not yet a clean-checkout product image builder, and no binary release is included.

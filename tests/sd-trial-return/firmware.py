@@ -12,6 +12,9 @@ scenario = sys.argv[4]
 errors = {
     "absent": "y700-sd-trial: Matching y700-test-root partition unavailable; rebooting to the default entry",
     "wrong-identity": "y700-sd-trial: Unexpected image identity; rebooting to the default entry",
+    "sd12-old-release": "y700-init: Wrong SD release",
+    "sd12-wrong-fat": "y700-init: Wrong SD sibling FAT serial",
+    "sd12-absent": "y700-init: Matching y700-test-root partition unavailable",
     "file-absent": "y700-file-trial: unsafe trial directory; rebooting to default",
     "file-symlink": "y700-file-trial: unsafe root image; rebooting to default",
     "file-identity": "y700-file-trial: unexpected inner image identity; rebooting to default",
@@ -24,8 +27,10 @@ cmd = [str(qemu / "usr/bin/qemu-system-aarch64"), "-L", str(qemu / "usr/share/qe
        "-machine", "virt,gic-version=3", "-cpu", "max", "-m", "2048", "-smp", "2",
        "-nodefaults", "-no-user-config", "-display", "none", "-nic", "none",
        "-monitor", "none", "-serial", "stdio", "-bios", str(bios)]
-for name, sector in ([("internal.img", 4096), ("wrong-card.img", 512)]
-                     if scenario == "wrong-identity" else [("internal.img", 4096)]):
+disks = [("internal.img", 4096)]
+if scenario in ("wrong-identity", "sd12-old-release", "sd12-wrong-fat"):
+    disks.append(("wrong-card.img", 512))
+for name, sector in disks:
     disk = Path(name).stem
     cmd += ["-drive", f"file={name},format=raw,if=none,id={disk},snapshot=on",
             "-device", f"virtio-blk-device,drive={disk},logical_block_size={sector},physical_block_size={sector}"]
