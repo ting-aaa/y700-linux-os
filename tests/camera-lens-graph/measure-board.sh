@@ -7,6 +7,8 @@ tool=$(realpath -e -- "$2")
 [[ -f $tool && -x $tool ]]
 grep -zFxq lenovo,asphalt /proc/device-tree/compatible
 [[ $(tr -d '\0' </proc/device-tree/region_country) == PRC ]]
+diagnostic=${Y700_AF_DIAGNOSTICS:-0}
+case $diagnostic in 0|1) ;; *) exit 2 ;; esac
 if [[ $mode == --detached-rear-af ]]; then
     # Keep the receipt in this boot's tmpfs even if the USB shell goes away.
     runner=$(realpath -e -- "$0")
@@ -18,6 +20,7 @@ if [[ $mode == --detached-rear-af ]]; then
     (umask 077; set -C; : > "$receipt")
     unit=y700-af-run-${stage##*.}
     systemd-run --quiet --collect --unit="$unit" -p RuntimeMaxSec=90s -p TimeoutStopSec=3s \
+        --setenv="Y700_AF_DIAGNOSTICS=$diagnostic" \
         -p "StandardOutput=append:$receipt" -p "StandardError=append:$receipt" \
         /bin/bash "$runner" --rear-af "$tool"
     printf 'AF_DISPATCH unit=%s receipt=%s\n' "$unit" "$receipt"
@@ -46,6 +49,19 @@ if [[ $mode == --rear-af ]] && pgrep -x qcam >/dev/null; then
     exit 1
 fi
 before=$(cat "$sensor/power/runtime_active_time")
+library=/opt/y700-camera/lib
+levels='*:ERROR'
+if [[ $diagnostic == 1 ]]; then
+    stage=$(dirname -- "$tool")
+    [[ $stage =~ ^/run/y700-af-optical\.[[:alnum:]]{8}$ && $(findmnt -nro FSTYPE -T "$stage") == tmpfs ]]
+    [[ -f $stage/libcamera.so.0.7 && ! -L $stage/libcamera.so.0.7 ]]
+    (cd "$stage" && printf '%s  %s\n' \
+        6521ee7a227580b1108e1643f9c5889be6a9f6fdfedd73833cfab0a42ed971ce libcamera.so.0.7 \
+        90dfdbf117fd844ead381f9ffc4f365f35e185a204e0768d70c2c5394fff1773 "$library/libcamera.so.0.7.2" \
+        7de9f8cf7eca33dc7cf4d14da83ed60d1240530f73f45c57484dc263f6ca5b8c "$library/libcamera-base.so.0.7.2" | sha256sum --quiet -c -)
+    library=$stage:$library
+    levels='*:FATAL,V4L2:ERROR,Y700Af:DEBUG'
+fi
 unit=y700-optical-$(cat /proc/sys/kernel/random/uuid)
 rc=0
 inhibit=()
@@ -57,8 +73,8 @@ fi
     -p ProtectHome=yes -p PrivateTmp=yes -p NoNewPrivileges=yes -p LimitCORE=0 \
     -p RuntimeMaxSec=70s -p TimeoutStopSec=3s -p "RuntimeDirectory=$unit" -p RuntimeDirectoryMode=0700 \
     --setenv="HOME=/run/$unit" --setenv="XDG_CONFIG_HOME=/run/$unit" \
-    --setenv=LD_LIBRARY_PATH=/opt/y700-camera/lib --setenv=LIBCAMERA_SOFTISP_MODE=cpu \
-    --setenv='LIBCAMERA_LOG_LEVELS=*:ERROR' "$tool" "$mode" || rc=$?
+    --setenv="LD_LIBRARY_PATH=$library" --setenv=LIBCAMERA_SOFTISP_MODE=cpu \
+    --setenv="LIBCAMERA_LOG_LEVELS=$levels" "$tool" "$mode" || rc=$?
 for ((i=0; i<40; i++)); do
     [[ $(cat "$sensor/power/runtime_status") != suspended ]] || break
     sleep 0.25

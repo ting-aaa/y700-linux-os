@@ -6,6 +6,8 @@ For a USB session, stage the runner as `measure-board.sh` and the executable in 
 
 Use a stationary, well-lit, textured target with visible fine edges near the centre of the preview. Keep the tablet and target still throughout the measurement. Each invocation of `--rear-af` opens the rear HI1339 for one 640×480 ABGR8888 viewfinder stream using the packaged CPU ISP. The sole actuator command is the normal libcamera `AfModeAuto` and `AfTriggerStart` pair in one request. The program neither creates a window nor encodes or saves images. The ordinary account running the measurement needs the same camera and dma-buf access as qcam.
 
+For the y7002 runtime, place the checked diagnostic `libcamera.so.0.7` beside the staged executable and set `Y700_AF_DIAGNOSTICS=1` on the board runner. It verifies the candidate and both installed camera libraries. Only this transient process then uses the diagnostic library. Its `AF_DIAG` line identifies the terminal scan phase and reason and counts accepted lens controls and samples. A successful control call only shows that the driver accepted the command. [Diagnostic source change](../../packaging/camera-autofocus/scan-result-diagnostics.patch)
+
 ```sh
 export LD_LIBRARY_PATH=/opt/y700-camera/lib
 export LIBCAMERA_LOG_LEVELS='*:FATAL'
