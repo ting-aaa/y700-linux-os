@@ -1,5 +1,7 @@
 # Hardware and system status
 
+The dev12.12 offline desktop update brings the rear-camera default, touch-sized Bluetooth controls and single-tap Pinyin selection to existing installations. The three application versions match the daily reference tablet. [Offline update and rollback](DEV12.12-DESKTOP-UPDATE.md)
+
 The reference tablet's daily dev12.11 runs Blueman `2.4.4-1+y7003`. The ordinary desktop manager started discovery on the physical WCN6855 and recovered its Search button when discovery finished. The existing Bluetooth daemon, applet, bonds and connections survived the test. A real keyboard or mouse is still needed to verify pairing, input and reconnection over the physical radio. [Touch controls and rollback](BLUETOOTH-MANAGER.md)
 
 On the dev12.12 kernel and release root, Blueman displayed the keyboard passkey at 200% scale. A virtual keyboard completed pairing, reconnected and sent encrypted keyboard and pointer reports. Across two cold boots, a bonded virtual peripheral also entered the LightDM password and unlocked the same Xfce session after PAM rejected an incorrect password. The physical WCN6855 and a real accessory still need an end-to-end bonding and input test. [Keyboard passkey](BLUETOOTH-HID-RADIO.md) · [Cold boot and lock screen](../tests/bluetooth-virtual/greeter-login.md)
