@@ -101,6 +101,39 @@ def check_idle(sensor, master):
         require(contents(dev / "power/control") == "auto", f"{dev.name} is not managed by runtime PM")
 
 
+WL2864C_RAILS = DT / "soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators"
+
+
+def stock_sensor_rails(phase):
+    """Read the three WL2864C outputs used together in the CN350 slot-0 table."""
+    rails = {}
+    for dev in Path("/sys/class/regulator").glob("regulator.*"):
+        node = (dev / "of_node").resolve()
+        if node.parent == WL2864C_RAILS and node.name in {"ldo1", "ldo4", "ldo5"}:
+            require(node.name not in rails, f"Duplicate regulator for {node.name}")
+            rails[node.name] = (contents(dev / "state"), int(contents(dev / "microvolts")),
+                                int(contents(dev / "num_users")))
+    require(set(rails) == {"ldo1", "ldo4", "ldo5"}, "Incomplete slot-0 regulator set")
+    for name, (state, microvolts, users) in sorted(rails.items()):
+        print(f"PM phase={phase} rail={name} state={state} uV={microvolts} users={users}",
+              flush=True)
+    return rails
+
+
+def check_slot_power(rails, powered):
+    aux = SENSOR_NODE / "aux-supply"
+    has_aux = aux.exists()
+    if has_aux:
+        phandle = aux.read_bytes()
+        require(len(phandle) == 4 and 0 < int.from_bytes(phandle, "big") < 0xffffffff
+                and phandle == (WL2864C_RAILS / "ldo5/phandle").read_bytes(),
+                "Unexpected auxiliary supply")
+    for name, microvolts in (("ldo1", 1100000), ("ldo4", 2800000), ("ldo5", 2800000)):
+        enabled = powered and (name != "ldo5" or has_aux)
+        expected = ("enabled" if enabled else "disabled", microvolts, int(enabled))
+        require(rails[name] == expected, f"Unexpected slot-0 power state at {name}")
+
+
 @contextmanager
 def main_sensor_power(sensor, enabled):
     if not enabled:
@@ -243,6 +276,8 @@ def main():
                         help="hold the HI1339 driver's normal runtime power during the read")
     parser.add_argument("--trace-queues", action="store_true",
                         help="record this read's ARM64 CCI queue numbers and return statuses")
+    parser.add_argument("--report-rails", action="store_true",
+                        help="sample the three CN350 slot-0 regulator outputs outside the CCI trace")
     args = parser.parse_args()
     if args.trace_queues and not (args.read_id or args.af_layout):
         parser.error("--trace-queues requires a read operation")
@@ -261,12 +296,17 @@ def main():
     bus, sensor, master = hardware()
     check_idle(sensor, master)
     levels = rail_levels()
+    initial_rails = stock_sensor_rails("before") if args.report_rails else None
+    if args.report_rails:
+        check_slot_power(initial_rails, False)
     print(f"CCI0 master=0 rate=400000 VAF_uV={levels[0]} camera_io_uV={levels[1]} "
           "HI1339=suspended CCI=suspended", flush=True)
     if not (args.read_id or args.af_layout):
         return
     try:
         with main_sensor_power(sensor, args.power_main):
+            if args.report_rails:
+                check_slot_power(stock_sensor_rails("during"), args.power_main)
             with trace_queues() if args.trace_queues else nullcontext():
                 if args.af_layout:
                     verify_calibration(bus, layout, decode)
@@ -280,6 +320,8 @@ def main():
             time.sleep(.1)
         check_idle(sensor, master)
         require(rail_levels() == levels, "Regulator level changed during probe")
+        if args.report_rails:
+            require(stock_sensor_rails("after") == initial_rails, "Slot-0 regulator state changed")
         print("After read: CCI=suspended HI1339=suspended existing_rails=enabled", flush=True)
 
 

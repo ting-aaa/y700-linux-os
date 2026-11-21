@@ -1,8 +1,36 @@
 # Main-camera actuator and EEPROM on the physical Y700
 
-On the TB320FC_PRC running kernel `7.3.4-asphalt-prc`, the main HI1339 sensor had already reported its chip ID `0x1339` and produced full-resolution images. Its focus actuator and calibration EEPROM are separate I²C devices. The CN350 TXD module description selects GT9768 address `0x0c` and EEPROM address `0x58`. The upstream GT9768 proposal expects `0xe9` at register `0x00`. These two peripheral addresses still need a successful physical response on this tablet. [Physical capture](CAMERA-SENSORS.md) · [Stock layout and supply evidence](CAMERA-FOCUS-FLASH.md) · [MediaTek GT9768 ID register](https://lists.infradead.org/pipermail/linux-mediatek/2024-June/080166.html)
+On the TB320FC_PRC running kernel `7.3.4-asphalt-prc`, the main HI1339 sensor had already reported its chip ID `0x1339` and produced full-resolution images. Its focus actuator and calibration EEPROM are separate I²C devices. The CN350 TXD module description selects GT9768 address `0x0c` and EEPROM address `0x58`. The upstream GT9768 proposal expects `0xe9` at register `0x00`. With the third factory slot-0 supply enabled, the installed tablet returned that ID and a valid per-unit AF calibration block. [Physical capture](CAMERA-SENSORS.md) · [Stock layout and supply evidence](CAMERA-FOCUS-FLASH.md) · [MediaTek GT9768 ID register](https://lists.infradead.org/pipermail/linux-mediatek/2024-June/080166.html)
 
 ## What the physical bus returned
+
+### Installed dev12.10 clock comparison
+
+On 2026-11-21 the installed CN350 tablet booted a counted CCI0 clock-only entry, using its permanent kernel and root. The active CCI0 source and branch changed from 19.2 MHz to **37.5 MHz**. Both returned to 19.2 MHz after the test. Both CCI0 masters worked at sensor probe on all three boots. The sensor driver read HI1339 ID `0x1339` and S5K4H7 ID `0x487b`. These are hardware register reads made by the sensor driver. The clock values come from the kernel clock framework. The SCL waveform was not measured. [Sensor ID proof](CAMERA-CCI-ID.md) · [Clock measurement](../tests/camera-cci-clock.sh)
+
+| Fixed register request on the tablet | 19.2 MHz default | 37.5 MHz trial |
+| --- | --- | --- |
+| Lens ID at `0x0c`, main camera idle | Queue 0 NACK | Queue 0 NACK |
+| Same ID, main sensor runtime-powered | Queue 0 NACK | Queue 0 NACK |
+| EEPROM AF window at `0x58`, main sensor runtime-powered | Queue 0 NACK | Queue 0 NACK |
+
+In all six requests CCI returned `-ENXIO` from queue 0 and never submitted queue 1. During each sensor power hold the regulator framework reported one user each for LDO1 (1.1 V) and LDO4 (2.8 V). LDO5 remained disabled with zero users. All three outputs returned to their initial states. Matching the stock controller reference frequency alone did not restore either peripheral. [Timing data and controller rate changes proposed upstream](https://lore-kernel.gnuweeb.org/lkml/asN3BRj7RyB1_Iwu@zenone.zhora.eu/T/)
+
+### Installed dev12.10 slot-0 power comparison
+
+A second counted boot used the original 19.2 MHz CCI clock and the original split-queue driver. Only the main sensor gained a third WL2864C supply. The sensor driver takes this regulator through the same runtime-PM transition as its existing supplies. The regulator was already configured for 2.8 V. The PC built identical ARM64 kernel, DTB and kernel notes twice. The resulting kernel retained the installed configuration, release string and exported symbols. An ARM64 guest booted it through to userspace, and the tablet subsequently booted the same kernel. [Kernel builder](../scripts/build-camera-ldo5.sh) · [Counted entry](../tests/installed-trial/README.md)
+
+| Request on the physical tablet | LDO5 reported state during request | Response |
+| --- | --- | --- |
+| GT9768 ID, HI1339 suspended | Disabled, zero users | Queue 0 NACK |
+| GT9768 ID, HI1339 runtime-powered | Enabled, 2.8 V, one user | Register `0x00` returned `0xe9`; queues 0 and 1 both succeeded |
+| AF EEPROM, HI1339 runtime-powered | Enabled, 2.8 V, one user | All 11 bytes read, factory CRC valid, infinity and macro endpoints ordered and within the 10-bit range |
+
+After each powered request LDO1, LDO4 and LDO5 returned to zero users and disabled. The per-unit bytes stayed on the tablet. The experiment identifies a missing supply in the native main-camera power sequence. The physical connection from LDO5 to each component has not been traced. Motor motion, optical focus, flash and application control require separate evidence.
+
+Both trial entries were removed after returning to the permanent dev12.10 kernel. Its physical outer EFI partition again had the original 29 files. All hashes matched before and after each trial apart from the boot manager’s random seed. The graphical login, touchscreen, Bluetooth service and both Wi-Fi gateway checks passed on return. The board log manifest is `out/cci0-dev12.10-board/BOARD-SHA256SUMS`, SHA-256 `1ff5cec1ac476438b36c5652db73989e865f112d38bd87756d521315eafbf1ef`.
+
+### Earlier observations on the original installation
 
 Linux identified `cci@ac15000/i2c-bus@0` as `Qualcomm-CCI` adapter 0, configured for 400 kHz. HI1339 was bound at `0x20`. Before each test regulator sysfs reported BOB enabled at 3.032 V and camera I/O enabled at 1.800 V. These are regulator readings reported by the kernel. Voltage at the lens connector was not measured.
 
@@ -49,7 +77,7 @@ A separate read of the GT9768 ID register at `0x0c` used the same native SMBus b
 
 The live kernel notes matched the retained `vmlinux` notes. Its disassembly places the observed queue 0 return address `cci_xfer+0x344` after the normal write submission and `+0x220` after the read submission. This separates the write from the earlier queue-validation calls. The first failed phase includes the slave address and register prefix. The trace cannot distinguish which byte the device rejected. There is no corresponding queue attribution for the earlier powered lens or EEPROM reads. The test took no picture and left the original seat, backlight and service instances intact. Terminating a separate trace process before any I²C request also verified that the 30-second recovery timer removes the private instance and both kernel events. The physical receipts are in `out/camera-cci-clock/`. [Queue probe](../tests/camera-focus-probe.py) · [Kernel trace event fields](https://docs.kernel.org/trace/kprobetrace.html)
 
-The isolated clock candidate assigns **37,500,000 Hz** to `CAM_CC_CCI_0_CLK_SRC`. Both masters on this controller, including the front camera bus, use 400 kHz Fast mode. The native Fast timing table and the separate CCI1 domain stay at baseline. CN350 requests Fast-mode Plus for the actuator and 400 kHz for the EEPROM, so the clock-only candidate still uses a different actuator bus mode from Android. Two builds yielded an identical 121,165-byte DTB with SHA-256 `b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea`. A comparison of the complete sorted trees found only the CCI0 clock phandle and rate assignments. The normal ARM64 Kbuild target produced the same DTB. The candidate has yet to run on the tablet. [Board source change](../config/kernel/asphalt-cci0-clock.patch) · [Qualcomm rate and timing series](https://lore-kernel.gnuweeb.org/lkml/asN3BRj7RyB1_Iwu@zenone.zhora.eu/T/)
+The isolated clock candidate assigns **37,500,000 Hz** to `CAM_CC_CCI_0_CLK_SRC`. Both masters on this controller, including the front camera bus, use 400 kHz Fast mode. The native Fast timing table and the separate CCI1 domain stay at baseline. CN350 requests Fast-mode Plus for the actuator and 400 kHz for the EEPROM, so the clock-only candidate still uses a different actuator bus mode from Android. Two builds yielded an identical 121,165-byte DTB with SHA-256 `b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea`. A comparison of the complete sorted trees found only the CCI0 clock phandle and rate assignments. The normal ARM64 Kbuild target produced the same DTB. The dev12.10 clock comparison above verified the actual branch rate and the unchanged lens and EEPROM results. [Board source change](../config/kernel/asphalt-cci0-clock.patch) · [Qualcomm rate and timing series](https://lore-kernel.gnuweeb.org/lkml/asN3BRj7RyB1_Iwu@zenone.zhora.eu/T/)
 
 Apply the patch in a separately prepared Asphalt kernel tree and rebuild the board with its existing configuration.
 
@@ -58,23 +86,29 @@ git apply "$product/config/kernel/asphalt-cci0-clock.patch"
 make ARCH=arm64 LLVM=1 qcom/sm8475-lenovo-asphalt.dtb
 ```
 
-### What to measure next
+### Lens integration still to qualify
 
-1. On a physical boot with the clock-only candidate, measure the active CCI0 branch and source again. Check both CCI0 camera buses before interpreting a fixed lens ID read. The platform clock helper can log a rejected rate request during probe, so a compiled assignment alone cannot establish the actual frequency. [Linux platform clock setup](https://github.com/torvalds/linux/blob/master/drivers/clk/clk-conf.c)
-2. After the active clock comparison, compare one diagnostic runtime-power cycle with only the HI1339 LDO5 supply added through the regulator framework. Confirm it has one consumer while HI1339 is held and returns to its original state afterward. The isolated patch appends an opt-in `aux-supply` to the existing HI1339 power sequence. It enables LDO5 with reset asserted and before MCLK, then disables it after asserting reset and stopping MCLK. The existing failure path unwinds it if MCLK cannot start. The stock driver enables all three outputs in one register write. This candidate uses the native ordered sequence. The ARM64 sensor object and complete DTB compiled against the retained tree, and the new DT phandle resolves to the 2.8 V WL2864C LDO5 node. No boot or transfer used the candidate. [Diagnostic source patch](../tests/camera-focus-ldo5.patch)
-3. Where an authorized camera run includes a specific register read, add `--trace-queues` to collect its queue results without recording payloads. Compare the powered and idle cases separately. A working stock trace can further verify the module and slot selection. [CamX sensor index diagnostics](https://github.com/bjzhou/CamxChi/blob/9f17f1b568626b393e785b369c5dc94543774d7a/camx/src/core/camxhwenvironment.cpp#L644-L676)
+1. Describe the lens and its power dependencies in the media graph, preserving the observed HI1339 runtime-PM sequencing. Check that discovering/listing cameras keeps the actuator stationary.
+2. Qualify explicit V4L2 focus moves, settling and power-down within the bounds of the current unit’s calibration. The native supply sequence enables LDO5 with reset asserted before MCLK, and releases it after stopping MCLK on power-down. [Sensor power patch](../tests/camera-focus-ldo5.patch)
+3. Integrate a focus control with libcamera and the touch camera application, then measure its optical effect on the physical rear camera.
 
 ## Reproducing the bounded read
 
 Use the [board probe](../tests/camera-focus-probe.py) in a maintenance shell on the supported tablet. Running it without arguments checks the board, adapter, driver, free lens address and already-enabled supplies. The device node is selected from its firmware path.
 
+To reproduce the supply trial, start from the compiled kernel tree for the installed dev12.10 entry. The builder verifies its original image, config, device tree, symbol table and camera sources. It applies the sensor patch in a private build mount. The published output contains `kernel.efi` (`bfb74a14…`), `board.dtb` (`9546d73b…`) and `notes` (`b52f0aeb…`) with SHA-256 checksums. [Build the single-boot entry](../tests/installed-trial/README.md)
+
+```sh
+sudo bash scripts/build-camera-ldo5.sh "$prepared_dev12_10_kernel" "$new_output"
+```
+
 ```sh
 uv run --offline --no-project --python /usr/bin/python3 python -B tests/camera-focus-probe.py
 uv run --offline --no-project --python /usr/bin/python3 python -B tests/camera-focus-probe.py --read-id
-uv run --offline --no-project --python /usr/bin/python3 python -B tests/camera-focus-probe.py --power-main --read-id
+uv run --offline --no-project --python /usr/bin/python3 python -B tests/camera-focus-probe.py --power-main --report-rails --trace-queues --read-id
 ```
 
-For the EEPROM diagnostic, first run the following command on a host with its own CN350 TXD module. Supply the resulting static layout alongside the probe and `scripts/decode-camera-focus.py` in their repository locations on the tablet. Only the eleven-byte AF window is requested. Decoding stays in process memory. The success output reports CRC and endpoint-order checks. The physical test above returned before decoding.
+For the EEPROM diagnostic, first run the following command on a host with its own CN350 TXD module. Supply the resulting static layout alongside the probe and `scripts/decode-camera-focus.py` in their repository locations on the tablet. Only the eleven-byte AF window is requested. Decoding stays in process memory. The success output reports CRC and endpoint-order checks. The LDO5 trial decoded the block on the tablet.
 
 ```sh
 uv run --no-project --python 3.13 python scripts/decode-camera-focus.py --eeprom-layout "$module" >layout.json

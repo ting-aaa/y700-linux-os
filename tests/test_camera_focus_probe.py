@@ -11,6 +11,28 @@ from unittest.mock import Mock, patch
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "the probe uses Linux i2c-dev")
 class FocusProbeTests(unittest.TestCase):
+    def test_slot0_power_checks_auxiliary_reference_and_active_consumer(self):
+        p = self.probe
+        rails = {"ldo1": ("enabled", 1100000, 1), "ldo4": ("enabled", 2800000, 1),
+                 "ldo5": ("disabled", 2800000, 0)}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sensor, provider = root / "sensor", root / "regulators"
+            sensor.mkdir()
+            (provider / "ldo5").mkdir(parents=True)
+            with patch.object(p, "SENSOR_NODE", sensor), patch.object(p, "WL2864C_RAILS", provider):
+                p.check_slot_power(rails, True)
+                (provider / "ldo5/phandle").write_bytes(bytes.fromhex("000000e4"))
+                aux = sensor / "aux-supply"
+                aux.write_bytes(bytes.fromhex("000000e3"))
+                with self.assertRaisesRegex(RuntimeError, "Unexpected auxiliary supply"):
+                    p.check_slot_power(rails, True)
+                aux.write_bytes(bytes.fromhex("000000e4"))
+                with self.assertRaisesRegex(RuntimeError, "ldo5"):
+                    p.check_slot_power(rails, True)
+                rails["ldo5"] = ("enabled", 2800000, 1)
+                p.check_slot_power(rails, True)
+
     @classmethod
     def setUpClass(cls):
         path = Path(__file__).with_name("camera-focus-probe.py")
