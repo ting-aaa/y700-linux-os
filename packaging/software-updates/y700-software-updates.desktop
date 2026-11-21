@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Software Updates
+Name[zh_CN]=软件更新
+Comment=Check Debian repositories and choose updates
+Comment[zh_CN]=检查 Debian 软件源并选择要安装的更新
+Icon=system-software-update
+Exec=y700-software-updates
+Terminal=false
+Categories=GTK;Settings;SystemSetup;X-XFCE-SettingsDialog;X-XFCE-SystemSettings;
+OnlyShowIn=XFCE;

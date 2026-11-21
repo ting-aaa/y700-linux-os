@@ -1,0 +1,8 @@
+Package: y700-software-updates
+Version: 0.1.0
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@localhost>
+Depends: gnome-package-updater, packagekit, gir1.2-packagekitglib-1.0, gir1.2-gtk-3.0, python3-gi, python3
+Description: Touchscreen entry for Debian software updates on the Y700
+ Refresh the configured package indexes through PackageKit and choose updates
+ with Debian's GTK package updater in the Xfce desktop.

@@ -1,0 +1,97 @@
+{
+  "format": 1,
+  "scope": "authenticated historical package snapshot; freshness not asserted",
+  "keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  "metadata": [
+    {
+      "file": "deb.debian.org_debian-security_dists_trixie-security_InRelease",
+      "sha256": "3d31c58caa2397eda1af459a0db092bb3b8f5abb31c67e50e1dd491958c2ddb9",
+      "date": "Sat, 21 Nov 2026 00:53:03 UTC",
+      "valid_until": "Sat, 28 Nov 2026 00:53:03 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "5e9606766c69fb8b71d6b8e0673a55c29e1263f7550808ddeebe34256eba533f",
+          "size": 2268852
+        }
+      ]
+    },
+    {
+      "file": "deb.debian.org_debian_dists_trixie-updates_InRelease",
+      "sha256": "bc32a362f5b6403c72d0458e74e92b3af01f7723ee7a1a8a6a0cbcfbf3a06b54",
+      "date": "Sat, 21 Nov 2026 14:13:49 UTC",
+      "valid_until": "Sat, 28 Nov 2026 14:13:49 UTC",
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "7f1dd99bbd1a0416d39499892ec12ff38d80637029114d234c38972bba8ae041",
+          "size": 2351
+        }
+      ]
+    },
+    {
+      "file": "deb.debian.org_debian_dists_trixie_InRelease",
+      "sha256": "bfacad4ca61899ce20d4a0d439f29339f66541561b67506364efb88e27dee870",
+      "date": "Sat, 21 Nov 2026 09:15:44 UTC",
+      "valid_until": null,
+      "indexes": [
+        {
+          "path": "main/binary-arm64/Packages",
+          "sha256": "0acef0390edcc88ec243516960a8530d5938a1fe63ce9859653ff8b68b55ec0b",
+          "size": 56177790
+        }
+      ]
+    }
+  ],
+  "installed_count": 5,
+  "authenticated_count": 5,
+  "repository_signature_chain_revalidated": true,
+  "unmatched": [],
+  "packages": [
+    {
+      "package": "gir1.2-packagekitglib-1.0",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 27080,
+      "sha256": "378041bae6ed8ca97c3e7ba77465d02f977e24e1f61594e9f4691eb403b8eb00",
+      "uri": "https://deb.debian.org/debian/pool/main/p/packagekit/gir1.2-packagekitglib-1.0_1.3.1-1+deb13u1_arm64.deb",
+      "repository_path": "pool/main/p/packagekit/gir1.2-packagekitglib-1.0_1.3.1-1+deb13u1_arm64.deb"
+    },
+    {
+      "package": "gnome-package-updater",
+      "version": "43.0-4",
+      "architecture": "arm64",
+      "size": 60176,
+      "sha256": "22133c8d6557bde95c38dabf5d947b616ef398fa9d6f59181c12eac6a2cef345",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gnome-packagekit/gnome-package-updater_43.0-4_arm64.deb",
+      "repository_path": "pool/main/g/gnome-packagekit/gnome-package-updater_43.0-4_arm64.deb"
+    },
+    {
+      "package": "gnome-packagekit-common",
+      "version": "43.0-4",
+      "architecture": "all",
+      "size": 900544,
+      "sha256": "b7a8e1b5bfb032e24f8e83a005af9edafd2d108daa3f9894fde0c366f5dce6d0",
+      "uri": "https://deb.debian.org/debian/pool/main/g/gnome-packagekit/gnome-packagekit-common_43.0-4_all.deb",
+      "repository_path": "pool/main/g/gnome-packagekit/gnome-packagekit-common_43.0-4_all.deb"
+    },
+    {
+      "package": "libpackagekit-glib2-18",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 105152,
+      "sha256": "38edb33fc56cdfb8a1eb5db52eee0410514217d024f4073bb3906cd030c93b7f",
+      "uri": "https://deb.debian.org/debian/pool/main/p/packagekit/libpackagekit-glib2-18_1.3.1-1+deb13u1_arm64.deb",
+      "repository_path": "pool/main/p/packagekit/libpackagekit-glib2-18_1.3.1-1+deb13u1_arm64.deb"
+    },
+    {
+      "package": "packagekit",
+      "version": "1.3.1-1+deb13u1",
+      "architecture": "arm64",
+      "size": 628088,
+      "sha256": "91bbd203d2b713e634507b7a160595db5323a519fe338ccf61d80e3dd43934e2",
+      "uri": "https://deb.debian.org/debian/pool/main/p/packagekit/packagekit_1.3.1-1+deb13u1_arm64.deb",
+      "repository_path": "pool/main/p/packagekit/packagekit_1.3.1-1+deb13u1_arm64.deb"
+    }
+  ]
+}

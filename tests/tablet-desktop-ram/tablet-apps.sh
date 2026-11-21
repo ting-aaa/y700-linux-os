@@ -15,6 +15,12 @@ answer=$("${bus[@]}" --method org.freedesktop.DBus.GetConnectionUnixProcessID "$
 pid=${BASH_REMATCH[1]}
 tr '\0' '\n' <"/proc/$pid/cmdline" | grep -Fxq -- --tray
 [[ $(stat -c %u "/proc/$pid") == 1000 ]]
-echo 'DEV1213_QUICK_SETTINGS xdg_autostart=1 uid=1000 session_bus_owner=1 tray_process=1 scale=2'
+tag=DEV1213
+[[ ${1:-dev12.13} != dev12.15 ]] || tag=DEV1215
+echo "${tag}_QUICK_SETTINGS xdg_autostart=1 uid=1000 session_bus_owner=1 tray_process=1 scale=2"
 export UV_CACHE_DIR="$XDG_RUNTIME_DIR/uv" UV_PYTHON_DOWNLOADS=never
-uv run --offline --no-project --python /usr/bin/python3 python -B /qa/chooser.py
+if [[ ${1:-dev12.13} == dev12.15 ]]; then
+    uv run --offline --no-project --python /usr/bin/python3 python -B /qa/observe.py --expect-no-service
+else
+    uv run --offline --no-project --python /usr/bin/python3 python -B /qa/chooser.py
+fi

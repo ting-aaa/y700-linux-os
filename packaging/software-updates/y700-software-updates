@@ -1,0 +1,117 @@
+#!/usr/bin/python3
+"""Refresh Debian's signed indexes before opening its graphical update selector."""
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("PackageKitGlib", "1.0")
+from gi.repository import Gio, GLib, Gtk, PackageKitGlib as Pk
+
+
+def message(english, chinese):
+    return chinese if any(lang.startswith("zh") for lang in GLib.get_language_names()) else english
+
+
+class SoftwareUpdates(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.y700.SoftwareUpdates")
+        self.window = None
+        self.request = None
+        self.client = Pk.Client.new()
+        self.client.set_interactive(True)
+
+    def do_activate(self):
+        if self.window:
+            self.window.present()
+            return
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title(message("Software Updates", "软件更新"))
+        self.window.set_default_size(360, 160)
+        self.window.connect("destroy", self.closed)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, border_width=16)
+        self.window.add(box)
+        self.status = Gtk.Label(wrap=True, xalign=0, max_width_chars=45)
+        box.pack_start(self.status, True, True, 0)
+        self.progress = Gtk.ProgressBar()
+        box.pack_start(self.progress, False, False, 0)
+        buttons = Gtk.ButtonBox(orientation=Gtk.Orientation.HORIZONTAL)
+        buttons.set_layout(Gtk.ButtonBoxStyle.END)
+        buttons.set_spacing(8)
+        box.pack_end(buttons, False, False, 0)
+        self.again = Gtk.Button(label=message("Retry", "重试"))
+        self.again.set_size_request(96, 48)
+        self.again.connect("clicked", self.refresh)
+        buttons.add(self.again)
+        self.cached = Gtk.Button(label=message("View saved list", "查看已有列表"))
+        self.cached.set_size_request(116, 48)
+        self.cached.connect("clicked", self.show_updates)
+        buttons.add(self.cached)
+        close = Gtk.Button(label=message("Close", "关闭"))
+        close.set_size_request(96, 48)
+        close.connect("clicked", lambda _: self.window.close())
+        buttons.add(close)
+        self.window.show_all()
+        self.refresh()
+
+    def refresh(self, *_):
+        if self.request:
+            return
+        self.again.hide()
+        self.cached.hide()
+        self.status.set_selectable(False)
+        self.progress.set_fraction(0)
+        self.progress.show()
+        self.status.set_text(message("Checking Debian for updates…", "正在检查 Debian 更新…"))
+        self.request = Gio.Cancellable()
+        self.client.refresh_cache_async(True, self.request, self.changed, (), self.finished, None)
+
+    def changed(self, progress, kind, *_):
+        if self.window and kind == Pk.ProgressType.PERCENTAGE:
+            value = progress.get_percentage()
+            if 0 <= value <= 100:
+                self.progress.set_fraction(value / 100)
+            else:
+                self.progress.pulse()
+
+    def finished(self, client, result, *_):
+        self.request = None
+        if not self.window:
+            return
+        try:
+            response = client.generic_finish(result)
+            error = response.get_error_code()
+            if error or response.get_exit_code() != Pk.ExitEnum.SUCCESS:
+                self.failed(error.get_details() if error else "")
+                return
+        except GLib.Error as error:
+            self.failed(error.message)
+            return
+        self.show_updates()
+
+    def show_updates(self, *_):
+        try:
+            Gio.Subprocess.new(["/usr/bin/gpk-update-viewer"], Gio.SubprocessFlags.NONE)
+        except GLib.Error as error:
+            self.failed(error.message)
+            return
+        self.window.close()
+
+    def failed(self, detail):
+        self.progress.hide()
+        summary = message("Could not check for updates.", "检查更新失败。")
+        self.status.set_text(summary + ("\n" + detail.strip()[:320] if detail else ""))
+        self.status.set_selectable(True)
+        self.again.show()
+        lists = Path("/var/lib/apt/lists")
+        if any(lists.glob("*_Packages*")):
+            self.cached.show()
+
+    def closed(self, *_):
+        self.window = None
+        if self.request:
+            self.request.cancel()
+
+
+if __name__ == "__main__":
+    raise SystemExit(SoftwareUpdates().run())
