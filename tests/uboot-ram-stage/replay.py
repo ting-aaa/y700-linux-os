@@ -3,6 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import re
+import runpy
 import subprocess
 import sys
 import uuid
@@ -242,6 +243,76 @@ def efi_handoff(debian):
                 rejects(lambda: stage.acquire_from_efi(port))
         checked(port.getvalue() == expected)
 
+    # Model Windows exposing the ACM handle before firmware accepts writes.
+    # Once Q might have reached the loader, a second request could target
+    # its caller. No such operation may be replayed on another handle.
+    from types import SimpleNamespace
+    try:
+        from serial import SerialTimeoutException as WriteTimeout
+    except ImportError:
+        WriteTimeout = TimeoutError
+
+    def transport(fail_at, *, change_device=False, attempts=3):
+        handles = []
+        sent = []
+        displays = []
+        seen = 0
+
+        class Port:
+            def __init__(self, *args, **kwargs):
+                self.closed = False
+                handles.append(self)
+
+            def write(self, data):
+                sent.append(data)
+                if data == fail_at and len(handles) <= attempts:
+                    raise WriteTimeout("simulated disconnect")
+                return len(data)
+
+            def close(self):
+                self.closed = True
+
+        def list_devices():
+            nonlocal seen
+            seen += 1
+            return [SimpleNamespace(device="fixture", location="other" if change_device and seen > 1 else "fixture",
+                                    serial_number=None, vid=0x18d1, pid=0x4ee0)]
+
+        api = SimpleNamespace(Serial=Port, SerialException=OSError)
+        enumeration = SimpleNamespace(list_ports=SimpleNamespace(comports=list_devices))
+        for _ in range(attempts if fail_at == b"v" else 0):
+            displays.append(b"")
+        displays.extend([b"", version, pause, menu])
+        with (patch.dict(sys.modules, {"serial": api, "serial.tools": enumeration}),
+              patch.object(stage, "read_display", side_effect=displays),
+              patch.object(stage.time, "sleep"), patch.object(stage, "prompt")):
+            try:
+                stage.connect(30, True).close()
+                success = True
+            except stage.Refused:
+                success = False
+        checked(all(h.closed for h in handles))
+        return success, b"".join(sent), len(handles)
+
+    checked(transport(b"v", attempts=1) == (True, b"vvQ\x03\x1b\x03", 2))
+    checked(transport(b"v") == (False, b"vvv", 3))
+    checked(transport(b"v", change_device=True, attempts=1) == (False, b"v", 1))
+    checked(transport(b"Q") == (False, b"vQ", 1))
+    checked(transport(b"\x03") == (False, b"vQ\x03", 1))
+
+
+def foreign_carrier():
+    sender = runpy.run_path(str(Path(__file__).resolve().parents[1] / "ram-trial/send-carrier.py"))
+    for local, peer in (tuple(sender["CARRIERS"]), tuple(reversed(sender["CARRIERS"]))):
+        sent = []
+        reply = f"Y700_RAM_INFO {sender['CARRIERS'][peer]} {peer}".encode()
+        try:
+            sender["exchange"](sent.append, lambda: reply, io.BytesIO(), local)
+        except RuntimeError:
+            checked(sent == [b"INFO\n"] * 15)
+        else:
+            raise AssertionError("Wrong release accepted")
+
 
 if __name__ == "__main__":
     debian, new, pin = sys.argv[1:]
@@ -253,4 +324,5 @@ if __name__ == "__main__":
     esp(blobs, addrs)
     bulk(addrs)
     efi_handoff(Path(debian))
+    foreign_carrier()
     stage.receipt(host_assertions=passed, historical_crcs=3, hardware_commands=0)

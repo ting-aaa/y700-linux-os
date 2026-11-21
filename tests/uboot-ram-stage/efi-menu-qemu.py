@@ -11,7 +11,7 @@ Console = helpers["helpers"]["Console"]
 LOADER = "76a5bba20322d4929f35c608199f21f80317ae006805315ca215382cdef4c75b"
 
 
-def synthetic_disk(directory, loader):
+def synthetic_disk(directory, loader, default_app):
     fat, disk = directory / "boot.fat", directory / "disk.img"
     for path, mib in ((fat, 64), (disk, 70)):
         with path.open("xb") as stream:
@@ -21,9 +21,10 @@ def synthetic_disk(directory, loader):
     run("mkfs.vfat", "-F", "32", fat)
     for subdir in ("/EFI", "/EFI/BOOT", "/loader", "/loader/entries"):
         run("mmd", "-i", fat, "::" + subdir)
-    for target in ("/EFI/BOOT/BOOTAA64.EFI", "/EFI/test.efi"):
-        run("mcopy", "-i", fat, loader, "::" + target)
-    for name, content in (("loader/loader.conf", "timeout menu-force\nauto-firmware no\nauto-entries no\n"),
+    run("mcopy", "-i", fat, loader, "::/EFI/BOOT/BOOTAA64.EFI")
+    run("mcopy", "-i", fat, default_app or loader, "::/EFI/test.efi")
+    timeout = "menu-hidden" if default_app else "menu-force"
+    for name, content in (("loader/loader.conf", f"timeout {timeout}\nauto-firmware no\nauto-entries no\n"),
                           ("loader/entries/test.conf", "title Y700 QA entry\nefi /EFI/test.efi\n")):
         src = directory / Path(name).name
         src.write_text(content)
@@ -39,11 +40,12 @@ def main():
     parser.add_argument("loader", type=Path, help="dev12.11 EFI/BOOT/BOOTAA64.EFI")
     parser.add_argument("--qemu", default="qemu-system-aarch64")
     parser.add_argument("--data", type=Path)
+    parser.add_argument("--default-app", type=Path, help="U-Boot helloworld.efi to verify a consumed one-shot timeout")
     args = parser.parse_args()
     digest = helpers["helpers"]["digest"]
     stage.need(digest(args.loader) == LOADER, "Expected the released ARM64 EFI loader")
     with tempfile.TemporaryDirectory(prefix="y700-efi-menu-") as tmp:
-        disk = synthetic_disk(Path(tmp), args.loader)
+        disk = synthetic_disk(Path(tmp), args.loader, args.default_app)
         original = digest(disk)
         cmd = [args.qemu, "-nodefaults", "-no-user-config", "-machine", "virt,gic-version=3",
                "-cpu", "cortex-a72", "-m", "512", "-serial", "stdio", "-display", "none",
@@ -63,6 +65,14 @@ def main():
                 for i, title in enumerate(("Boot NixOS", "Enable USB serial console", "Drop to shell", "Reset device")):
                     stage.command(port, f"setenv bootmenu_{i} '{title}=setenv y700_selection unexpected'")
                 stage.command(port, "setenv y700_selection untouched")
+                variable = "-guid 4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+                name = "LoaderConfigTimeoutOneShot"
+                if args.default_app:
+                    # Seed at firmware boot services time, independently of the
+                    # tablet's ability to set nonvolatile variables from Linux.
+                    stage.command(port, f"env set -e {variable} -nv -bs -rt {name} =H360030000000")
+                    before = stage.command(port, f"env print -e {variable} {name}")
+                    stage.need(f"\n{name}:\n" in before, "Failed to seed finite one-shot timeout")
                 loaded = stage.command(port, "fatload scsi 0:1 ${kernel_addr_r} /EFI/BOOT/BOOTAA64.EFI")
                 stage.need("bytes read" in loaded, "Virtual FAT load failed")
                 port.write(b"bootefi ${kernel_addr_r}; pause; bootmenu -1\r")
@@ -70,12 +80,20 @@ def main():
                 stage.acquire_from_efi(port)
                 value = stage.command(port, "printenv y700_selection")
                 stage.need("y700_selection=untouched\n" in value, "Maintenance menu item ran unexpectedly")
+                if args.default_app:
+                    after = stage.command(port, f"env print -e {variable} {name}")
+                    stage.need(f"\n{name}:\n" not in after and "not defined" in after,
+                               "One-shot timeout was not consumed")
+                    stage.command(port, "fatload scsi 0:1 ${kernel_addr_r} /EFI/BOOT/BOOTAA64.EFI")
+                    port.write(b"bootefi ${kernel_addr_r}\r")
+                    helpers["wait_for_text"](port, b"Hello, world!")
             finally:
                 proc.terminate()
                 proc.wait(timeout=10)
         stage.need(original == digest(disk), "Virtual disk backing changed")
     print(f"UBOOT_EFI_MENU firmware_sha256={digest(args.uboot)} loader_sha256={LOADER} "
-          "exit_acknowledged=1 menu_selected=0 disk_unchanged=1 hardware_commands=0")
+          f"exit_acknowledged=1 menu_selected=0 disk_unchanged=1 hardware_commands=0 "
+          f"oneshot_consumed_default_booted={int(bool(args.default_app))}")
 
 
 if __name__ == "__main__":

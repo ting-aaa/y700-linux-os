@@ -2,11 +2,11 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyserial==3.5"]
 # ///
-"""Verify and load the dev12.12 storage-disabled early USB receiver into RAM."""
+"""Verify and load a sealed Y700 storage-disabled early USB receiver into RAM."""
 
 import argparse
 import binascii
-from contextlib import closing
+from contextlib import closing, contextmanager
 import hashlib
 from pathlib import Path
 import re
@@ -40,6 +40,21 @@ SHELL_PROMPT = re.compile(rb"(?:^|[\r\n])=> $")
 
 class Refused(Exception):
     pass
+
+
+class MenuNotReady(Refused):
+    """The USB interface has not answered a read-only identity query yet."""
+
+
+@contextmanager
+def menu_io(phase, *, probing=False):
+    try:
+        yield
+    except Refused as exc:
+        raise Refused(f"ACM phase={phase}: {exc}") from exc
+    except OSError as exc:
+        error = MenuNotReady if probing else Refused
+        raise error(f"ACM phase={phase} transport={type(exc).__name__}") from exc
 
 
 def need(ok, reason):
@@ -198,35 +213,45 @@ def board_menu(rows):
 
 
 def acquire_from_efi(port):
-    initial = read_display(port, 1.5)
+    with menu_io("listen", probing=True):
+        initial = read_display(port, .8)
     rows = display_rows(initial)
     if SHELL_PROMPT.search(initial):
-        write(port, b"\x03")
-        prompt(port)
+        with menu_io("shell-sync"):
+            write(port, b"\x03")
+            prompt(port)
         return
     if board_menu(rows):
-        cancel_menu(port)
+        with menu_io("cancel-board-menu"):
+            cancel_menu(port)
         return
     need(RETURN_WAIT not in rows, "Unverified continuation prompt already active")
     need(BOARD_MENU[0] not in rows, "Unrecognized or incomplete U-Boot maintenance menu")
 
     # 'v' displays the EFI version. In an already-running shell it merely
     # echoes the typed character. Never submit that character as a command.
-    write(port, b"v")
-    fresh = read_display(port)
+    with menu_io("version-query", probing=True):
+        write(port, b"v")
+        fresh = read_display(port)
+    if not fresh:
+        raise MenuNotReady("ACM phase=version-query no response")
     if fresh == b"v":
-        write(port, b"\x03")
-        prompt(port)
+        with menu_io("shell-sync"):
+            write(port, b"\x03")
+            prompt(port)
         return
     # The EFI text console can draw a horizontal border below the status line.
     fields = [row for row in display_rows(fresh) if row.replace("─".encode(), b"")]
-    need(fields == [EFI_ID], "Expected the verified systemd-boot and U-Boot version display")
-    write(port, b"Q")
-    rows = display_rows(read_display(port, 8))
-    need(rows == [RETURN_WAIT], "EFI did not return to the expected continuation prompt")
-    write(port, b"\x03")
-    need(board_menu(display_rows(read_display(port, 8))), "Expected the PRC U-Boot maintenance menu")
-    cancel_menu(port)
+    need(fields == [EFI_ID], "ACM phase=version-query unexpected systemd-boot or U-Boot identity")
+    with menu_io("efi-exit"):
+        write(port, b"Q")
+        rows = display_rows(read_display(port, 8))
+        need(rows == [RETURN_WAIT], "Missing the expected continuation prompt")
+    with menu_io("return-to-board-menu"):
+        write(port, b"\x03")
+        need(board_menu(display_rows(read_display(port, 8))), "Unexpected maintenance menu")
+    with menu_io("cancel-board-menu"):
+        cancel_menu(port)
     receipt(efi_menu_exit=1)
 
 
@@ -234,26 +259,41 @@ def connect(wait, exit_efi_menu=False):
     import serial
     from serial.tools import list_ports
     end = time.monotonic() + wait
+    probes = 0
+    identity = None
     while time.monotonic() < end:
         ports = [item for item in list_ports.comports() if (item.vid, item.pid) == (0x18d1, 0x4ee0)]
         need(len(ports) <= 1, "Ambiguous U-Boot ACM interface")
         if ports:
+            device = ports[0]
+            marker = (device.location, device.serial_number)
+            if not any(marker):
+                marker = device.device
+            need(identity in (None, marker), "ACM device changed during acquisition")
+            identity = marker
             try:
-                port = serial.Serial(ports[0].device, 115200, timeout=.15, write_timeout=5)
+                port = serial.Serial(device.device, 115200, timeout=.15, write_timeout=1 if exit_efi_menu else 5)
             except serial.SerialException:
                 time.sleep(.4)
                 continue
             try:
                 if exit_efi_menu:
+                    probes += 1
                     acquire_from_efi(port)
+                    port.write_timeout = 5
                 else:
                     cancel_menu(port)
                 return port
+            except MenuNotReady as error:
+                port.close()
+                print(f"acm_probe={probes} {error}", flush=True)
+                if probes >= 3 or time.monotonic() >= end:
+                    raise
             except BaseException:
                 port.close()
                 raise
         time.sleep(.4)
-    raise Refused("No enabled U-Boot ACM port")
+    raise Refused("ACM phase=connect acquisition window expired")
 
 
 def inspect(port):
@@ -476,6 +516,8 @@ def main():
                      help="Also reuse the first 11 MiB of the installed dev12.11 initrd after checking its RAM CRC")
     cli.add_argument("--exit-efi-menu", action="store_true",
                      help="Allow exiting the verified dev12.11 systemd-boot menu back to its U-Boot shell")
+    cli.add_argument("--wait-seconds", type=int, default=30, metavar="SECONDS",
+                     help="Wait 5 to 180 seconds for the initial U-Boot ACM interface (default 30)")
     args = cli.parse_args()
     if args.esp_initrd_prefix and args.esp_kernel is None:
         cli.error("--esp-initrd-prefix requires --esp-kernel PARTUUID")
@@ -483,12 +525,15 @@ def main():
         cli.error("--esp-kernel applies to YMODEM stage or boot")
     if args.exit_efi_menu and args.action == "check":
         cli.error("--exit-efi-menu applies to board actions")
+    if not 5 <= args.wait_seconds <= 180:
+        cli.error("--wait-seconds must be between 5 and 180")
     blobs, cmdline = inputs(args.directory, args.manifest_sha256)
     receipt(host_verified=5, first_stage_files=3, first_stage_bytes=sum(map(len, blobs.values())))
     if args.action == "check":
         return
     executable = None if args.fastboot is None else str(args.fastboot.resolve(strict=True))
-    with closing(connect(30, args.exit_efi_menu)) as serial_port:
+    receipt(acm_wait_s=args.wait_seconds)
+    with closing(connect(args.wait_seconds, args.exit_efi_menu)) as serial_port:
         address = inspect(serial_port)
         receipt(verified_boards=1, verified_ram_slots=3)
         if args.action == "inspect":

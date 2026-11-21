@@ -67,10 +67,26 @@ uv run --offline --no-project --python 3.13 python -B tests/uboot-ram-stage/repl
 
 回放直接读取 `physical-20261117-ram-recovery/{uboot-console,linux-handoff-console}.log` 和当时三件镜像，重新计算原机三项 CRC；另外读取 `physical-20261116-uboot-prc` 的版本记录及 PRC 控制树。合成负例覆盖错板、预约项缺失、受保护范围、地址冲突、截短数据、错误目标 DT 状态及错误命令行。模拟 YMODEM 检查重发、尾包及取消；模拟 fastboot 检查同一临时标识、合包字节、复制定位和失败退出。测试结束报告 `hardware_commands=0`。历史原始日志留在本地。
 
-Linux 主机还可运行独立的 AArch64 QEMU U-Boot FAT 检查。它使用临时合成 GPT、FAT32、随机分区 UUID 和实际 39,410,176 字节内核，通过相同的生产代码执行分区查询、加载与 RAM 校验。已实测正确身份命中、错身份拒绝和原 GPT 镜像 SHA 前后一致。此项测试的 U-Boot 为 QEMU virt 版（SHA-256 `ccfe8c4136a02adccdc68b2e7567fa4a06cc8874213064f62f20463803706c4f`）。物理机的 U-Boot 从日常分区加载这一特定文件仍待试启动验证。
+Linux 主机还可运行独立的 AArch64 QEMU U-Boot FAT 检查。它使用临时合成 GPT、FAT32、随机分区 UUID 和实际 39,410,176 字节内核，通过相同的生产代码执行分区查询、加载与 RAM 校验。已实测正确身份命中、错身份拒绝和原 GPT 镜像 SHA 前后一致。此项测试的 U-Boot 为 QEMU virt 版（SHA-256 `ccfe8c4136a02adccdc68b2e7567fa4a06cc8874213064f62f20463803706c4f`）。随后 dev12.12 实机启动记录也取得 `esp_kernel_hit=1`、三个 RAM CRC 及两个禁用的存储控制器回执，见 `out/camera-optical-qa/physical-menu-ram-boot2.log`。
 
 ```sh
 uv run --offline --no-project --python /usr/bin/python3 python -B tests/uboot-ram-stage/esp-qemu.py "$Bundle/kernel.efi" "$QemuUBoot"
 ```
 
 另一次 ARM64 QEMU 实验使用 dev12.11 发行 FAT 的原始 `EFI/BOOT/BOOTAA64.EFI` 和启用 `CONFIG_CMD_BOOTMENU`、`CONFIG_CMD_PAUSE` 的 U-Boot 2026.10。已有 shell 和正式 EFI 菜单分别通过了新的接管路径，测试期间没有选中维护菜单项，虚拟磁盘校验前后一致。版本不符、旧版本回显、缺少继续提示、返回其他菜单等负例均在对应阶段停止。[EFI 菜单测试](efi-menu-qemu.py) · [历史串口及负例回放](replay.py)
+
+## dev12.13 正常重启时接管串口
+
+Windows 必须先完成五个输入的校验。把接收器放在本机可读目录，用此前从该机实际读回的 `linux-boot` 分区 PARTUUID 设置 `$PartUuid`，在 PowerShell 运行以下命令。主机显示 `acm_wait_s=120` 后，才在平板日用系统发起一次获准的普通重启。Linux 日用维护端口为 `18d1:4e11`，引导端口为 `18d1:4ee0`。
+
+```powershell
+$Bundle = '\\wsl.localhost\Ubuntu\var\tmp\y700-dev12.13-usb-receiver'
+$Pin = 'c7e5c6a5cfc795c25bd54940b8f4f1fea0e457cafb02f6e17ca3dc6914fc608f'
+uv run --offline --python 3.13 scripts/uboot-ram-stage.py boot $Bundle $Pin --wait-seconds 120 --exit-efi-menu --esp-kernel $PartUuid --esp-initrd-prefix
+```
+
+等待窗口可取 5 至 180 秒，默认 30 秒。引导端口刚枚举、读取或发送版本查询 `v` 超时时，工具最多打开并探测三次。重新枚举必须匹配先前的接口身份。工具只接受新鲜的精确版本回显，随后只发一次大写 `Q`。U-Boot 显示预期的继续提示并返回已知菜单后才进入 shell。遇到其他菜单、多个端口、更换设备或后续写入超时，工具关闭端口并报告阶段。收到 `boot_requests=1` 后，运行 `uv run --offline --python 3.13 tests/ram-trial/send-carrier.py "$Bundle\carrier.squashfs"`，等接收端报告完整 SHA，再按 [RAM 对焦协议](../ram-af-acm/README.md) 查询 READY、检查配置和发起获准的单轮测量。
+
+systemd-boot 262 支持一次性有限菜单超时。Linux 通过 `systemctl reboot --boot-loader-menu=60s` 请求时，需要固件在退出 EFI Boot Services 后仍支持 SetVariable。封存的 Asphalt U-Boot 镜像 `f6c60193…` 从偏移 4096 起的 1,432,232 字节与构建树的 `u-boot-nodtb.bin` 完整匹配，SHA-256 为 `29a15b930e1f2e7ae2c7a04c330001d321bfefed11df79ee15b510fe4d9af079`。相应配置启用 `EFI_VARIABLE_FILE_STORE` 并关闭 `EFI_RT_VOLATILE_STORE`，因此这台板应使用原菜单超时，或在有人协助时于启动阶段按住音量减进入 U-Boot 的驻留菜单。[一次性变量](https://systemd.io/BOOT_LOADER_INTERFACE/) · [systemd-boot 262 实现](https://github.com/systemd/systemd/blob/v262/src/boot/boot.c) · [U-Boot 运行时变量条件](https://github.com/u-boot/u-boot/blob/v2026.10/lib/efi_loader/Kconfig)
+
+若完全错过 EFI 菜单且没有按键被接受，原超时会启动日用默认项。EFI 已接受按键时可能停留在菜单，退出 EFI 后也可能停留在固件提示。此时以板上实际显示决定如何回到已知日用默认项。工具没有给这两种停留状态发送盲回车或自动重启。虚拟机可加 `--default-app /path/to/helloworld.efi`，测试在固件阶段设定 60 秒的单次超时，确认发布的加载器消费该变量，第二次执行加载器时自动进入原默认应用。物理 dev12.13 在此前一次普通重启窗口只回传主机校验和串口超时，尚待重测。

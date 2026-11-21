@@ -20,16 +20,20 @@ elif [[ ${1:-} == --dev12.9 ]]; then
 elif [[ ${1:-} == --dev12.10 ]]; then
     root_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
     shift
-elif [[ ${1:-} == --dev12.12 ]]; then
+elif [[ ${1:-} == --dev12.12 || ${1:-} == --dev12.13 ]]; then
     root_sha=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
     fat_sha=1f6d75c17b5f38ff69d57e13c671bd0c1cbccf0c74cf1ea3f79e2011445ed091
+    if [[ $1 == --dev12.13 ]]; then
+        root_sha=6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c
+        fat_sha=cdd0e35bf0d0cd859f521bf74fafa594388ea3093c33ea81c189da56cb3dea0d
+    fi
     kernel_sha=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
     dt_sha=53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7
     storage_guard=1
     shift
 fi
 if [[ $# != 2 ]]; then
-    echo "Usage: build-ram-trial.sh [--dev12.6|--dev12.8|--dev12.9|--dev12.10|--dev12.12] IMAGES NEW_DIRECTORY" >&2
+    echo "Usage: build-ram-trial.sh [--dev12.6|--dev12.8|--dev12.9|--dev12.10|--dev12.12|--dev12.13] IMAGES NEW_DIRECTORY" >&2
     exit 2
 fi
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)

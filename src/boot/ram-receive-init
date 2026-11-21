@@ -11,8 +11,8 @@ cmdline=" $(cat /proc/cmdline) "
 case "$cmdline" in *' y700.media=ram '*) ;; *) fail 'RAM boot parameter missing';; esac
 case "$cmdline" in *' root='*|*' resume='*) fail 'unexpected disk parameter';; esac
 check_storage
-bytes=1351581696
-digest=ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a
+bytes=@CARRIER_BYTES@
+digest=@CARRIER_SHA256@
 available=$(awk '$1=="MemAvailable:" {print $2}' /proc/meminfo)
 [ "$available" -gt 4194304 ] || fail 'too little available RAM'
 target=/y700-root.squashfs

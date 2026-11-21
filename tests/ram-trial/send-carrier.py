@@ -2,28 +2,32 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyserial==3.5"]
 # ///
-"""Send the exact dev12.12 sealed RAM carrier to the waiting USB or QEMU receiver."""
+"""Send a verified Y700 RAM carrier to a matching USB or QEMU receiver."""
 import argparse
 import hashlib
+import os
 import socket
 import time
 from contextlib import ExitStack
 from pathlib import Path
 
 
-SIZE = 1_351_581_696
-DIGEST = "ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a"
+CARRIERS = {
+    "ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a": 1_351_581_696,
+    "1e8d32f9db603ff91c13b4666e78ce2d8af3355cf7e8fa2426339b4e13743ef2": 1_353_732_096,
+}
 
 
-def exchange(send, readline, payload):
-    ready = f"Y700_RAM_INFO {SIZE} {DIGEST}".encode()
+def exchange(send, readline, payload, digest):
+    size = CARRIERS[digest]
+    ready = f"Y700_RAM_INFO {size} {digest}".encode()
     for _ in range(15):
         send(b"INFO\n")
         if readline().strip() == ready:
             break
     else:
         raise RuntimeError("Receiver did not identify the expected carrier")
-    send(f"BEGIN {DIGEST}\n".encode())
+    send(f"BEGIN {digest}\n".encode())
     for _ in range(16):
         line = readline().strip()
         if line == b"Y700_RAM_SEND":
@@ -37,7 +41,7 @@ def exchange(send, readline, payload):
     if readline().strip() != b"Y700_RAM_VERIFIED":
         raise RuntimeError("Missing receiver SHA-256 confirmation")
     send(b"CONTINUE\n")
-    print(f"RAM_CARRIER bytes={SIZE} sha256={DIGEST} receiver_verified=1", flush=True)
+    print(f"RAM_CARRIER bytes={size} sha256={digest} receiver_verified=1", flush=True)
 
 
 def main():
@@ -49,7 +53,11 @@ def main():
     args = parser.parse_args()
     with ExitStack() as stack:
         payload = stack.enter_context(args.carrier.open("rb"))
-        if args.carrier.stat().st_size != SIZE or hashlib.file_digest(payload, "sha256").hexdigest() != DIGEST:
+        size = os.fstat(payload.fileno()).st_size
+        if size not in CARRIERS.values():
+            raise RuntimeError("Unexpected carrier size")
+        digest = hashlib.file_digest(payload, "sha256").hexdigest()
+        if CARRIERS.get(digest) != size:
             raise RuntimeError("Local carrier identity mismatch")
         payload.seek(0)
         if args.qemu_socket:
@@ -57,7 +65,7 @@ def main():
             sock.settimeout(90)
             sock.connect(str(args.qemu_socket))
             stream = stack.enter_context(sock.makefile("rb"))
-            exchange(sock.sendall, lambda: stream.readline(180), payload)
+            exchange(sock.sendall, lambda: stream.readline(180), payload, digest)
             return
         import serial
         from serial.tools import list_ports
@@ -76,7 +84,7 @@ def main():
                 raise RuntimeError("Short USB serial write")
             if len(data) > 1000:
                 port.timeout = 90
-        exchange(write, lambda: port.read_until(size=180), payload)
+        exchange(write, lambda: port.read_until(size=180), payload, digest)
 
 
 if __name__ == "__main__":

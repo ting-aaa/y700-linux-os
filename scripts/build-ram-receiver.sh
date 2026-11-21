@@ -15,8 +15,22 @@ trap 'rm -r -- "$work"' EXIT
 out=$work/bundle
 extra=$work/newc
 mkdir -p "$out" "$extra/ram-receive/modules"
-( cd "$full"; echo '2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453  SHA256SUMS' | sha256sum --quiet -c -; sha256sum --strict --quiet -c SHA256SUMS )
-( cd "$images"; printf '%s  %s\n' 5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3 root.ext4 1f6d75c17b5f38ff69d57e13c671bd0c1cbccf0c74cf1ea3f79e2011445ed091 linux-boot.fat | sha256sum --quiet -c - )
+manifest=$(sha256sum "$full/SHA256SUMS")
+case ${manifest%% *} in
+    2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453)
+        root_sha=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
+        esp_sha=1f6d75c17b5f38ff69d57e13c671bd0c1cbccf0c74cf1ea3f79e2011445ed091
+        carrier_bytes=1351581696
+        carrier_sha=ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a ;;
+    bbf042bf2683b248d162e97f76edde1152ce3b741b48fb0826e8a88f70490182)
+        root_sha=6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c
+        esp_sha=cdd0e35bf0d0cd859f521bf74fafa594388ea3093c33ea81c189da56cb3dea0d
+        carrier_bytes=1353732096
+        carrier_sha=1e8d32f9db603ff91c13b4666e78ce2d8af3355cf7e8fa2426339b4e13743ef2 ;;
+    *) echo 'Unrecognized diskless image manifest' >&2; exit 1 ;;
+esac
+( cd "$full"; sha256sum --strict --quiet -c SHA256SUMS )
+( cd "$images"; printf '%s  %s\n' "$root_sha" root.ext4 "$esp_sha" linux-boot.fat | sha256sum --quiet -c - )
 mcopy -i "$images/linux-boot.fat" ::/EFI/debian/initrd "$out/initrd"
 echo "6d3832e03eaea523a55c6bf12f90e1cf1146a34df1a264bdeefec9c8398d00ce  $out/initrd" | sha256sum --quiet -c -
 size=$(stat -c %s "$out/initrd")
@@ -24,8 +38,11 @@ offset=$(( (size + 3) / 4 * 4 ))
 cmp -n "$size" "$out/initrd" "$full/initrd"
 tail -c "+$((offset+1))" "$full/initrd" | (cd "$extra" && cpio --quiet -id y700-ram-trial-init y700-root.squashfs)
 mv -- "$extra/y700-root.squashfs" "$out/carrier.squashfs"
-echo "ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a  $out/carrier.squashfs" | sha256sum --quiet -c -
-install -m755 "$repo/src/boot/ram-receive-init" "$extra/y700-ram-receive-init"
+[[ $(stat -c %s "$out/carrier.squashfs") == "$carrier_bytes" ]]
+printf '%s  %s\n' "$carrier_sha" "$out/carrier.squashfs" | sha256sum --strict --quiet -c -
+sed -e "s/@CARRIER_BYTES@/$carrier_bytes/" -e "s/@CARRIER_SHA256@/$carrier_sha/" \
+    "$repo/src/boot/ram-receive-init" > "$extra/y700-ram-receive-init"
+chmod 755 "$extra/y700-ram-receive-init"
 install -m755 "$repo/src/boot/ram-receive-transfer" "$extra/ram-receive/transfer"
 install -m644 "$repo/src/boot/ram-trial-storage-check" "$extra/ram-receive/storage-check"
 modules=/usr/lib/modules/7.3.4-asphalt-prc

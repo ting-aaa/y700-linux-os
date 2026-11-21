@@ -27,3 +27,9 @@
 在运行日常 dev12.11 内核的平板上，通过 USB 把发行包的压缩根传入 RAM，用时 55 秒。平板校验了 6 GiB 原始根和 1,241 项包记录，在独立的 2560 × 1600、200% 缩放 Xfce 会话中启动了屏幕键盘和顶栏快捷设置。中英文相机菜单在隔离的虚拟三镜头后端均默认选中主摄。测试结束后，日用席位、网络、存储及摄像头电源状态均已复核。[实机 RAM 测试](../tests/tablet-desktop-ram/README.md)
 
 内置日用系统上的后置主摄预览由机主另行复看，确认原先上下左右倒置的问题已修复。三镜头、四种屏幕方向的 JPEG 像素方向另有合成标靶测试。后置主摄实景自动合焦、真实蓝牙键鼠绑定与输入，以及 dev12.13 开机进入物理显示屏，仍待独立验证。[相机方向](CAMERA-ORIENTATION.md) · [后摄对焦](CAMERA-FOCUS-PROBE.md) · [蓝牙无线链路](BLUETOOTH-HID-RADIO.md)
+
+## 从 USB 启动独立 RAM 诊断
+
+dev12.13 可以从封存 EFI 和根镜像构建禁用 UFS、SD 的 RAM 启动包，再拆出小 initrd 与独立的 SquashFS 载荷。对焦附件检查系统版本和包清单，保留单轮授权、只传聚合测量值和正常重启的期限。版本专用附件 SHA-256 为 `b95ffa6ee14db058903c38a7c1bf892883dff150bb1dbed7e4638136f0db21d2`。五文件清单 SHA-256 为 `c7e5c6a5cfc795c25bd54940b8f4f1fea0e457cafb02f6e17ca3dc6914fc608f`。[RAM 构建器](../scripts/build-ram-trial.sh) · [接收器构建器](../scripts/build-ram-receiver.sh) · [版本专用附件](../tests/ram-af-acm/dev12.13-attachment.sh)
+
+ARM64 虚拟机从小 initrd 实收 1,353,732,096 字节，核对载荷 SHA-256 `1e8d32f9db603ff91c13b4666e78ce2d8af3355cf7e8fa2426339b4e13743ef2`。进入 RAM 根后，诊断进程报告无持久盘、无交换区，完成了一次合成图像的测量、断线重取收据和清理。实体平板尝试在正常重启时接管串口，在板型确认前发生超时。dev12.13 的物理冷启动和后摄实景对焦仍待验证。[主机接管及恢复步骤](../tests/uboot-ram-stage/README.md#dev1213-正常重启时接管串口)
