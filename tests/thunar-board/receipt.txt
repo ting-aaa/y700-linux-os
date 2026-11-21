@@ -1,0 +1,28 @@
+TB320FC PRC, 2026-11-22, internal dev12.11
+
+Original package: thunar 4.20.2-1+deb13u1 arm64
+Updated package: thunar 4.20.2-1+deb13u1+y7001 arm64
+Original installed executable: 62ae0d0a05446bf7cf0cc0ca0f249f3663547f643d534fe6c417146ae31d4cb0
+Updated installed executable: 02caf12619717678c5b615a1c06c89ff21390966c2b348c07cf4a05216342b8d
+Offline TAR (778240 bytes): d5a041232cbe03ae4c5ca8965eff5887340f15a7774bea03979c9cca1482566c
+
+Stock, 2560x1600, GTK scale 2, XI2 on the tablet:
+THUNAR_STOCK tap_selected=1 hold_menu=0
+The candidate preview and the final installed executable independently returned:
+THUNAR_TOUCH opened=2 back=1 forward=1 parent=1 hold_menu=2 onboard=2 created=1 renamed=1 shortcuts=0
+THUNAR_BOARD same_boot_seat_services_packages_binary=1 actor_exit=0
+
+Package transactions: install -> rollback -> install -> check -> no-op install.
+Each checked all 1248 installed name/version/architecture tuples.
+Original and rollback: 8a4aced66e2947b07082c4b9988358f01673d617ab642bf1152e1ea275b69646
+Both installs:         6f137ecb4bf553f780fcfe9627ac82baaa361aecb885ce676669e867682a8056
+Only Thunar changed. Both ext4 filesystems remained read-write with zero recorded
+errors. The boot, active seat and service invocation IDs were stable throughout.
+Final package check, archive checksums and apt dependency check passed.
+The installed rollback bundle is /var/lib/y700/updates/thunar-touch-y7001/.
+
+Local logs, paths under out/thunar-touch/:
+731be1a6b69f63872d751346f8e839f3f7c0fe48aca7116ce8334a07fe9715aa  board-stock.log
+8b53c776f40df42c48c1dac4474efaab42a780a39f343e6faf533bd88ad45d78  board-preview-final.log
+b4e2b904e0339ea5126178acc1fbbc86033147e545303bb824ef685c46cd917f  board-installed.log
+ec1b9d69e86c21533ee02a34e310fb995ed1acc16b1392442820da6064b64f55  daily-transaction.log

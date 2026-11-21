@@ -1,5 +1,9 @@
 # Build migration status
 
+## Optional Thunar update for the tablet desktop
+
+The sealed dev12.15 root ships Debian's Thunar. The standalone touch update for that desktop consists of an arm64 build of the same Debian source with the Y700 input patch and its original rollback package. Build both inputs as described in the [ARM64 instructions](../tests/thunar-touch/README.md). From the product checkout, run `bash scripts/package-thunar-touch-update.sh out/thunar-touch out/thunar-touch/thunar-touch-y7001.tar`. Use the resulting bundle in the target root after its base packages are configured. [Installation and board verification](THUNAR-TOUCH.md)
+
 ## Disk budgets for image builds
 
 The large host builders check capacity before creating their output. They reserve one build lane using an advisory lock on the existing `/var/tmp` directory inode. A concurrent guarded builder sharing that directory reports `Storage busy` and can be retried after the first job exits. Kernel release of the file descriptor also covers an interrupted build. Small package builds can continue in parallel.

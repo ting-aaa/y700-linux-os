@@ -1,5 +1,7 @@
 # Hardware and system status
 
+The daily dev12.11 tablet has an updated Thunar icon view. At 200% scale its installed desktop opened folders with a tap, used both history buttons, and created and renamed a directory through long-press menus and Onboard. The board test used direct XI2 events in a private session. The original and updated packages are on the tablet for offline rollback. [Touch file management](THUNAR-TOUCH.md) · [Physical package and input checks](../tests/thunar-board/receipt.txt)
+
 On the stock daily kernel, a single read of the APPS voltage resource for the internal microphones' shared BOB rail returned 3032 mV. The factory Android microphone configuration specifies a 3296 mV request. The physical rail voltage and the WCD938x variant still need identification. The board has two speaker playback endpoints and no native microphone capture endpoint. [Board measurement and limits](MICROPHONE.md) · [Observer and receipt](../tests/microphone/bob/README.md)
 
 The rear HI1339 completed a four-step exposure/gain bracket on the reference tablet. The four RAW channel means stayed close to the black level in the sampled centre; processed green at 32 ms and 8× gain averaged 0.3334/255. Changing back to 2 ms and 1× returned the sampled RGB channels to zero. Target illumination and optical focus remain unverified. [Physical values](CAMERA-SIGNAL.md#physical-exposure-bracket-on-22-november)
