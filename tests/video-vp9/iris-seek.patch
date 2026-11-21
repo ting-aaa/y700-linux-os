@@ -1,15 +1,16 @@
 --- a/sys/v4l2/gstv4l2videodec.c
 +++ b/sys/v4l2/gstv4l2videodec.c
-@@ -200,6 +200,8 @@
+@@ -200,6 +200,9 @@
  
    GST_DEBUG_OBJECT (self, "Starting");
  
++  self->wait_for_vp9_keyframe = FALSE;
 +  g_atomic_int_set (&self->flush_started, FALSE);
 +
    gst_v4l2_object_unlock (self->v4l2output);
    g_atomic_int_set (&self->active, TRUE);
    self->output_flow = GST_FLOW_OK;
-@@ -332,6 +334,23 @@
+@@ -332,6 +335,23 @@
  }
  
  static gboolean
@@ -33,7 +34,7 @@
  gst_v4l2_video_dec_flush (GstVideoDecoder * decoder)
  {
    GstV4l2VideoDec *self = GST_V4L2_VIDEO_DEC (decoder);
-@@ -357,6 +376,32 @@
+@@ -357,6 +377,34 @@
    gst_v4l2_object_unlock_stop (self->v4l2output);
    gst_v4l2_object_unlock_stop (self->v4l2capture);
  
@@ -42,6 +43,8 @@
 +   * first, so also restart a seek interrupted before CAPTURE negotiation. */
 +  if (self->iris_flush_state == IRIS_FLUSH_STOP &&
 +      GST_V4L2_IS_ACTIVE (self->v4l2output) && is_iris_seek_decoder (self)) {
++    self->wait_for_vp9_keyframe =
++        self->v4l2output->format.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_VP9;
 +    GST_INFO_OBJECT (self, "Opening a new Iris decoder session after flush");
 +    /* An outstanding old allocator must not issue REQBUFS on the new fd. */
 +    if (!gst_v4l2_buffer_pool_orphan (self->v4l2output) ||
@@ -66,7 +69,7 @@
    gst_v4l2_buffer_pool_flush (self->v4l2output);
  
    /* gst_v4l2_buffer_pool_flush() calls streamon the capture pool and must be
-@@ -369,6 +414,14 @@
+@@ -369,6 +417,14 @@
      gst_v4l2_object_stop (self->v4l2capture);
  
    return TRUE;
@@ -81,7 +84,7 @@
  }
  
  static gboolean
-@@ -765,6 +818,11 @@
+@@ -765,6 +821,11 @@
    GST_LOG_OBJECT (self, "Looping.");
  
    GST_VIDEO_DECODER_STREAM_LOCK (decoder);
@@ -93,7 +96,7 @@
    if (G_UNLIKELY (!GST_V4L2_IS_ACTIVE (self->v4l2capture))) {
      ret = gst_v4l2_video_dec_wait_for_src_ch (self);
      if (ret != GST_FLOW_OK) {
-@@ -792,6 +850,15 @@
+@@ -792,6 +853,15 @@
         * In case we are flushing or stopping the element, ensure the active
         * state is reflected onto the newly create pool.
         */
@@ -109,7 +112,28 @@
        if (!g_atomic_int_get (&self->active))
          gst_v4l2_object_unlock (self->v4l2capture);
      }
-@@ -1041,6 +1108,11 @@
+@@ -961,6 +1031,20 @@
+   if (G_UNLIKELY (!g_atomic_int_get (&self->active)))
+     goto flushing;
+ 
++  /* A dependent VP9 picture can arrive ahead of the indexed
++   * keyframe after a seek. A fresh Iris session has no reference picture
++   * for it and cannot negotiate CAPTURE until it receives a keyframe. */
++  if (G_UNLIKELY (self->wait_for_vp9_keyframe)) {
++    if (GST_BUFFER_FLAG_IS_SET (frame->input_buffer, GST_BUFFER_FLAG_DELTA_UNIT)) {
++      GST_DEBUG_OBJECT (self, "Skipping dependent VP9 picture after seek: %u",
++          frame->system_frame_number);
++      return gst_video_decoder_drop_frame (decoder, frame);
++    }
++    self->wait_for_vp9_keyframe = FALSE;
++    GST_DEBUG_OBJECT (self, "Starting Iris VP9 seek at keyframe %u",
++        frame->system_frame_number);
++  }
++
+   if (G_UNLIKELY (!GST_V4L2_IS_ACTIVE (self->v4l2output))) {
+     if (!self->input_state)
+       goto not_negotiated;
+@@ -1041,6 +1125,11 @@
      }
    }
  
@@ -121,7 +145,7 @@
    task_state = gst_pad_get_task_state (GST_VIDEO_DECODER_SRC_PAD (self));
    if (task_state == GST_TASK_STOPPED || task_state == GST_TASK_PAUSED) {
      /* It's possible that the processing thread stopped due to an error */
-@@ -1228,6 +1300,7 @@
+@@ -1228,6 +1317,7 @@
  
    switch (type) {
      case GST_EVENT_FLUSH_START:
@@ -129,7 +153,7 @@
        GST_DEBUG_OBJECT (self, "flush start");
        gst_v4l2_object_unlock (self->v4l2output);
        gst_v4l2_object_unlock (self->v4l2capture);
-@@ -1236,7 +1309,15 @@
+@@ -1236,7 +1326,15 @@
        break;
    }
  
@@ -147,12 +171,13 @@
      case GST_EVENT_FLUSH_START:
 --- a/sys/v4l2/gstv4l2videodec.h
 +++ b/sys/v4l2/gstv4l2videodec.h
-@@ -64,8 +64,10 @@
+@@ -64,8 +64,11 @@
    GstFlowReturn output_flow;
  
    /* Source Change Events */
 +  gint flush_started;  /* Atomic: FLUSH_START is not serialized. */
    gboolean wait_for_source_change;
++  gboolean wait_for_vp9_keyframe;
    gboolean draining;
 +  enum { IRIS_FLUSH_IDLE, IRIS_FLUSH_STOP, IRIS_FLUSH_FAILED } iris_flush_state;
  
