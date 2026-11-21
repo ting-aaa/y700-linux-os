@@ -199,7 +199,7 @@ def main(pid, version, app_locale):
             window.find(Atspi.Role.PUSH_BUTTON, ui_label)
         before = log.stat().st_size
         wait_for(lambda: log.read_bytes()[before:].count(b"\nseq:") >= 3, "three live frames")
-        if version.endswith(".y7005"):
+        if version.endswith((".y7005", ".y7006")):
             focus_label = "对焦" if chinese else "Focus"
             assert not any(node.get_role() == Atspi.Role.PUSH_BUTTON
                            and node.get_name() == focus_label

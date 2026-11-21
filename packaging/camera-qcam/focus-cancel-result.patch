@@ -1,0 +1,30 @@
+--- a/src/apps/qcam/focus_button.cpp
++++ b/src/apps/qcam/focus_button.cpp
+@@ -94,21 +94,22 @@
+ void FocusButton::completed(const ControlList &sent, const ControlList &metadata)
+ {
+ 	const auto trigger = sent.get(controls::AfTrigger);
+-	if (stage_ == Stage::Cancelling && trigger == controls::AfTriggerCancel) {
+-		finish(chinese_ ? QStringLiteral("对焦已取消") : QStringLiteral("Focus cancelled"));
+-		return;
+-	}
++	const bool cancelAcknowledged =
++		stage_ == Stage::Cancelling && trigger == controls::AfTriggerCancel;
+ 	// Earlier frames can still carry the result of the previous scan.
+ 	if (stage_ == Stage::Starting && trigger == controls::AfTriggerStart)
+ 		setStage(Stage::Scanning);
+-	if (stage_ != Stage::Scanning)
++	if (stage_ != Stage::Scanning && !cancelAcknowledged)
+ 		return;
+ 
++	// The scan can finish before the camera processes the cancellation.
+ 	const auto state = metadata.get(controls::AfState);
+ 	if (state == controls::AfStateFocused)
+ 		finish(chinese_ ? QStringLiteral("已合焦") : QStringLiteral("Focused"));
+ 	else if (state == controls::AfStateFailed)
+ 		finish(chinese_ ? QStringLiteral("未能合焦，请重试") : QStringLiteral("Could not focus. Try again."));
++	else if (cancelAcknowledged)
++		finish(chinese_ ? QStringLiteral("对焦已取消") : QStringLiteral("Focus cancelled"));
+ }
+ 
+ void FocusButton::queueFailed(const ControlList &sent)

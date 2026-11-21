@@ -6,9 +6,11 @@ umask 022
 
 component=runtime
 qcam_autofocus=false
-if [[ ${1:-} == --qcam || ${1:-} == --qcam-autofocus ]]; then
+qcam_cancel_result=false
+if [[ ${1:-} == --qcam || ${1:-} == --qcam-autofocus || ${1:-} == --qcam-autofocus-result ]]; then
     component=qcam
-    if [[ $1 == --qcam-autofocus ]]; then qcam_autofocus=true; fi
+    if [[ $1 != --qcam ]]; then qcam_autofocus=true; fi
+    if [[ $1 == --qcam-autofocus-result ]]; then qcam_cancel_result=true; fi
     shift
 fi
 autofocus=0
@@ -25,7 +27,7 @@ if [[ -n ${CAMERA_SDK_OUTPUT:-} ]]; then
     sdk_output=$(realpath -m -- "$CAMERA_SDK_OUTPUT")
 fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
+    echo 'Usage: build-camera-backport.sh [--autofocus|--qcam|--qcam-autofocus|--qcam-autofocus-result] SOURCES ASPHALT_CHECKOUT OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
@@ -82,6 +84,9 @@ if [[ $component == qcam ]]; then
     if $qcam_autofocus; then
         patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/autofocus-ui.patch"
         cp "$repo/packaging/camera-qcam"/focus_button.{h,cpp} source/src/apps/qcam/
+        if $qcam_cancel_result; then
+            patch -p1 --batch --forward --fuzz=0 -d source < "$repo/packaging/camera-qcam/focus-cancel-result.patch"
+        fi
     fi
     export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1795143600}
     export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-ffile-prefix-map=$build=/usr/src/y700-camera"
@@ -111,6 +116,7 @@ if [[ $component == qcam ]]; then
     extra_dependencies="$runtime_package (= $runtime_version), "
     if $qcam_autofocus; then
         version=0.7.2-1~bpo13+1.y7005
+        if $qcam_cancel_result; then version=0.7.2-1~bpo13+1.y7006; fi
         extra_dependencies="$runtime_package (= 0.7.2-1~bpo13+1.y7001) | $runtime_package (= 0.7.2-1~bpo13+1.y7002), "
     fi
     summary='Qt desktop camera app for the Lenovo TB320FC'

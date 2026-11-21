@@ -69,6 +69,29 @@ int main(int argc, char **argv)
 	check(!button.isEnabled(), "wait for cancel acknowledgement");
 	button.completed(cancel, none);
 	check(button.isEnabled() && bar.currentMessage() == "Focus cancelled", "cancelled result");
+	if (app.arguments().contains("--cancel-result")) {
+		bool correct = true;
+		for (int result : { controls::AfStateFocused, controls::AfStateFailed, controls::AfStateIdle }) {
+			button.click();
+			button.prepare(start);
+			outcome.set(controls::AfState, controls::AfStateScanning);
+			button.completed(start, outcome);
+			button.click();
+			button.prepare(cancel);
+			const QString expected = result == controls::AfStateFocused ? "Focused" :
+						 result == controls::AfStateFailed ? "Could not focus. Try again." :
+						 "Focus cancelled";
+			outcome.set(controls::AfState, result);
+			button.completed(none, outcome);  // an older queued request
+			check(!button.isEnabled(), "wait for the acknowledged cancel");
+			button.completed(cancel, outcome);
+			std::cout << "late cancel AfState=" << result
+				  << " feedback=" << bar.currentMessage().toStdString() << '\n';
+			correct &= button.isEnabled() && button.text() == "Focus" &&
+				   bar.currentMessage() == expected;
+		}
+		check(correct, "cancel acknowledgement must preserve a completed scan result");
+	}
 	button.click();
 	button.prepare(start);
 	outcome.set(controls::AfState, controls::AfStateFailed);
