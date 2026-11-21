@@ -1,0 +1,10 @@
+Package: y700-quick-settings
+Version: 0.1.0
+Section: x11
+Priority: optional
+Architecture: all
+Maintainer: Y700 Linux OS contributors <maintainers@localhost>
+Depends: y700-platform, python3, python3-gi, gir1.2-gtk-3.0, wireplumber, bluez
+Description: Touch quick settings for the Lenovo Y700 Xfce desktop
+ Control the panel backlight, output volume, Bluetooth radio and rotation
+ preference from the same panel.

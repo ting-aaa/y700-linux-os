@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Settings
+Name[zh_CN]=快捷设置
+Comment=Adjust brightness, volume, Bluetooth and screen rotation
+Comment[zh_CN]=调节亮度、音量、蓝牙和屏幕旋转
+Exec=y700-quick-settings
+Icon=preferences-system
+Categories=Settings;HardwareSettings;X-XFCE-SettingsDialog;X-XFCE-HardwareSettings;
+OnlyShowIn=XFCE;
+StartupNotify=false
+Terminal=false

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Settings
+Name[zh_CN]=快捷设置
+Exec=y700-quick-settings --tray
+TryExec=y700-quick-settings
+OnlyShowIn=XFCE;
+Icon=preferences-system
+Terminal=false
+StartupNotify=false
