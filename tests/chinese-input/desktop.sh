@@ -17,7 +17,7 @@ gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
     --method org.a11y.Bus.GetAddress >/dev/null
 xfce4-session >"$root/xfce.log" 2>&1 &
 session=$!
-timeout 35 gdbus wait --session org.onboard.Onboard
+timeout "${CHINESE_INPUT_START_TIMEOUT:-35}" gdbus wait --session org.onboard.Onboard
 timeout 15 gdbus wait --session org.xfce.SettingsDaemon
 echo "CHINESE_INPUT_XSESSION gtk=${GTK_IM_MODULE:-unset} xmodifiers=${XMODIFIERS:-unset}"
 [[ ${GTK_IM_MODULE:-} == ibus && ${XMODIFIERS:-} == @im=ibus ]]

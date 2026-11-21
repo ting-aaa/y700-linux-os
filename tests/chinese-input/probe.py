@@ -1,4 +1,4 @@
-"""Use pointer clicks on the stock Onboard keyboard and IBus GTK candidate panel."""
+"""Drive the stock Onboard keyboard and IBus panel with pointer or kernel touch."""
 
 import ctypes
 import json
@@ -19,6 +19,7 @@ from gi.repository import Atspi, Gdk, Gio, GLib, IBus
 
 ROOT = Path(os.environ["CHINESE_INPUT_TEST_DIR"])
 SCREEN = (2560, 1600)
+TYPE_B = os.environ.get("CHINESE_INPUT_TYPE_B") == "1"
 KEYS = {
     "a": (0.144, 0.50),
     "e": (0.251, 0.30),
@@ -51,7 +52,10 @@ def wait_for(read, failure, seconds=14):
 
 
 def command(*args):
-    return subprocess.run(args, capture_output=True, text=True, timeout=4, check=False)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=15 if TYPE_B else 4, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise ProbeError(f"desktop-query-timed-out command={args[0]} operation={args[1]}") from error
 
 
 def extent(window):
@@ -73,7 +77,17 @@ def windows(kind, expression):
 
 def tap(x, y):
     if not 0 <= x < SCREEN[0] or not 0 <= y < SCREEN[1]:
-        raise ProbeError("pointer-coordinate-outside-private-display")
+        raise ProbeError(f"coordinate-outside-private-display x={x} y={y}")
+    if TYPE_B:
+        # The board-shaped uinput device is connected to the sole unrotated
+        # virtual output. Normalized raw axes are 0..16000 and 0..25600.
+        completed = Path("/run/topology/input.log")
+        before = completed.read_text().splitlines().count("DONE")
+        with open("/run/topology/feed", "w") as stream:
+            stream.write(f"tap {round(x * 16000 / SCREEN[0])} {round(y * 25600 / SCREEN[1])}\n")
+        wait_for(lambda: completed.read_text().splitlines().count("DONE") == before + 1,
+                 "kernel-touch-was-not-completed", 3)
+        return
     if command("xdotool", "mousemove", str(x), str(y), "click", "1").returncode:
         raise ProbeError("pointer-click-failed")
 
@@ -91,7 +105,11 @@ def keyboard_geometry():
         Gio.DBusCallFlags.NONE, 2500, None,
     ).unpack()
     if visible:
-        return next((box for box in windows("--class", "^Onboard$") if box[2] >= 1200 and box[3] >= 250), None)
+        # The dock reports Visible while it slides into place. Input is only
+        # meaningful after the full key area has entered the screen.
+        return next((box for box in windows("--class", "^Onboard$")
+                     if box[2] >= 1200 and box[3] >= 250 and
+                     0 <= box[0] <= SCREEN[0] - box[2] and 0 <= box[1] <= SCREEN[1] - box[3]), None)
     return None
 
 
@@ -111,10 +129,19 @@ def accessible_nodes(root, depth=0):
 
 
 def visible_named_nodes(match, roles):
-    for node in accessible_nodes(Atspi.get_desktop(0)):
-        if (node.get_role() in roles and node.get_state_set().contains(Atspi.StateType.SHOWING)
-                and match(node.get_name() or "")):
-            yield node
+    desktop = Atspi.get_desktop(0)
+    for i in range(desktop.get_child_count()):
+        try:
+            app = desktop.get_child_at_index(i)
+            if TYPE_B and app.get_name() not in ("gtk-target.py", "ibus-ui-gtk3"):
+                continue
+            for node in accessible_nodes(app):
+                if (node.get_role() in roles and node.get_state_set().contains(Atspi.StateType.SHOWING)
+                        and match(node.get_name() or "")):
+                    yield node
+        except GLib.Error:
+            # A separate desktop app can close its accessible bus during startup.
+            continue
 
 
 def visible_named(match, roles):
@@ -179,6 +206,10 @@ def switch_engine(bus, expected, match, scale):
         screenshot()
     roles = (Atspi.Role.MENU_ITEM, Atspi.Role.CHECK_MENU_ITEM, Atspi.Role.RADIO_MENU_ITEM)
     items = wait_for(lambda: list(visible_named_nodes(match, roles)), "ibus-engine-menu-item-not-visible")
+    if TYPE_B:
+        print(f"CHINESE_INPUT_TRAY engine={expected} matching_menu_items={len(items)}", flush=True)
+    if os.environ.get("CHINESE_INPUT_EXPECT_FIRST") == "1" and len(items) != 1:
+        raise ProbeError("more-than-one-language-menu-after-one-tray-tap")
     anchor_x = icon[0] + icon[2] // 2
     item = min(items, key=lambda node: abs((rect(node).x + rect(node).width // 2) * scale - anchor_x))
     if os.environ.get("CHINESE_INPUT_DISCOVERY") == "1":
@@ -202,7 +233,7 @@ def screenshot():
         snapshot.savev(str(ROOT / "display.png"), "png", [], [])
 
 
-def pointer_input_windows():
+def pointer_input_windows(point=None):
     x11 = ctypes.CDLL("libX11.so.6")
     pointer, ulong = ctypes.c_void_p, ctypes.c_ulong
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
@@ -213,18 +244,29 @@ def pointer_input_windows():
     window_ref, int_ref = ctypes.POINTER(ulong), ctypes.POINTER(ctypes.c_int)
     x11.XQueryPointer.argtypes = [pointer, ulong, window_ref, window_ref, *([int_ref] * 4),
                                   ctypes.POINTER(ctypes.c_uint)]
+    x11.XTranslateCoordinates.argtypes = [pointer, ulong, ulong, ctypes.c_int, ctypes.c_int,
+                                          int_ref, int_ref, window_ref]
     xdisplay = x11.XOpenDisplay(None)
     if not xdisplay:
         return []
     window = x11.XDefaultRootWindow(xdisplay)
+    screen_root = window
     root, child = ulong(), ulong()
     coords = [ctypes.c_int() for _ in range(4)]
     mask = ctypes.c_uint()
     inspected = []
     try:
         for _ in range(10):
-            if not x11.XQueryPointer(xdisplay, window, ctypes.byref(root), ctypes.byref(child),
-                                     *(ctypes.byref(item) for item in coords), ctypes.byref(mask)):
+            if point is not None:
+                # Query the topmost child at the contact without moving the X
+                # pointer over it (which itself can change a menu's state).
+                ok = x11.XTranslateCoordinates(xdisplay, screen_root, window, *point,
+                                               ctypes.byref(coords[0]), ctypes.byref(coords[1]),
+                                               ctypes.byref(child))
+            else:
+                ok = x11.XQueryPointer(xdisplay, window, ctypes.byref(root), ctypes.byref(child),
+                                       *(ctypes.byref(item) for item in coords), ctypes.byref(mask))
+            if not ok:
                 break
             if not child.value:
                 break
@@ -270,7 +312,7 @@ def main():
     bus = IBus.Bus.new()
     wait_for(lambda: current_engine(bus) == "xkb:us::eng", "configured-english-engine-not-active")
     panel_clicks = []
-    if os.environ.get("CHINESE_INPUT_DISCOVERY") == "1":
+    if TYPE_B or os.environ.get("CHINESE_INPUT_DISCOVERY") == "1":
         bus.get_connection().signal_subscribe(
             None, "org.freedesktop.IBus.Panel", "CandidateClicked", "/org/freedesktop/IBus/Panel",
             None, Gio.DBusSignalFlags.NONE,
@@ -312,7 +354,8 @@ def main():
 
     clicked = False
     attempts = 0
-    for attempt in (1, 2):
+    strict = os.environ.get("CHINESE_INPUT_EXPECT_FIRST") == "1"
+    for attempt in ((1,) if strict else (1, 2)):
         candidate = visible_named(lambda name: name.strip() == "你好", (Atspi.Role.LABEL,))
         if not candidate or state()["committed"] or state()["preedit"] != original_preedit:
             break
@@ -322,11 +365,12 @@ def main():
         position = rect(target)
         target_x = (position.x + position.width // 2) * scale
         target_y = (position.y + position.height // 2) * scale
-        command("xdotool", "mousemove", str(target_x), str(target_y))
-        chain = pointer_input_windows()
+        chain = pointer_input_windows((target_x, target_y))
         if not chain or '"ibus-ui-gtk3"' not in chain[0][1]:
             raise ProbeError("candidate-tap-target-not-owned-by-ibus-panel")
-        print(f"CHINESE_INPUT_POPUP selector={selector} attempt={attempt} ibus_input_window=1", flush=True)
+        popup = chain[0][2]
+        print(f"CHINESE_INPUT_POPUP selector={selector} attempt={attempt} ibus_input_window=1 "
+              f"popup={popup} target={target_x},{target_y}", flush=True)
         if os.environ.get("CHINESE_INPUT_DISCOVERY") == "1":
             print(f"CHINESE_INPUT_POINTER_CHAIN {chain}", flush=True)
         tap(target_x, target_y)
@@ -338,11 +382,19 @@ def main():
         except ProbeError:
             print(f"CHINESE_INPUT_AFTER_CANDIDATE {state()}", flush=True)
     if not clicked:
+        if strict:
+            raise ProbeError("first-candidate-contact-did-not-commit")
         selector = "space"
         type_onboard(" ")
         wait_for(committed, "onboard-space-did-not-commit-candidate")
     if os.environ.get("CHINESE_INPUT_DISCOVERY") == "1":
         print(f"CHINESE_INPUT_IBUS_CANDIDATE_CLICKED {panel_clicks}", flush=True)
+    if TYPE_B:
+        wait_for(lambda: len(panel_clicks) > 0, "no-ibus-panel-click")
+        if len(panel_clicks) != 1 or panel_clicks[0][:2] != (0, 1):
+            raise ProbeError("unexpected-ibus-candidate-clicks")
+        print(f"CHINESE_INPUT_CONTACTS candidate_taps={attempts} panel_candidate_clicked={len(panel_clicks)} "
+              "gtk_committed=1", flush=True)
     print(f"CHINESE_INPUT_GTK pinyin_osk_letters=5 candidate_pointer_tap={int(selector != 'space')} "
           f"selector={selector} candidate_taps={attempts} text=你好 scale=2", flush=True)
     switch_engine(bus, "xkb:us::eng", lambda name: "English" in name and "US" in name, scale)
