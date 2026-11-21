@@ -16,7 +16,7 @@ work=$(mktemp -d /tmp/y700-blueman-live.XXXXXXXX)
 [[ $(realpath -e "$work") =~ ^/tmp/y700-blueman-live\.[a-zA-Z0-9]{8}$ ]]
 stage=
 remove_stage() {
-    "${ssh[@]}" "set -e; test \"\$(realpath -e '$stage')\" = '$stage'; if mountpoint -q '$stage'; then test \"\$(findmnt -nr -M '$stage' -o FSTYPE)\" = tmpfs; umount '$stage'; fi; rmdir '$stage'"
+    "${ssh[@]}" "set -e; test \"\$(realpath -e '$stage')\" = '$stage'; if mountpoint -q '$stage'; then test \"\$(findmnt -nr -M '$stage' -o FSTYPE)\" = tmpfs; umount '$stage'; fi; rmdir '$stage'" </dev/null
 }
 cleanup() {
     if [[ $stage =~ ^/var/tmp/y700-blueman-tablet\.[a-zA-Z0-9]{8}$ ]]; then remove_stage || true; fi
@@ -57,12 +57,12 @@ sed -e 's|/opt/blueman-pairing|/run/blueman-pairing/tools|g' \
     -e 's|PATH=/usr/local/bin:|PATH=/run/blueman-pairing/tools/bin:/usr/local/bin:|' \
     "$here/run-session.sh" > "$bundle/run-session.sh"
 install -m644 "$here/tablet-namespace.sh" "$here/tablet-check.sh" "$work/send/"
-stage=$("${ssh[@]}" 'mktemp -d /var/tmp/y700-blueman-tablet.XXXXXXXX')
+stage=$("${ssh[@]}" 'mktemp -d /var/tmp/y700-blueman-tablet.XXXXXXXX' </dev/null)
 [[ $stage =~ ^/var/tmp/y700-blueman-tablet\.[a-zA-Z0-9]{8}$ ]]
-"${ssh[@]}" "mount -t tmpfs -o size=256M,mode=0700,nodev,nosuid tmpfs '$stage'"
+"${ssh[@]}" "mount -t tmpfs -o size=256M,mode=0700,nodev,nosuid tmpfs '$stage'" </dev/null
 tar -C "$work/send" -czf - . | "${ssh[@]}" "tar -C '$stage' -xzf -"
 status=0
-"${ssh[@]}" "bash '$stage/tablet-check.sh' '$stage' '$version'" || status=$?
+"${ssh[@]}" "bash '$stage/tablet-check.sh' '$stage' '$version'" </dev/null || status=$?
 remove_stage
 stage=
 echo 'BLUEMAN_TABLET_STAGING_CLEANUP paths_remaining=0'

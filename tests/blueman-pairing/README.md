@@ -92,6 +92,16 @@ The English and Chinese Xvfb receipts are
 `out/dev12.12-bt-desktop/manager-portrait-zh-maximize2.log`.
 [配对步骤](../../docs/BLUETOOTH-MANAGER.md)
 
+## Physical controller discovery
+
+The dev12.11 tablet now has the installed y7003 package and the offline y7002 rollback at `/var/lib/y700/updates/blueman-y7003`. Its package inventory changed from `a49b13a6…` to `a434ec3c…` with qcam y7007. The update kept the running Bluetooth, NetworkManager, SSH and LightDM service invocations.
+
+```sh
+bash tests/blueman-pairing/run-real-discovery.sh "$usb_ssh_wrapper" "$arm64_xvfb_deb" "$arm64_uv"
+```
+
+Start with the owner logged into Xfce, an idle powered adapter, and the Manager closed. The ordinary account starts the installed desktop entry's executable on a private 200% X display. The real session applet and the real system BlueZ bus handle the Search action. A complete physical run observed the WCN6855 entering discovery, returning to idle after 77.21 seconds, and enabling Search again. The test compares bonded, trusted and connected devices in memory, and emits only the comparison result. The receipt is `out/dev12.12-bt-desktop/installed-discovery-r2.log`. Physical HID input requires an accessory.
+
 `run-manager-touch.sh` also boots the released ARM64 kernel and dev12.12
 root in QEMU, installs y7003 in guest RAM, and runs the portrait test with
 a Type-B kernel input device instead of XTest. See the usage line for the
