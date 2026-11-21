@@ -52,7 +52,7 @@ bash tests/ufs-scaling/boot-smoke.sh "$new_output" "$busybox_arm64" "$new_log"
 
 ## 从独立 RAM 环境观测
 
-这台板的私有 `out/ufs-scaling/observer/initrd` 为 6,988,639 字节，SHA-256 `380711f0df5fc76809b6e8ba62a3dc2c6a4d54a66c08f7659d173eae3db9736e`，两次完整交叉编译、封装结果一致。它同时支持上面的两版内核。PID 1 核对运行内核 notes、PRC 与板上 UFS 节点的时钟数。包内有一份静态 AArch64 程序、已核验的七个 PMIC/UCSI 模块和 ADSP 固件、这台板私有的分区匹配输入。分发源码，硬件准备时从本机已核对的输入生成私有产物。[构建入口](../tests/ufs-scaling/build-observer.sh)
+这台板的私有 v2 位于 `out/ufs-scaling/observer-v2/initrd`，6,988,579 字节，SHA-256 `71d078d6490152ccbab7efacaa1251c18ef6e3a2757f70fa07fc460fda2730e7`，两次完整交叉编译、封装结果一致。它同时支持上面的两版内核。PID 1 核对运行内核 notes、PRC 与板上 UFS 节点的时钟数。包内有一份静态 AArch64 程序、已核验的七个 PMIC/UCSI 模块和 26 个 ADSP 固件文件、这台板私有的分区匹配输入。分发源码，硬件准备时从本机已核对的输入生成私有产物。首版 `out/ufs-scaling/observer/initrd`（`380711f0…`）及源码 `0e51a36` 保留供复核。[构建入口](../tests/ufs-scaling/build-observer.sh)
 
 ```bash
 bash tests/ufs-scaling/build-observer.sh out/dev12.12-ram-receiver/initrd \
@@ -70,6 +70,8 @@ uv run --with pyserial python tests/ufs-scaling/collect.py --port COM<n> --varia
 四组数值分别在第一次读取之前、第一次之后、空闲结束、第二次之后取得。`RANGE` 给出 devfreq 当前允许上下限与可用 OPP 范围，不应用日用系统的限频规则。`PHASE` 中的 runtime 为 0 活动、1 已挂起、2 正挂起、3 正恢复、4 不支持；link 为 0 OFF、1 ACTIVE、2 HIBERN8、3 BROKEN、4 UNKNOWN。`-1` 表示接口没有提供该数值。时钟是 Linux CCF 对三个分支的频率记账值，link 是驱动记账状态。单次采样可能略过中间切换，耗时只覆盖 `pread`。这条试验不进行吞吐压测，不启用 tracing，也无法测出电源轨上的电压、电流或证明进入系统深睡。[采样实现](../tests/ufs-scaling/observer-io.c)
 
 主机先保存并校验数字回执，再用摘要 ACK。已开始的操作可以用 `--resume` 取回缓存，设备不会为回放再读分区。正常 ACK 或等待命令约 105 秒到期后会请求重启；独立 PID 1 另有从用户态启动算起的 155 秒上限。若内核整体停止调度、控制器在内核关机阶段锁死，仍需现场恢复。此软件计时器没有硬件 watchdog 保证。[PID 1](../tests/ufs-scaling/observer-init.c)
+
+v2 在 QEMU 里也执行板端使用的 ConfigFS 建立步骤，创建配置字符串、ACM 函数及其绝对路径链接。虚拟机使用 virtio 串口传输回执。单独将链接恢复成首版的相对路径后，同一 stock 内核返回 `UFS1 EARLY_EXIT 64`。原版和候选内核均内建 ACM；两份发行来源的 DT 分别有 8 和 9 个 UFS 时钟，PRC 检查通过。观察程序在离开前向控制台写 `UFS1 SUPERVISOR N`，向本次内核日志写 `UFS1 EARLY_EXIT N`。40–46 表示无法打开对应模块，50–56 表示加载失败（顺序见代码），60 是未出现 UDC，61–65 分别是配置目录、描述符、函数、链接、绑定，68/69 是端口打开或属性失败。两份 DT 中都没有声明 ramoops 设备，重启后无法保证从日用系统找回该日志。[ACM 初始化](../tests/ufs-scaling/observer-port.c)
 
 PC 在两个真实内核上均从相同 initrd 启动，以 320 MiB ARM64 QEMU、virtio 串口和一份可写的合成 GPT 文件验证正常读回、保存、ACK 与重启。GUID 错误、缺少 `boot_b`、只检查且原始设备仍可写都在分区数据读取前拒绝。已知前缀故意损坏在第一次读后拒绝。每次测试后比对整份虚拟磁盘字节。无主机命令的单独测试覆盖超时返回。该虚拟机缺少 UFS、PRC USB/电源硬件，故所有对应的时钟及错误接口报告 `-1`。各项数值收据位于 `out/ufs-scaling/observer-verified/`。[QEMU 正反例](../tests/ufs-scaling/observer-vm.sh)
 

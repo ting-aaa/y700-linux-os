@@ -153,7 +153,7 @@ static int run(void)
     }
     (void)mount("debugfs","/sys/kernel/debug","debugfs",MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC,NULL);
     int fd=observation_port(vm);
-    if (fd<0) return 2;
+    if (fd<0) return -fd;
     char line[100],read_cmd[24],result_cmd[24];
     snprintf(read_cmd,sizeof(read_cmd),"UFS1 READ %d",variant);
     snprintf(result_cmd,sizeof(result_cmd),"UFS1 RESULT %d",variant);
@@ -204,6 +204,8 @@ int main(void)
     }
     int console=open("/dev/console",O_WRONLY|O_NONBLOCK);
     if (console>=0) dprintf(console,"UFS1 SUPERVISOR %d\n",cause);
+    int kmsg=open("/dev/kmsg",O_WRONLY|O_NONBLOCK);
+    if (kmsg>=0) dprintf(kmsg,"<5>UFS1 EARLY_EXIT %d\n",cause);
     reboot(RB_AUTOBOOT);
     for (;;) pause();
 }
