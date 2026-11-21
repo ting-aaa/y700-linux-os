@@ -1,0 +1,22 @@
+# Debian's launcher sources this file before its own default flags and camera hook.
+if [ "$(/usr/bin/gsettings get org.y700.chromium hardware-acceleration 2>/dev/null)" = true ]; then
+    y700_graphics_choice=auto
+    y700_graphics_headless=false
+    case " $CHROMIUM_FLAGS " in
+        *" --disable-gpu "*|*" --use-angle="*|*" --use-gl="*) y700_graphics_choice=explicit ;;
+    esac
+    for y700_graphics_arg do
+        case $y700_graphics_arg in
+            --disable-gpu|--use-angle=*|--use-gl=*) y700_graphics_choice=explicit ;;
+            --headless|--headless=*) y700_graphics_headless=true ;;
+        esac
+    done
+    if [ "$y700_graphics_choice" = auto ]; then
+        CHROMIUM_FLAGS="$CHROMIUM_FLAGS --use-gl=angle --use-angle=vulkan"
+        if [ "$y700_graphics_headless" = true ]; then CHROMIUM_FLAGS="$CHROMIUM_FLAGS --enable-gpu"; fi
+    fi
+    unset y700_graphics_choice y700_graphics_headless y700_graphics_arg
+else
+    CHROMIUM_FLAGS="$CHROMIUM_FLAGS --disable-gpu"
+fi
+export CHROMIUM_FLAGS

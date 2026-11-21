@@ -24,3 +24,5 @@ jobs:
         run: uv run --python 3.13 --no-project python tests/xorg-dsi-layer.py
       - name: Build and verify platform package
         run: bash tests/platform-package.sh
+      - name: Verify per-user Chromium graphics choices
+        run: bash tests/chromium-graphics/policy.sh

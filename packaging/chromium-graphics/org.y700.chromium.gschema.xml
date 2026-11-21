@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.y700.chromium" path="/org/y700/chromium/">
+    <key name="hardware-acceleration" type="b">
+      <default>false</default>
+      <summary>Use hardware acceleration in Chromium</summary>
+      <description>Request the ANGLE Vulkan backend when this user starts Chromium. The default uses software rendering.</description>
+    </key>
+  </schema>
+</schemalist>

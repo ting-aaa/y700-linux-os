@@ -1,0 +1,41 @@
+#!/usr/bin/python3
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gio, GLib, Gtk
+
+
+def label(english, chinese):
+    return chinese if GLib.get_language_names()[0].startswith("zh") else english
+
+
+def activate(app):
+    window = app.get_active_window()
+    if window:
+        window.present()
+        return
+    window = Gtk.ApplicationWindow(application=app, title=label("Chromium graphics", "Chromium 图形"))
+    window.set_default_size(440, -1)
+    window.set_position(Gtk.WindowPosition.CENTER)
+    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, border_width=22)
+    window.add(content)
+    toggle = Gtk.CheckButton(label=label("Use GPU acceleration in Chromium", "在 Chromium 中使用 GPU 加速"))
+    toggle.set_size_request(-1, 64)
+    content.add(toggle)
+    hint = Gtk.Label(wrap=True, xalign=0, max_width_chars=44, label=label(
+        "Turn this off for software rendering. Fully quit Chromium and reopen it to apply your choice.",
+        "关闭此项可切换为软件渲染。完全退出 Chromium 后重新打开，设置即可生效。",
+    ))
+    content.add(hint)
+    settings = Gio.Settings.new("org.y700.chromium")
+    settings.bind("hardware-acceleration", toggle, "active", Gio.SettingsBindFlags.DEFAULT)
+    window.show_all()
+    window.present()
+
+
+if __name__ == "__main__":
+    app = Gtk.Application(application_id="org.y700.ChromiumGraphics")
+    app.connect("activate", activate)
+    sys.exit(app.run(sys.argv))

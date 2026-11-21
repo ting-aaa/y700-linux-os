@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Chromium graphics
+Name[zh_CN]=Chromium 图形
+Exec=/usr/libexec/y700-chromium-graphics
+Icon=chromium
+Categories=GTK;Settings;DesktopSettings;X-XFCE-SettingsDialog;X-XFCE-HardwareSettings;
+OnlyShowIn=XFCE;
+Terminal=false
