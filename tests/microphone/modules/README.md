@@ -22,3 +22,18 @@ The shipped kernel adds the Adreno HFI queued-vote acknowledgement fix, patch SH
 The runner independently pins both the raw candidate ELF manifest (`643fcd01ad5b928ff99648b11189640f1cb551d9ac2dae5395623cd95aaae933`) and the sealed compressed staging tree's manifest (`ccadea506a41b8883fc7d689d8c7e764129f4b3b520bf6a283321166e13a47e6`). In each QEMU guest, Debian's kmod 34.2-2 opened the staged compressed files. All 12 candidate modules and both original CS35L45 modules coexisted in the kernel. Every running module's GNU build ID matched the one extracted from its input ELF. The observer unloaded all 14 in holder order, then repeated the load and unload. Both rounds on each kernel produced zero new warnings and left the kernel taint mask at zero. The kernel configuration disables module signing and symbol version CRCs. The test used the ordinary kernel loader. Local receipts are `out/microphone/modules/{shipped-pinned,build-base-pinned}/receipt.log` and `out/microphone/modules/kernel-comparison.log`.
 
 The virtual board provides module registration and lifetime coverage. Physical power sequencing, driver binding to TB320FC components, probe and microphone data still require board-specific evidence.
+
+## dev12.12
+
+Use the sealed dev12.12 root and EFI image from the same release. The builder selects all three candidate patches from the root digest. Its WCD938x module uses the checked eFuse read. The runner pins the raw ELF manifest (`091e21b852b20a4c0f85ac4204cdf82fccb897ff8e302a92c81099d8c407f28d`) and the compressed module tree manifest (`f1b578a728d058be00c037fb3b20abb60506e5f96fb108dc6af75d1f31c24eee`) for both boot entries.
+
+```sh
+sudo bash scripts/build-microphone-modules.sh "$kernel_build" "$root_ext4" "$module_build"
+for suffix in '' -120; do
+    mcopy -i "$esp" "::/EFI/debian/kernel$suffix.efi" "./kernel$suffix.efi"
+    bash tests/microphone/modules/run.sh "--dev12.12$suffix" "./kernel$suffix.efi" \
+        "$root_ext4" "$module_build" "$arm64_static_busybox" "./load$suffix"
+done
+```
+
+The local combined receipt is `out/microphone/dev12.12-checked/receipt.txt`, SHA-256 `b05dd1da7c45811060e06f38cd781ce9e9b87b0042dc9e85b5237e0c318e25ea`. The modules loaded with Debian kmod from the sealed root. The QEMU virtual board has no physical TB320FC audio hardware.

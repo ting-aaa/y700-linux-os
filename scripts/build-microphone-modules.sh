@@ -3,7 +3,7 @@
 set -euo pipefail
 export LC_ALL=C
 if [[ ${1:-} != --inside ]]; then
-    [[ $# == 3 && $EUID == 0 ]] || { echo 'Usage as root: build-microphone-modules.sh PREPARED_KERNEL DEV12.9_ROOT.ext4 NEW_OUTPUT' >&2; exit 2; }
+    [[ $# == 3 && $EUID == 0 ]] || { echo 'Usage as root: build-microphone-modules.sh PREPARED_KERNEL SEALED_ROOT.ext4 NEW_OUTPUT' >&2; exit 2; }
     exec unshare --mount --propagation private bash "$0" --inside "$@"
 fi
 shift
@@ -15,6 +15,15 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 jobs=${JOBS:-6}
 [[ $jobs =~ ^[1-9][0-9]*$ && -d $base && $out != "$src" && $out != "$src/"* ]]
 [[ ! -e $out && ! -L $out ]] || { echo "Output already exists: $out" >&2; exit 2; }
+root_hash=$(sha256sum "$disk")
+root_hash=${root_hash%% *}
+patches=(config/kernel/asphalt-lpass-tx-stereo.patch config/kernel/asphalt-tx3-dma-map.patch)
+case $root_hash in
+    e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb) ;; # Frozen dev12.9 build.
+    5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3)
+        patches+=(config/kernel/asphalt-wcd938x-checked-id.patch) ;; # dev12.12
+    *) echo 'Expected the sealed dev12.9 or dev12.12 root' >&2; exit 2 ;;
+esac
 umask 022
 scratch=$(mktemp -d /var/tmp/y700-mic-modules.XXXXXXXX)
 result=$(mktemp -d "$base/.y700-mic-result.XXXXXXXX")
@@ -45,10 +54,9 @@ bdcb10cbce42c563d2b4f8563779d3be62c8de7dca135470efc21a664d8a0957  vmlinux.o
 56c915a4585c9ba956e7f0f5573e4582912d47b3eb1bc217293935230aa28947  System.map
 4626edf0d6fc948d3ae91160b0497ce3f394d47bcbefc34f607e87559f015fef  sound/soc/qcom/sc8280xp.c
 37ad9373051ca515d2b33e3e38c3506f10dac003a71b8c82fcb7f81f2048a58b  sound/soc/codecs/lpass-tx-macro.c
+c6d1fe48ee9f9c00e6b311277bf58bab711b84a08add74f4e69563eab0920ee1  sound/soc/codecs/wcd938x.c
 HASH
 sha256sum --strict -c "$result/kernel-inputs.sha256"
-root_hash=e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb
-echo "$root_hash  $disk" | sha256sum --strict -c -
 release=$(cat include/config/kernel.release)
 [[ $release == 7.3.4-asphalt-prc ]]
 targets=(drivers/base/regmap/regmap-sdw.ko drivers/soundwire/soundwire-qcom.ko
@@ -63,7 +71,6 @@ original="$scratch/disk/usr/lib/modules/$release"
 mkdir -p "$stage/lib/modules" "$result/modules" "$result/closure"
 cp -a "$original" "$moddir"
 cd "$scratch/tree"
-patches=(config/kernel/asphalt-lpass-tx-stereo.patch config/kernel/asphalt-tx3-dma-map.patch)
 (cd "$repo" && sha256sum "${patches[@]}") > "$result/patches.sha256"
 for p in "${patches[@]}"; do patch --no-backup-if-mismatch --fuzz=0 -p1 < "$repo/$p"; done
 unset KBUILD_OUTPUT KCONFIG_CONFIG KBUILD_EXTMOD KBUILD_EXTRA_SYMBOLS KBUILD_MODPOST_WARN KBUILD_MODPOST_NOFINAL MODPROBE_OPTIONS

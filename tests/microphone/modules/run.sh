@@ -4,13 +4,29 @@ set -euo pipefail
 mode=shipped
 image_hash=4e23cb29a382da7d66f4476d72fd8ac3b11960749649875b00cd8453f4aa3bf1
 notes=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
+root_hash=e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb
+elf_manifest=643fcd01ad5b928ff99648b11189640f1cb551d9ac2dae5395623cd95aaae933
+stage_manifest=ccadea506a41b8883fc7d689d8c7e764129f4b3b520bf6a283321166e13a47e6
 if [[ ${1:-} == --build-base ]]; then
     shift
     mode=build-base
     image_hash=9afa9b69763b33133f20d137047084343c5e5465cbb1a0bbfa56b01b9d76b4db
     notes=2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066
+elif [[ ${1:-} == --dev12.12 || ${1:-} == --dev12.12-120 ]]; then
+    mode=${1#--}
+    shift
+    root_hash=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3
+    elf_manifest=091e21b852b20a4c0f85ac4204cdf82fccb897ff8e302a92c81099d8c407f28d
+    stage_manifest=f1b578a728d058be00c037fb3b20abb60506e5f96fb108dc6af75d1f31c24eee
+    if [[ $mode == dev12.12 ]]; then
+        image_hash=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
+        notes=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063
+    else
+        image_hash=b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625
+        notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+    fi
 fi
-[[ $# == 5 ]] || { echo 'Usage: run.sh [--build-base] KERNEL_IMAGE DEV12.9.ext4 MODULE_BUILD ARM64_BUSYBOX NEW_LOG_DIR' >&2; exit 2; }
+[[ $# == 5 ]] || { echo 'Usage: run.sh [--build-base|--dev12.12|--dev12.12-120] KERNEL_IMAGE SEALED_ROOT.ext4 MODULE_BUILD ARM64_BUSYBOX NEW_LOG_DIR' >&2; exit 2; }
 image=$(realpath -e "$1")
 disk=$(realpath -e "$2")
 build=$(realpath -e "$3")
@@ -23,9 +39,8 @@ work=$(mktemp -d "${TMPDIR:-/var/tmp}/y700-mic-load.XXXXXXXX")
 trap 'rm -r --one-file-system -- "$work"' EXIT
 release=7.3.4-asphalt-prc
 printf '%s  %s\n' "$image_hash" "$image" \
-    e40d2b7b297913c7200d2238f8f79d5a28926b983866cf09ca61f3dcbd8a0ddb "$disk" \
-    643fcd01ad5b928ff99648b11189640f1cb551d9ac2dae5395623cd95aaae933 "$build/SHA256SUMS" \
-    ccadea506a41b8883fc7d689d8c7e764129f4b3b520bf6a283321166e13a47e6 "$build/staged.sha256" > "$out/inputs.sha256"
+    "$root_hash" "$disk" "$elf_manifest" "$build/SHA256SUMS" \
+    "$stage_manifest" "$build/staged.sha256" > "$out/inputs.sha256"
 sha256sum --strict -c "$out/inputs.sha256"
 (cd "$build" && sha256sum --strict --quiet -c SHA256SUMS)
 (cd "$build/staged" && sha256sum --strict --quiet -c ../staged.sha256)
