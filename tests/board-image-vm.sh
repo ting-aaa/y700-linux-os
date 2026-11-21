@@ -2,6 +2,7 @@
 # Make a new sparse disk FILE and use QEMU copy-on-write for guest writes.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
+source "$repo/packaging/sd-trial/dual-release.sh"
 images=$(realpath -e "${1:?candidate directory}")
 board=$(realpath -e "${2:?board component directory}")
 qemu=$(realpath -e "${3:?extracted QEMU bundle}")
@@ -48,7 +49,9 @@ qa_options='console=ttyAMA0 loglevel=7 systemd.show_status=yes'
 if [[ -n "$card" ]]; then
     (cd "$card" && sha256sum -c SHA256SUMS)
     if mdir -b -i "$card/y700-test-card.img@@1048576" ::/loader/entries/debian-120.conf >/dev/null 2>&1; then
-        dual=1; payload_dir=y700-sd-12-12; selected=$payload_dir.conf
+        sd_release "$(mtype -i "$card/y700-test-card.img@@1048576" ::/loader/entries/debian.conf | sed -n 's/^title Y700 \(dev[0-9.]*\) .*/\1/p')"
+        [[ $package_digest == "$sd_inventory" ]]
+        dual=1; payload_dir=$sd_name; selected=$payload_dir.conf
         expected_root=$card/card-root.ext4
         cmp "$images/SHA256SUMS" "$card/SOURCE-SHA256SUMS"
         if [[ -n $variant ]]; then
@@ -150,6 +153,9 @@ mcopy -i "$esp" exported-options ::/exported-options
     printf 'fbdev=%s\n' "$fbdev"
     echo "split=$split"
     echo "dual=$dual"
+    if (( dual )); then
+        printf 'edition=%s\nsd_boot_uuid=%s\nsd_suffix=%s\n' "$edition" "$sd_boot_uuid" "$sd_suffix"
+    fi
     echo "expected_entry=$selected"
     echo "esp_label=$label"
     echo "logical_sector=$sector"
@@ -194,10 +200,10 @@ if [ "$split" = 1 ]; then
     if [ "$dual" = 1 ]; then
         test "$(blkid -s UUID -o value /dev/disk/by-partlabel/linux)" = "$root_uuid"
         test "$(blkid -s UUID -o value /dev/disk/by-partlabel/linux-boot)" = 171A-4ADB
-        test "$(findmnt -nro UUID -M /boot)" = 12DC-1212
+        test "$(findmnt -nro UUID -M /boot)" = "$sd_boot_uuid"
         grep -Fxq 'PARTLABEL=y700-test-root / ext4 defaults 0 1' /etc/fstab
-        grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
-        echo 'Y700_VM_SD_1212 ufs_root_uuid_collision=1 sd_esp=12DC-1212 ufs_esp=171A-4ADB'
+        grep -Fxq "IMAGE_VERSION=$edition" /etc/os-release
+        echo "Y700_VM_SD_$sd_suffix ufs_root_uuid_collision=1 sd_esp=$sd_boot_uuid ufs_esp=171A-4ADB"
     fi
     options=/run/y700-image-vm/exported-options
     echo 'Y700_VM_SPLIT_LAYOUT root_and_boot_card=1 card_sector=512 internal_sector=4096 internal_observer_ro=1'

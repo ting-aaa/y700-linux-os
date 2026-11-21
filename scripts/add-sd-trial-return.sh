@@ -4,10 +4,11 @@ set -euo pipefail
 umask 077
 program=y700-sd-trial-init
 change=sd-trial-return.patch
-if [[ ${1:-} == --dev12.12 ]]; then
-    shift; program=y700-dev1212-sd-init; change=dev12.12-sd-init.patch
+if [[ ${1:-} == --dev12.12 || ${1:-} == --dev12.13 ]]; then
+    program=y700-dev12${1##*.}-sd-init
+    shift; change=dev12.12-sd-init.patch
 fi
-[[ $# == 2 ]] || { echo 'Usage: add-sd-trial-return.sh [--dev12.12] ORIGINAL_INITRD NEW_INITRD' >&2; exit 2; }
+[[ $# == 2 ]] || { echo 'Usage: add-sd-trial-return.sh [--dev12.12|--dev12.13] ORIGINAL_INITRD NEW_INITRD' >&2; exit 2; }
 [[ ! -e $2 && ! -L $2 ]]
 src=$(realpath -e -- "$1")
 dest=$(realpath -m -- "$2")
@@ -20,8 +21,12 @@ printf '%s  %s\n' 6d3832e03eaea523a55c6bf12f90e1cf1146a34df1a264bdeefec9c8398d00
 gzip -dc "$src" | cpio --quiet -i --to-stdout init > original-init
 printf '%s  %s\n' 61d548300f6f66b8876757af2c0159046e1bc98e3cb36736a2d9e562fc574aac original-init | sha256sum --strict -c -
 patch --silent --fuzz=0 -o "$program" original-init "$repo/src/boot/$change"
-if [[ $program == y700-dev1212-sd-init ]]; then
+if [[ $change == dev12.12-sd-init.patch ]]; then
     printf '%s  %s\n' 335aa115fa6389816d93f161c9a722ef5ab1fafad8a774d1ef8903ada9453f98 "$program" | sha256sum -c -
+    if [[ $program == y700-dev1213-sd-init ]]; then
+        patch --silent --fuzz=0 "$program" "$repo/src/boot/dev12.13-sd-init.patch"
+        printf '%s  %s\n' 7c668ff6e15563edfd64db3a8033375e2cc497155c3da3878931b3c8b2a31fad "$program" | sha256sum -c -
+    fi
 fi
 chmod 755 "$program"
 touch -d @1795150416 "$program"

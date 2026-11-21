@@ -3,6 +3,7 @@
 # The caller supplies a NEW host directory. Deployment is a separate operation.
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
+source "$repo/packaging/sd-trial/dual-release.sh"
 bounded=0
 if [[ ${1:-} == --bounded-return ]]; then bounded=1; shift; fi
 [[ $# == 2 ]]
@@ -13,17 +14,18 @@ cd "$card"
 sha256sum -c SHA256SUMS
 card_esp=y700-test-card.img@@1048576
 if mdir -b -i "$card_esp" ::/loader/entries/debian-120.conf >/dev/null 2>&1; then
-    name=y700-sd-12-12
+    sd_release "$(mtype -i "$card_esp" ::/loader/entries/debian.conf | sed -n 's/^title Y700 \(dev[0-9.]*\) .*/\1/p')"
+    name=$sd_name
     mkdir -p "$out/EFI/$name" "$out/loader/entries"
     for file in kernel.efi kernel-120.efi board.dtb initrd; do
         mcopy -i "$card_esp" "::/EFI/debian/$file" "$out/EFI/$name/$file"
     done
     for variant in '' -120; do
         source_entry=$(mtype -i "$card_esp" "::/loader/entries/debian$variant.conf" | tr -d '\r')
-        expected=49a12578e3a92c39a3636c51a5fb06be932dfb915e47ac6b62794dda9b152d04
-        if [[ -n $variant ]]; then expected=3de4e351392958102ac3a325d2e5f517d206ba840a1307f25d9ba23574db3dfe; fi
+        expected=$sd_primary
+        if [[ -n $variant ]]; then expected=$sd_compat; fi
         [[ $(printf '%s\n' "$source_entry" | sha256sum | cut -d' ' -f1) == "$expected" ]]
-        sed -e 's/^title Y700 dev12.12 /title Y700 dev12.12 microSD /' \
+        sed -e "s/^title Y700 $edition /title Y700 $edition microSD /" \
             -e "s|/EFI/debian/|/EFI/$name/|g" <<<"$source_entry" >"$out/loader/entries/$name$variant.conf"
     done
     cd "$out/EFI/$name"
@@ -31,8 +33,8 @@ if mdir -b -i "$card_esp" ::/loader/entries/debian-120.conf >/dev/null 2>&1; the
 0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60  kernel.efi
 b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625  kernel-120.efi
 53bc719146da49baff7b975c06942892278639909e48d0f998b894220c7d05b7  board.dtb
-f024ed471d61cdad1033b6c88feeeb1e57a0690874154772a391ba3924211fc4  initrd
 HASHES
+    printf '%s  initrd\n' "$sd_initrd" | sha256sum --strict -c -
     cd "$out"
     sha256sum "EFI/$name/"{kernel.efi,kernel-120.efi,board.dtb,initrd} "loader/entries/$name"{,-120}.conf >SHA256SUMS
     exit

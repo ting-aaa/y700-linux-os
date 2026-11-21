@@ -14,12 +14,16 @@ if (label, sector) not in {('linux-boot', '4096'), ('y700-test-esp', '512')}:
 split = sys.argv[7] == '1'
 package_count = str(int(sys.argv[8])).encode()
 entry = sys.argv[9] if len(sys.argv) > 9 else 'y700-test.conf'
-sd_titles = {
-    'y700-sd-12-12.conf': b'Y700 dev12.12 microSD (60 / 120 Hz display)',
-    'y700-sd-12-12-120.conf': b'Y700 dev12.12 microSD (dev12.11 kernel, 120 Hz only)',
-}
-default_title = b'Y700 dev12.12 (60 / 120 Hz display)'
-titles = [default_title, b'Y700 dev12.12 (dev12.11 kernel, 120 Hz only)', *sd_titles.values()]
+sd_release = '13' if entry in ('y700-sd-12-13.conf', 'y700-sd-12-13-120.conf') else '12'
+title_prefix = f'Y700 dev12.{sd_release}'.encode()
+primary_title = b' (60 / 120 Hz display)'
+compat_title = b' (dev12.11 kernel, 120 Hz only)'
+sd_name = 'y700-sd-12-' + sd_release
+sd_titles = {sd_name + '.conf': title_prefix + b' microSD' + primary_title,
+             sd_name + '-120.conf': title_prefix + b' microSD' + compat_title}
+default_title = title_prefix + primary_title
+titles = [default_title, title_prefix + compat_title, *sd_titles.values()]
+sd_marker = f'Y700_VM_SD_12{sd_release} ufs_root_uuid_collision=1 sd_esp=12DC-12{sd_release} ufs_esp=171A-4ADB'.encode()
 expected = re.compile(b'Y700_BOOT_PASS image=' + re.escape(sys.argv[4].encode()) +
                       rb' root=/dev/(?P<disk>vd[ab])2 esp=/dev/(?P=disk)1 '
                       rb'kernel=7\.3\.4-asphalt-prc pid1=systemd packages=' + package_count +
@@ -80,7 +84,7 @@ with (vm / 'serial.log').open('xb', buffering=0) as log:
                     proc.stdin.flush()
                     menu_pending = False
                 selected |= f'Y700_VM_EFI_ENTRY selected={entry} loader_esp=internal'.encode() in recent
-                sd_identity |= b'Y700_VM_SD_1212 ufs_root_uuid_collision=1 sd_esp=12DC-1212 ufs_esp=171A-4ADB' in recent
+                sd_identity |= sd_marker in recent
                 efi_runtime |= b'efi: EFI v' in recent and b'by Das U-Boot' in recent
                 powered_down |= b'reboot: Power down' in recent
                 if passed is None and (match := expected.search(recent)):

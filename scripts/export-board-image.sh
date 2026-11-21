@@ -3,6 +3,7 @@
 set -euo pipefail
 umask 077
 repo=$(cd "$(dirname "$0")/.." && pwd)
+source "$repo/packaging/sd-trial/dual-release.sh"
 card_only=false
 if [[ ${1:-} == --card-only ]]; then
     [[ $# == 5 ]] || { echo 'Usage: export-board-image.sh --card-only IMAGES NEW_DIRECTORY CARD ENTRY' >&2; exit 2; }
@@ -47,16 +48,20 @@ if [[ -n ${card:-} ]]; then
         root_image=$candidate/root.ext4
         entry_options=(--bounded-return)
         readme=$repo/packaging/sd-trial/README.zh_CN.md
-        if grep -Fxq 'package_digest=ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047' "$candidate/identity.txt"; then
-            files=(EFI/y700-sd-12-12/{kernel.efi,kernel-120.efi,board.dtb,initrd} loader/entries/{y700-sd-12-12,y700-sd-12-12-120}.conf)
+        if mdir -b -i "$candidate/linux-boot.fat" ::/loader/entries/debian-120.conf >/dev/null 2>&1; then
+            sd_release "$(mtype -i "$candidate/linux-boot.fat" ::/loader/entries/debian.conf | sed -n 's/^title Y700 \(dev[0-9.]*\) .*/\1/p')"
+            grep -Fxq "$sd_esp  linux-boot.fat" "$candidate/SHA256SUMS"
+            grep -Fxq "$sd_root  root.ext4" "$candidate/SHA256SUMS"
+            grep -Fxq "package_digest=$sd_inventory" "$candidate/identity.txt"
+            files=("EFI/$sd_name/"{kernel.efi,kernel-120.efi,board.dtb,initrd} "loader/entries/$sd_name"{,-120}.conf)
             cmp "$candidate/SHA256SUMS" "$card/SOURCE-SHA256SUMS"
             root_image=$card/card-root.ext4
             entry_options=()
-            readme=$repo/packaging/sd-trial/dev12.12.zh_CN.md
+            readme=$repo/packaging/sd-trial/$edition.zh_CN.md
             [[ $(stat -c %s "$root_image") == 6442450944 ]]
-            debugfs -R 'cat /etc/os-release' "$root_image" 2>/dev/null | grep -Fxq IMAGE_VERSION=dev12.12
+            debugfs -R 'cat /etc/os-release' "$root_image" 2>/dev/null | grep -Fxq "IMAGE_VERSION=$edition"
             debugfs -R 'cat /var/lib/y700/build/packages.tsv' "$root_image" 2>/dev/null |
-                sha256sum | grep -Eq '^5fa586a125d52580771c923bec05985e32906be36acf1b88dec29e5791b89ccd '
+                sha256sum | grep -Fq "$sd_ledger  -"
         else
             files=(EFI/y700-test/kernel.efi EFI/y700-test/board.dtb EFI/y700-test/initrd loader/entries/y700-test.conf)
         fi

@@ -4,6 +4,7 @@ set -euo pipefail
 export LC_ALL=C TZ=UTC
 umask 077
 repo=$(realpath -e "$(dirname "$0")/..")
+source "$repo/packaging/sd-trial/dual-release.sh"
 images=$(realpath -e "${1:?completed candidate directory}")
 out=$(realpath -m "${2:?new card output directory}")
 mkdir -m700 -- "$out"
@@ -26,27 +27,34 @@ layout=$'label: gpt\nunit: sectors\n\nstart=2048, size=2097152, type=uefi, name=
 if [[ -f esp/loader/entries/debian-120.conf ]]; then
     # The generic initrd authenticates the root UUID, then chooses the root by physical
     # controller and GPT label. Give /boot a distinct FAT UUID when UFS is also present.
-    printf '%s  %s\n' 1f6d75c17b5f38ff69d57e13c671bd0c1cbccf0c74cf1ea3f79e2011445ed091 "$images/linux-boot.fat" | sha256sum --strict -c -
-    grep -Fxq '5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3  root.ext4' "$images/SHA256SUMS"
+    sd_release "$(sed -n 's/^title Y700 \(dev[0-9.]*\) .*/\1/p' esp/loader/entries/debian.conf)"
+    grep -Fxq "$sd_esp  linux-boot.fat" "$images/SHA256SUMS"
+    grep -Fxq "$sd_root  root.ext4" "$images/SHA256SUMS"
+    grep -Fxq "package_digest=$sd_inventory" "$images/identity.txt"
     cp "$images/SHA256SUMS" SOURCE-SHA256SUMS
-    bash "$repo/scripts/add-sd-trial-return.sh" --dev12.12 esp/EFI/debian/initrd sd-initrd
+    bash "$repo/scripts/add-sd-trial-return.sh" "--$edition" esp/EFI/debian/initrd sd-initrd
     mv -T sd-initrd esp/EFI/debian/initrd
     for bls in esp/loader/entries/debian{,-120}.conf; do
         grep -Eq '^options rdinit=/init root=PARTLABEL=y700-test-root y700.media=sd ' "$bls"
         if grep -Eq '(^| )panic=' "$bls"; then exit 1; fi
-        sed -i '/^options /{ s| rdinit=/init | rdinit=/y700-dev1212-sd-init |; s/$/ panic=15/; }' "$bls"
+        sed -i "/^options /{ s| rdinit=/init | rdinit=/y700-dev${sd_suffix}-sd-init |; s/$/ panic=15/; }" "$bls"
     done
     rootuuid=$(blkid -p -s UUID -o value "$root")
     [[ $rootuuid == 171a4adb-916b-4763-9e6f-722b4a99988f && $fatid == 171A4ADB ]]
     epoch=$(date -d "$(dumpe2fs -h "$root" 2>/dev/null | sed -n 's/^Last write time: *//p')" +%s)
     export SOURCE_DATE_EPOCH=$epoch MTOOLSRC=/dev/null
-    fatid=12DC1212; format=(--invariant)
-    layout=$'label: gpt\nlabel-id: d17cdf76-0a43-57e1-be65-a009653b8c77\nunit: sectors\n\nstart=2048, size=2097152, type=uefi, uuid=312462af-8174-5749-ae6c-b4fae22ab28d, name=y700-test-esp\nstart=2099200, size=12582912, type=linux, uuid=fbb98ccc-c5e5-5fd3-b055-b51b1dfa69d1, name=y700-test-root'
+    fatid=${sd_boot_uuid/-/}; format=(--invariant)
+    layout="label: gpt
+label-id: $sd_disk_id
+unit: sectors
+
+start=2048, size=2097152, type=uefi, uuid=$sd_esp_id, name=y700-test-esp
+start=2099200, size=12582912, type=linux, uuid=$sd_root_id, name=y700-test-root"
     debugfs -R 'cat /etc/fstab' "$root" >original.fstab
     grep -Fxq "UUID=$rootuuid / ext4 defaults 0 1" original.fstab
     grep -Fxq 'UUID=171A-4ADB /boot vfat umask=0077 0 2' original.fstab
     sed -e "s|^UUID=$rootuuid / |PARTLABEL=y700-test-root / |" \
-        -e 's|^UUID=171A-4ADB /boot |UUID=12DC-1212 /boot |' original.fstab >card.fstab
+        -e "s|^UUID=171A-4ADB /boot |UUID=$sd_boot_uuid /boot |" original.fstab >card.fstab
     chmod 644 card.fstab; touch -d "@$epoch" card.fstab
     cp --sparse=always --reflink=auto "$root" card-root.ext4
     chmod u+w card-root.ext4

@@ -1,0 +1,25 @@
+--- y700-dev1212-sd-init
++++ y700-dev1213-sd-init
+@@ -47,10 +47,10 @@
+ fi
+ mount -t ext4 -o ro,noload "$rootdev" /newroot || fail 'Read-only root check failed'
+ [ "$(cat /newroot/etc/y700/image-id)" = y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f ] || fail 'Unexpected image identity'
+-grep -Fxq 'IMAGE_VERSION=dev12.12' /newroot/etc/os-release || fail "Wrong SD release"
+-echo "4ea6e1bd96aee71bb57b4a352d0c7affa325645829b3ee75e12d3fa0c49990a7  /newroot/var/lib/y700/build/platform-desktop-update.lock.json" | sha256sum -c - >/dev/null || fail "Unexpected SD desktop release receipt"
++grep -Fxq 'IMAGE_VERSION=dev12.13' /newroot/etc/os-release || fail "Wrong SD release"
++echo "3dd7e2df8f918e4012f95ea536eaca782bf4a27bdc584af8d35d34fe59d4e123  /newroot/var/lib/y700/build/tablet-desktop.lock.json" | sha256sum -c - >/dev/null || fail "Unexpected SD desktop release receipt"
+ grep -Fxq 'PARTLABEL=y700-test-root / ext4 defaults 0 1' /newroot/etc/fstab || fail "Wrong SD root mount"
+-grep -Fxq 'UUID=12DC-1212 /boot vfat umask=0077 0 2' /newroot/etc/fstab || fail "Wrong SD boot mount"
++grep -Fxq 'UUID=12DC-1213 /boot vfat umask=0077 0 2' /newroot/etc/fstab || fail "Wrong SD boot mount"
+ root_path=$(readlink -f "/sys/class/block/${rootdev##*/}")
+ parent=${root_path%/*}
+ bootdev=
+@@ -62,7 +62,7 @@
+ done
+ [ -b "$bootdev" ] || fail "Missing SD sibling ESP"
+ serial=$(dd if="$bootdev" bs=1 skip=67 count=4 2>/dev/null | hexdump -ve '1/1 "%02x"')
+-[ "$serial" = 1212dc12 ] || fail "Wrong SD sibling FAT serial"
++[ "$serial" = 1312dc12 ] || fail "Wrong SD sibling FAT serial"
+ umount /newroot || fail 'Cannot release read-only mount'
+ mount -t ext4 -o rw "$rootdev" /newroot || fail 'Cannot mount root read-write'
+ echo "y700-init: verified y700-prc-171a4adb-916b-4763-9e6f-722b4a99988f on $rootdev ($label)"
