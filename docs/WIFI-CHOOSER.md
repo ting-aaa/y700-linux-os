@@ -2,6 +2,8 @@
 
 On the installed dev12.10 tablet, the saved Wi-Fi profile connected after the second reboot. The wireless interface received replies to all three probes to each of its IPv4 and IPv6 default routers. The tablet used the distribution versions of NetworkManager and wpa_supplicant. [Physical installation](DEV12.10-INSTALLATION.md)
 
+The same tablet subsequently received the verified two-package SAE update over its maintenance USB link. Both running daemons matched their installed binaries. The two saved profiles retained their original bytes, the previous active profile reconnected and its station exposed `AuthStatusCode=0`. Both gateway checks again returned 3/3. The existing SSH and LightDM processes kept their systemd invocation IDs. The original Debian packages are available on the tablet in `/var/lib/y700/updates/wifi-sae1/stock`. The new inventory contains the same 1,240 packages with only those two versions changed. [Update and rollback procedure](WIFI-PASSWORD-RETRY.md)
+
 An optional update passed two WPA3 password-recovery tests in ARM64 QEMU. With hostapd 2.11 the ordinary Xfce applet reopened the password dialog after SAE status 15. With hostapd 2.10 the station reported status 1, and a second selection of the same access point requested a replacement password from the same user's SecretAgent. A missing access point caused no password request. Both corrected connections negotiated SAE and protected management frames, obtained an address and passed traffic. The legacy run exercised the agent protocol. Physical touchscreen password recovery remains open. [Offline update and rollback](WIFI-PASSWORD-RETRY.md) · [Legacy test](../tests/wifi-sae-retry/README.md)
 
 ## Radio bands and reconnection on the physical tablet

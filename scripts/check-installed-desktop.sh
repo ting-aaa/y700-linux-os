@@ -52,7 +52,13 @@ if [[ $mode == candidate ]]; then
     records=$(dpkg-query -W -f='${db:Status-Status}\t${Package}\t${Version}\t${Architecture}\n' |
         sed -n 's/^installed\t//p' | sort)
     check installed_packages_1240 test "$(printf '%s\n' "$records" | wc -l)" = 1240
-    check installed_versions test "$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)" = ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3
+    case $(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1) in
+        ffb8818f1fd41efb3b7c7a14782abd62b37bf5dd687cfaa923d3419d785f51c3)
+            echo 'PASS installed_versions dev12.10' ;;
+        2d180b436086b9015044bff4053c314de4b63bce4f5406baffcd1ebce79a67d8)
+            echo 'PASS installed_versions dev12.10 with Wi-Fi SAE update' ;;
+        *) check installed_versions false ;;
+    esac
     check migration_receipt grep -Fxq 'dev12.10 personal files verified, USB identity retained' "$origin/var/lib/y700-trial/dev12.10/installed.ok"
     check machine_identity_retained cmp -s /etc/machine-id "$origin/etc/machine-id"
     check bluetooth_identity_retained cmp -s /etc/y700/bluetooth-address "$origin/etc/y700/bluetooth-address"
