@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Camera display orientation
+Exec=/usr/libexec/y700-camera-orientation
+OnlyShowIn=XFCE;
+NoDisplay=true

@@ -5,8 +5,10 @@
 set -euo pipefail
 export LC_ALL=C
 umask 022
+orientation=false
+if [[ ${1:-} == --display-orientation ]]; then orientation=true; shift; fi
 if [[ $# != 3 ]]; then
-    echo 'Usage: build-camera-pipewire.sh PIPEWIRE_SOURCE_ARCHIVES CAMERA_SDK OUTPUT' >&2
+    echo 'Usage: build-camera-pipewire.sh [--display-orientation] PIPEWIRE_SOURCE_ARCHIVES CAMERA_SDK OUTPUT' >&2
     exit 2
 fi
 sources=$(realpath -e -- "$1")
@@ -17,6 +19,7 @@ assets=$repo/packaging/camera-pipewire
 package=y700-camera-pipewire
 version=1.4.2-1+y700.3
 runtime_version=0.7.2-1~bpo13+1.y7001
+if $orientation; then version=1.4.2-1+y700.5; fi
 if [[ $(dpkg --print-architecture) != arm64 || $(. /etc/os-release; echo "$VERSION_CODENAME") != trixie ]]; then
     echo 'Use an ARM64 Debian trixie build root.' >&2
     exit 1
@@ -45,6 +48,10 @@ EOF
 
 dpkg-source --no-check -x "$sources/pipewire_1.4.2-1.dsc" source
 patch -d source -p1 --batch --forward <"$assets/libcamera-0.7.patch"
+if $orientation; then
+    patch -d source -p1 --batch --forward --fuzz=0 <"$assets/panel-orientation.patch"
+    install -m644 "$assets/panel-orientation.h" source/spa/plugins/libcamera/
+fi
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(date -u -d "$(dpkg-parsechangelog -l source/debian/changelog -S Date)" +%s)}
 # The SDK supplies headers, the installed private runtime supplies both DSOs.
 mkdir -p sdk/lib/pkgconfig
@@ -96,7 +103,19 @@ cat > debian/shlibs.local <<EOF
 libcamera 0.7 y700-camera-runtime (= $runtime_version)
 libcamera-base 0.7 y700-camera-runtime (= $runtime_version)
 EOF
-libs=$(dpkg-shlibdeps -O -l/opt/y700-camera/lib -xy700-camera-runtime "${so#"$work"/}")
+elfs=("${so#"$work"/}")
+runtime_dep="y700-camera-runtime (= $runtime_version)"
+if $orientation; then
+    helper=$stage/usr/libexec/y700-camera-orientation
+    mkdir -p "$(dirname "$helper")"
+    cc -O2 -Wall -Wextra -Werror "$assets/panel-orientation.c" -lX11 -lXrandr -o "$helper"
+    strip --strip-unneeded "$helper"
+    install -Dm644 "$assets/y700-camera-orientation.desktop" "$stage/etc/xdg/autostart/y700-camera-orientation.desktop"
+    echo /etc/xdg/autostart/y700-camera-orientation.desktop >> "$stage/DEBIAN/conffiles"
+    elfs+=("${helper#"$work"/}")
+    runtime_dep="$runtime_dep | y700-camera-runtime (= 0.7.2-1~bpo13+1.y7002)"
+fi
+libs=$(dpkg-shlibdeps -O -l/opt/y700-camera/lib -xy700-camera-runtime "${elfs[@]}")
 [[ $libs == shlibs:Depends=* ]]
 cat > "$stage/DEBIAN/control" <<EOF
 Package: $package
@@ -106,7 +125,7 @@ Maintainer: Y700 Linux OS contributors <maintainers@example.invalid>
 Section: video
 Priority: optional
 Installed-Size: $(du -sk "$stage" | cut -f1)
-Depends: libspa-0.2-modules (= 1.4.2-1), wireplumber (>= 0.5), y700-camera-runtime (= $runtime_version), ${libs#shlibs:Depends=}
+Depends: libspa-0.2-modules (= 1.4.2-1), wireplumber (>= 0.5), $runtime_dep, ${libs#shlibs:Depends=}
 Provides: libspa-0.2-libcamera (= 1.4.2-1)
 Conflicts: libspa-0.2-libcamera
 Replaces: libspa-0.2-libcamera

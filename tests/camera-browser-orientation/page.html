@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; style-src 'unsafe-inline'; media-src 'self' blob:">
+<title>Y700 camera orientation fixture</title>
+<style>body { margin:0; background:#111 } video { display:block; margin:20px; width:360px; height:300px; object-fit:contain }</style>
+<video autoplay muted playsinline></video>
+<script>
+async function submit(path, data) {
+  const response = await fetch(path, {method:"POST",body:JSON.stringify(data)});
+  if (!response.ok) throw Error(path);
+}
+async function measure() {
+  const media = navigator.mediaDevices;
+  if (!window.isSecureContext) throw Error("secure context");
+  const initial = await media.getUserMedia({video:true});
+  initial.getTracks().forEach(t => t.stop());
+  const devices = await media.enumerateDevices();
+  const video = document.querySelector("video");
+  for (const [lens,label,alias] of [["main","Y700 Rear Camera","y700_camera_rear"],["front","Y700 Front Camera","y700_camera_front"]]) {
+    const matches=devices.filter(d => d.kind==="videoinput" && [label,alias].includes(d.label));
+    if(matches.length!==1) throw Error("cannot select "+lens+" from "+devices.map(d=>d.label).join(","));
+    const device=matches[0];
+    const stream=await media.getUserMedia({video:{deviceId:{exact:device.deviceId},width:{exact:640},height:{exact:480}},audio:false});
+    const track=stream.getVideoTracks()[0];
+    try {
+      if(track.label!==device.label || track.getSettings().deviceId!==device.deviceId) throw Error("incorrect track");
+      video.srcObject=stream;
+      await video.play();
+      for(const rotation of ["left","right"]) {
+        await submit("/rotate",{rotation});
+        let count=0,previous=-1;
+        await new Promise((resolve,reject) => {
+          const timeout=setTimeout(()=>reject(Error("new frames timed out")),18000);
+          function frame(_,m) {
+            if(m.presentedFrames<=previous) {clearTimeout(timeout);reject(Error("nonmonotonic frame"));return;}
+            previous=m.presentedFrames;
+            if(++count===8) {clearTimeout(timeout);resolve();}
+            else video.requestVideoFrameCallback(frame);
+          }
+          video.requestVideoFrameCallback(frame);
+        });
+        const canvas=document.createElement("canvas");
+        canvas.width=4; canvas.height=4;
+        const ctx=canvas.getContext("2d");ctx.drawImage(video,0,0,4,4);
+        const rgb=ctx.getImageData(0,0,4,4).data;
+        function color(i) {
+          const [r,g,b]=rgb.slice(i*4,i*4+3);
+          if(Math.min(r,g)>b+55 && Math.abs(r-g)<75) return "Y";
+          if(r>Math.max(g,b)+55) return "R";
+          if(g>Math.max(r,b)+55) return "G";
+          if(b>Math.max(r,g)+55) return "B";
+          return "-";
+        }
+        await submit("/sample",{lens,rotation,frames:count,width:video.videoWidth,height:video.videoHeight,
+          corners:[0,3,12,15].map(color).join("")});
+      }
+    } finally {stream.getTracks().forEach(t=>t.stop());video.srcObject=null;}
+  }
+  await submit("/done",{});
+}
+measure().catch(error=>submit("/error",{error:String(error)}));
+</script>

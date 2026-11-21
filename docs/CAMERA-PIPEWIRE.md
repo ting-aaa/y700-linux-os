@@ -78,3 +78,17 @@ uv run --offline --no-project --python /usr/bin/python3 python -m http.server 87
 ```
 
 Attended work includes granting access by touch in the daily user session, checking the preview on the built-in panel, switching cameras in a third-party conferencing or Flatpak app, and evaluating orientation and still-image quality. Main-camera autofocus and rear flash have separate driver work. [qcam controls](QCAM.md) · [Focus and flash](CAMERA-FOCUS-FLASH.md)
+
+## Optional Xfce browser orientation update
+
+The stock .4 backend produced the same portrait image when the internal panel changed from left landscape to right landscape. In the dev12.12 ARM64 regression, the front and rear main camera each retained the same 480×640 corner order in both directions. The expected order is known from their different board mountings and an asymmetric four-colour input. [Test, expected corners and reproduction](../tests/camera-browser-orientation/README.md)
+
+The opt-in `y700-camera-pipewire` version `1.4.2-1+y700.5` includes an Xfce autostart helper that reads the active DSI-1 RandR CRTC. It publishes the current rotation in an eight-byte, owner-only file in the user's runtime directory. Only the three known integrated camera IDs combine that rotation with their negotiated SPA buffer orientation. The front camera accounts for its opposite facing. Each captured buffer can reflect a change during an open track. When a session stops reporting, its rotation expires after six seconds. The helper needs display metadata and has no camera or recording role.
+
+In the ARM64 VM, Chromium's unmirrored video element and the mapped X11 client window both presented the expected four corners in all four tested cases with .5. Each remained 640×480, with eight successive presentation callbacks per case. The fixture verified both genuine permission dialogs and the renderer's seccomp filter and PID namespace. These results use virtual cameras and a VKMS panel. The all-lens tablet streaming checks above remain separate.
+
+Build with `scripts/build-camera-pipewire.sh --display-orientation ARCHIVES SDK OUTPUT` in the existing arm64 Debian build environment. The historical invocation without that option still produces .3, which the sealed autofocus release wraps as .4. The signed-input checks and both private-runtime alternatives apply to the opt-in package. [Backend builder](../scripts/build-camera-pipewire.sh)
+
+Schedule installation or rollback while the user has finished camera and media use. Keep both .deb files. A normal logout and next Xfce login starts the watcher in the proper display environment and permits the camera SPA to reload. For an already running desktop, the watcher belongs to that user's X11 session. Restarting WirePlumber can interrupt audio or active captures, so defer that operation to an agreed idle point. Confirm that the active WirePlumber process has loaded the installed plugin and that the watcher is running before judging the browser result.
+
+In a disposable copy of the sealed root, installing .5 and then downgrading to .4 both passed the package dependency check. Debian retained the obsolete autostart conffile on downgrade. Its original SHA-256 is `182ed10efb22af8230800dc2571a1d4dbde2b94fc33009c8037652e1414c0276`. If cleanup is needed after .4 has returned, remove it only when its contents still match. The .4 package has no display watcher.
