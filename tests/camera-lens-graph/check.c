@@ -51,7 +51,7 @@ static int open_media(const char *node)
     return fd;
 }
 
-static void query_range(const char *node, dev_t expected)
+static void query_range(const char *node, dev_t expected, int check_limits)
 {
     struct stat st;
     if (lstat(node, &st) || !S_ISCHR(st.st_mode) || st.st_rdev != expected)
@@ -65,6 +65,12 @@ static void query_range(const char *node, dev_t expected)
     if (q.type != V4L2_CTRL_TYPE_INTEGER || (q.flags & V4L2_CTRL_FLAG_DISABLED)
         || q.minimum >= q.maximum || !q.step || q.default_value < q.minimum
         || q.default_value > q.maximum) fail("invalid FOCUS_ABSOLUTE metadata");
+    if (check_limits) {
+        if (q.minimum < 0 || q.maximum > 1023 || q.step != 1)
+            fail("unexpected 10-bit focus range or step");
+        puts("FOCUS_ABSOLUTE ordered=1 within_10_bits=1 step=1 default_in_range=1");
+        return;
+    }
     printf("FOCUS_ABSOLUTE min=%lld max=%lld step=%llu default=%lld flags=0x%x\n",
            (long long)q.minimum, (long long)q.maximum, (unsigned long long)q.step,
            (long long)q.default_value, q.flags);
@@ -72,8 +78,9 @@ static void query_range(const char *node, dev_t expected)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3 && !(argc == 5 && !strcmp(argv[3], "--query-range"))) {
-        fputs("Usage: lens-graph MEDIA_NODE EXACT_SENSOR [--query-range LENS_SUBDEV_NODE]\n", stderr);
+    int check_limits = argc == 5 && !strcmp(argv[3], "--check-limits");
+    if (argc != 3 && !(argc == 5 && (!strcmp(argv[3], "--query-range") || check_limits))) {
+        fputs("Usage: lens-graph MEDIA_NODE EXACT_SENSOR [--query-range|--check-limits LENS_SUBDEV_NODE]\n", stderr);
         return 2;
     }
     int fd = open_media(argv[1]);
@@ -127,7 +134,7 @@ int main(int argc, char **argv)
     printf("LENS_GRAPH sensor=\"%s\" lens=\"%s\" interface=%u:%u\n",
            sensor->name, lens->name, intf->devnode.major, intf->devnode.minor);
     if (argc == 5)
-        query_range(argv[4], makedev(intf->devnode.major, intf->devnode.minor));
+        query_range(argv[4], makedev(intf->devnode.major, intf->devnode.minor), check_limits);
     close(fd);
     free(entities); free(interfaces); free(links);
     return 0;

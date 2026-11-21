@@ -6,7 +6,8 @@ mode=recovery; prefix=y700-installed-recovery-qarecovery
 if [[ ${1:-} == --rtc1 ]]; then shift; mode=rtc1; prefix=y700-installed-rtc1-qartc; fi
 if [[ ${1:-} == --cci0 ]]; then shift; mode=cci0; prefix=y700-installed-cci0-qacci; fi
 if [[ ${1:-} == --ldo5 ]]; then shift; mode=ldo5; prefix=y700-installed-ldo5-qaldo; fi
-[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0|--ldo5] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
+if [[ ${1:-} == --gt9768 ]]; then shift; mode=gt9768; prefix=y700-installed-gt9768-qafocus; fi
+[[ $# == 5 ]] || { echo 'Usage: recovery-firmware.sh [--rtc1|--cci0|--ldo5|--gt9768] MENU_QA_DIR VIRT_UBOOT VIRT_DTB ARM64_BUSYBOX EFIVARFS_KO_ZSTD' >&2; exit 2; }
 work=$(realpath -e "$1")
 bios=$(realpath -e "$2"); dt=$(realpath -e "$3"); busy=$(realpath -e "$4")
 efivarfs=$(realpath -e "$5")
@@ -70,24 +71,37 @@ case "$selected" in
         test ! -e /proc/device-tree/soc@0/cci@ac15000/assigned-clock-rates
         echo "CCI0_EFI selected=$selected virtual_assignment=0"
         poweroff -f ;;
-    y700-installed-ldo5-qaldo-trial.conf|y700-installed-ldo5-qaldo-base.conf)
+    y700-installed-ldo5-qaldo-trial.conf|y700-installed-ldo5-qaldo-base.conf|\
+    y700-installed-gt9768-qafocus-trial.conf|y700-installed-gt9768-qafocus-base.conf)
         grep -Fwq y700.recovery=journal /proc/cmdline
         aux=/proc/device-tree/soc@0/cci@ac15000/i2c-bus@0/camera@20/aux-supply
         rail=/proc/device-tree/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators/ldo5/phandle
         notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
-        if [ "$selected" = y700-installed-ldo5-qaldo-trial.conf ]; then
-            grep -Fwq y700.ldo_probe=ldo5 /proc/cmdline
-            grep -Fwq y700.installed_trial=qaldo /proc/cmdline
+        case $selected in
+            *gt9768*) kind=GT9768; token=y700.focus_probe=gt9768; run=qafocus; expected=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ;;
+            *) kind=LDO5; token=y700.ldo_probe=ldo5; run=qaldo; expected=b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7 ;;
+        esac
+        slot=/proc/device-tree/soc@0/cci@ac15000/i2c-bus@0
+        if [ "${selected##*-}" = trial.conf ]; then
+            grep -Fwq "$token" /proc/cmdline
+            grep -Fwq "y700.installed_trial=$run" /proc/cmdline
             test "$(od -An -tx1 "$rail" | tr -d ' \n')" = 000000e4
             cmp "$rail" "$aux"
-            test "$notes" = b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7
-            echo "LDO5_EFI selected=$selected virtual_supply=1 notes=$notes"
+            test "$notes" = "$expected"
+            if [ "$kind" = GT9768 ]; then
+                test "$(od -An -tx1 "$slot/lens@c/reg" | tr -d ' \n')" = 0000000c
+                cmp "$slot/camera@20/lens-focus" "$slot/lens@c/phandle"
+                cmp "$slot/lens@c/vaf-supply" /proc/device-tree/soc@0/rsc@17a00000/regulators-1/bob/phandle
+            fi
+            echo "${kind}_EFI selected=$selected virtual_supply=1 notes=$notes"
             reboot -f
         else
-            if grep -Eq ' y700\.(installed_trial|ldo_probe)=' /proc/cmdline; then exit 1; fi
+            if grep -Eq ' y700\.(installed_trial|ldo_probe|focus_probe)=' /proc/cmdline; then exit 1; fi
             test ! -e "$aux"
+            test ! -e "$slot/camera@20/lens-focus"
+            test ! -e "$slot/lens@c"
             test "$notes" = c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
-            echo "LDO5_EFI selected=$selected virtual_supply=0 notes=$notes"
+            echo "${kind}_EFI selected=$selected virtual_supply=0 notes=$notes"
             poweroff -f
         fi ;;
     *) exit 1 ;;
@@ -101,10 +115,10 @@ mkfs.fat -F16 -S4096 esp4k.fat >/dev/null
 mkdir sources
 mcopy -s -i ../menu.fat '::/EFI' sources/
 mcopy -i esp4k.fat -s sources/EFI ::/
-if [[ $mode == ldo5 ]]; then
-    mmd -i esp4k.fat ::/EFI/y700-ldo5-12-10
+if [[ $mode == ldo5 || $mode == gt9768 ]]; then
+    mmd -i esp4k.fat "::/EFI/y700-$mode-12-10"
     # The transaction fixture retained the exact staged kernel from its FAT.
-    mcopy -i esp4k.fat ../armed-probe/kernel.efi ::/EFI/y700-ldo5-12-10/kernel.efi
+    mcopy -i esp4k.fat ../armed-probe/kernel.efi "::/EFI/y700-$mode-12-10/kernel.efi"
 fi
 mcopy -i esp4k.fat -s ../armed-loader ::/loader
 mcopy -i esp4k.fat "$dt" ::/EFI/qa-virt.dtb
@@ -121,13 +135,26 @@ elif [[ $mode == cci0 ]]; then
     fdtput -p -t x cci0-virt.dtb "$node" assigned-clocks da 8
     fdtput -t u cci0-virt.dtb "$node" assigned-clock-rates 37500000
     mcopy -i esp4k.fat cci0-virt.dtb ::/EFI/qa-cci0-virt.dtb
-elif [[ $mode == ldo5 ]]; then
-    cp "$dt" ldo5-virt.dtb
+elif [[ $mode == ldo5 || $mode == gt9768 ]]; then
+    virtual=$mode-virt.dtb
+    cp "$dt" "$virtual"
     rail=/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators/ldo5
     slot=/soc@0/cci@ac15000/i2c-bus@0/camera@20
-    fdtput -p -t x ldo5-virt.dtb "$rail" phandle e4
-    fdtput -p -t x ldo5-virt.dtb "$slot" aux-supply e4
-    mcopy -i esp4k.fat ldo5-virt.dtb ::/EFI/qa-ldo5-virt.dtb
+    fixture_cell() {
+        local value
+        value=$(fdtget -t x ../armed-probe/board.dtb "$1" "$2")
+        [[ $value =~ ^[[:xdigit:]]+$ ]]
+        fdtput -p -t x "$virtual" "$1" "$2" "$value"
+    }
+    fixture_cell "$rail" phandle
+    fixture_cell "$slot" aux-supply
+    if [[ $mode == gt9768 ]]; then
+        lens=${slot%/*}/lens@c
+        fixture_cell "$slot" lens-focus
+        for prop in reg phandle vaf-supply; do fixture_cell "$lens" "$prop"; done
+        fixture_cell /soc@0/rsc@17a00000/regulators-1/bob phandle
+    fi
+    mcopy -i esp4k.fat "$virtual" "::/EFI/qa-$virtual"
 fi
 for original in ../armed-loader/entries/y700-installed-*.conf; do
     qa_dt=/EFI/qa-virt.dtb

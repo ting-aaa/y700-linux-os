@@ -22,6 +22,9 @@ name=$($b sed -n 's/^DEVNAME=//p' "/sys/dev/char/$devnum/uevent")
 range=$(/check "$media" 'Sensor A' --query-range "/dev/$name")
 echo "$range"
 echo "$range" | $b grep -q '^FOCUS_ABSOLUTE min=0 max=1023 step=1 default=0 '
+limits=$(/check "$media" 'Sensor A' --check-limits "/dev/$name")
+echo "$limits" | $b grep -Fx 'FOCUS_ABSOLUTE ordered=1 within_10_bits=1 step=1 default_in_range=1'
+if echo "$limits" | $b grep -Eq '(^| )(min|max|default)='; then exit 1; fi
 if /check "$media" 'Sensor B' --query-range "/dev/$name"; then exit 1; fi
 if /check "$media" 'Missing Sensor'; then exit 1; fi
 $b rmmod vimc

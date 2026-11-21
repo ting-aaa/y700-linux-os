@@ -2,7 +2,7 @@
 # Build a single-boot probe which retains the installed recovery initrd.
 set -euo pipefail
 umask 077
-[[ $# == 4 ]] || { echo 'Usage: build-dt-probe-entry.sh --rtc1|--cci0 RECOVERY_ENTRY PROBE_DTB NEW_DIRECTORY, or --ldo5 RECOVERY_ENTRY IMAGE_DIRECTORY NEW_DIRECTORY' >&2; exit 2; }
+[[ $# == 4 ]] || { echo 'Usage: build-dt-probe-entry.sh --rtc1|--cci0 RECOVERY_ENTRY PROBE_DTB NEW_DIRECTORY, or --ldo5|--gt9768 RECOVERY_ENTRY IMAGE_DIRECTORY NEW_DIRECTORY' >&2; exit 2; }
 kernel_hash=
 case $1 in
     --rtc1)
@@ -20,7 +20,15 @@ case $1 in
         title='HI1339 LDO5 probe'; option=y700.ldo_probe=ldo5
         tree_hash=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
         kernel_hash=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
+        notes_hash=b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7
         manifest=ec8957894bdbc40d2a9abd07a98c54f1066bb081c4bfd2887a42fe2e09eae6c5 ;;
+    --gt9768)
+        name=y700-gt9768-12-10
+        title='GT9768 calibrated lens probe'; option=y700.focus_probe=gt9768
+        tree_hash=a178f9de454d0e8aa5b474c91b4280da3aadc6aad0622c0120661447d836209f
+        kernel_hash=b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625
+        notes_hash=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+        manifest=06049cd22b6a4bb0cd98df8ddbb257569fc2431e4033e7fa59f3663d38fed621 ;;
     *) exit 2 ;;
 esac
 shift
@@ -29,7 +37,7 @@ if [[ -n $kernel_hash ]]; then
     image=$(realpath -e "$2")
     dtb=$image/board.dtb
     (cd "$image"; sha256sum --strict -c <<<"$kernel_hash  kernel.efi
-b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7  notes")
+$notes_hash  notes")
 else
     dtb=$(realpath -e "$2")
 fi

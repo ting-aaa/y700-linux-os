@@ -118,3 +118,19 @@ bash scripts/manage-file-trial-entry.sh --dev12.10-ldo5 remove "$work/entry" "$O
 ```
 
 The 16,056,721-byte archive has SHA-256 `97573e56f3b1a9b39a2457abb456454e8ebe812798bdfbc9e7b87c4bb9c92663`. Repeat the FAT transaction and ARM64 firmware fixture above with `--ldo5`. The EFI guest executed the exact probe kernel on the counted boot and the exact previous kernel on the second boot. The observer read their distinct notes and a synthetic auxiliary supply reference on the virtual tree. Traces are in `out/dev12.10-ldo5-trial/`. Physical regulator activity and hardware identification require separate evidence.
+
+## Single-boot GT9768 lens probe
+
+The lens candidate pairs a dedicated kernel and device tree with the installed dev12.10 recovery initrd. Its HI1339 sensor at address `0x20` references the GT9768 at `0x0c` through `lens-focus`. The sensor's auxiliary supply is WL2864C LDO5 and the lens supply is BOB. During confirmation the controller verifies both regulator references, the lens address and compatible string, the running kernel notes and the digests of all assigned clocks and supplies.
+
+```sh
+bash scripts/build-camera-ldo5.sh --lens "$PREPARED_KERNEL" "$work/image"
+bash scripts/build-dt-probe-entry.sh --gt9768 "$RECOVERY_ENTRY" "$work/image" "$work/entry"
+bash tests/installed-trial/rtc1-arm.sh --gt9768 "$RECOVERY_MENU_QA_DIR" "$work/entry" "$NEW_MENU_QA_DIR"
+bash tests/installed-trial/recovery-firmware.sh --gt9768 "$NEW_MENU_QA_DIR" \
+    "$VIRT_UBOOT" "$VIRT_DTB" "$ARM64_BUSYBOX" "$EFIVARFS_KO_ZSTD"
+```
+
+The FAT fixture checks the source menu, kernel, DT and inherited initrd before arming a single attempt. It also substitutes a wrong sensor-to-lens reference and a wrong BOB phandle to exercise confirmation failures. The EFI test runs the candidate and baseline kernels on QEMU's Arm virtual machine. Its synthetic tree carries the board's actual phandle values so the observer can check the sensor, lens and supply references across the boot manager handoff. Physical binding and optical behavior require tablet measurements.
+
+Two builds produced the same 16,059,711-byte `gt9768-entry.tar.gz` using the archive command in the LDO5 example. Its SHA-256 is `c3c33cac98fc0f764ff2ad1d76db7cd9d179bc1a790ca9b2f66a5b4e540e14d2`. The two EFI boots reported the GT9768 kernel notes and the original dev12.10 kernel notes in that order. The boot manager consumed the trial counter during the first boot. Logs from both boots and the earlier RTC1, CCI0 and LDO5 regression checks are in `out/dev12.10-gt9768-final-trial/`.

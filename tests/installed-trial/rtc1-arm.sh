@@ -5,10 +5,11 @@ variant=rtc1; run_id=qartc
 case ${1:-} in
     --cci0) variant=cci0; run_id=qacci ;;
     --ldo5) variant=ldo5; run_id=qaldo ;;
+    --gt9768) variant=gt9768; run_id=qafocus ;;
 esac
 if [[ ${Y700_MENU_NS:-0} != 1 ]]; then exec unshare --mount --propagation private env Y700_MENU_NS=1 bash "$0" "$@"; fi
 if [[ $variant != rtc1 ]]; then shift; fi
-[[ $# == 3 && $EUID == 0 ]] || { echo 'Usage: rtc1-arm.sh [--cci0|--ldo5] RECOVERY_MENU_QA_DIR PROBE_ENTRY NEW_WORK' >&2; exit 2; }
+[[ $# == 3 && $EUID == 0 ]] || { echo 'Usage: rtc1-arm.sh [--cci0|--ldo5|--gt9768] RECOVERY_MENU_QA_DIR PROBE_ENTRY NEW_WORK' >&2; exit 2; }
 repo=$(realpath -e "$(dirname "$0")/../..")
 previous=$(realpath -e "$1"); candidate=$(realpath -e "$2"); work=$(realpath -m "$3")
 [[ $work == /var/tmp/y700-recovery-menu.* && $previous == /var/tmp/y700-recovery-menu.* ]]
@@ -31,7 +32,7 @@ manage add
 [[ ! -e $esp/loader/entries/$entry ]]
 checks=("$esp/EFI/$source_sub/board.dtb" "$esp/EFI/$source_sub/source.conf" "$esp/EFI/$baseline_sub/initrd")
 staged_count=2
-if [[ $variant == ldo5 ]]; then
+if [[ -n $probe_kernel_sha ]]; then
     staged_count=3
     checks+=("$esp/EFI/$source_sub/kernel.efi")
     cp -r "$esp/EFI/$source_sub" "$work/armed-probe"
@@ -66,6 +67,18 @@ if [[ $variant != rtc1 ]]; then
         mv "$rail" "$work/rail.saved"
         refused "$gate" trial "$work/trial-fs"
         mv "$work/rail.saved" "$rail"
+        if [[ $variant == gt9768 ]]; then
+            sensor=$work/trial-fs/soc@0/cci@ac15000/i2c-bus@0/camera@20
+            mv "$sensor/lens-focus" "$work/link.saved"
+            cp "$sensor/aux-supply" "$sensor/lens-focus"
+            refused "$gate" trial "$work/trial-fs"
+            mv "$work/link.saved" "$sensor/lens-focus"
+            bob=$work/trial-fs/soc@0/rsc@17a00000/regulators-1/bob/phandle
+            mv "$bob" "$work/bob.saved"
+            cp "$sensor/aux-supply" "$bob"
+            refused "$gate" trial "$work/trial-fs"
+            mv "$work/bob.saved" "$bob"
+        fi
     fi
     "$gate" base "$work/base-fs"; "$gate" trial "$work/trial-fs"
     refused "$gate" trial "$work/base-fs"
@@ -94,7 +107,7 @@ menu arm; menu arm
 trial=$entries/$prefix-trial+1.conf; consumed=$entries/$prefix-trial+0-1.conf
 grep -Fxq "devicetree /EFI/$source_sub/board.dtb" "$trial"
 kernel_sub=$baseline_sub
-if [[ $variant == ldo5 ]]; then kernel_sub=$source_sub; fi
+if [[ -n $probe_kernel_sha ]]; then kernel_sub=$source_sub; fi
 grep -Fxq "linux /EFI/$kernel_sub/kernel.efi" "$trial"
 grep -Fxq "initrd /EFI/$baseline_sub/initrd" "$trial"
 grep -Fxq "linux /EFI/$baseline_sub/kernel.efi" "$entries/$prefix-base.conf"

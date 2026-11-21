@@ -14,7 +14,7 @@ dt_probe=
 probe_dtb_sha=
 probe_kernel_sha=
 stock_notes=c9fbc259802dfc4570c14df56043d37f1c08e9769341de3d7cde08f9be6f1564
-ldo5_notes=b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7
+probe_notes=
 probe_option=
 trial_role=
 recovery_sha=21b05d85897a5047834766a5ae1629203d6fad6fd43d0aa614c110b1f3bfa834
@@ -44,10 +44,17 @@ dt_probe_mode() {
             probe_dtb_sha=b7364d3d493689f5d64834d22dbaa3684892fb3572bceaf653659f7486d69aea
             recovery_sha=e621697a905ba34e2274d9ba2a4cacb076bf9b4d7df7f6c96f527c73a06e5635 ;;
         ldo5)
+            probe_notes=b52f0aebff47c2d1819d4569abc6f27d9c2f274f60f0230365d3440f99416fc7
             probe_option=y700.ldo_probe=ldo5
             probe_dtb_sha=9546d73b96aafb9f3dbe8580ceafae65d1ba36bdcedba620da7395a8ea5f28d9
             probe_kernel_sha=bfb74a14a8772750df919cdc80c3a141ca37b64a5a8e676e30e36206ea92fe85
             recovery_sha=16526328e8c3079fd0dd1755f075c5316fec876cdd41ba02e0d1bbb3d12fa724 ;;
+        gt9768)
+            probe_option=y700.focus_probe=gt9768
+            probe_dtb_sha=a178f9de454d0e8aa5b474c91b4280da3aadc6aad0622c0120661447d836209f
+            probe_kernel_sha=b103d0fcd65a08cadb592fbdc69c8c483a7727ef212c15e464208f5c30a1a625
+            probe_notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+            recovery_sha=f547188ee2fc0ed918675cdfae1b285bd2a6865c1b8c1793039a533608d84cc1 ;;
         *) die 'unknown DT probe' ;;
     esac
 }
@@ -184,17 +191,17 @@ check_recovery_origin() {
     if [[ -n $dt_probe ]]; then
         [[ $(tr ' ' '\n' <<<"$args" | grep '^y700[.]recovery=') == y700.recovery=journal ]] || die 'wrong permanent recovery options'
     elif grep -Eq '(^| )y700[.]recovery(=| |$)' <<<"$args"; then die 'already running recovery'; fi
-    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo)_probe)(=| |$)' <<<"$args"; then
+    if grep -Eq '(^| )(y700[.]installed_trial|y700[.](rtc|cci|ldo|focus)_probe)(=| |$)' <<<"$args"; then
         die 'already running a trial or recovery'
     fi
     case $dt_probe in
         cci0) verify_cci0_tree base ;;
-        ldo5) verify_ldo5_tree base ;;
+        ldo5|gt9768) verify_ldo5_tree base ;;
     esac
 }
 verify_running_kernel() {
     local expected=$stock_notes
-    if [[ $dt_probe == ldo5 && $1 == confirm ]]; then expected=$ldo5_notes; fi
+    if [[ -n $probe_notes && $1 == confirm ]]; then expected=$probe_notes; fi
     [[ $(sha "${2:-/sys/kernel/notes}") == "$expected" ]] || die 'unexpected installed kernel build'
 }
 check_recovery_runtime() {
@@ -385,9 +392,9 @@ current_trial() {
             [[ $(selected_entry) == "y700-installed-${trial_role}$id-trial.conf" ]] || die 'unexpected recovery selection'
     fi
     if [[ -n $dt_probe ]]; then
-        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci|ldo)_probe(=|$)') == "$probe_option" ]] ||
+        [[ $(tr ' ' '\n' <<<"$args" | grep -E '^y700[.](rtc|cci|ldo|focus)_probe(=|$)') == "$probe_option" ]] ||
             die 'wrong DT probe option'
-        case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; ldo5) verify_ldo5_tree trial ;; esac
+        case $dt_probe in rtc1) verify_rtc1_tree ;; cci0) verify_cci0_tree trial ;; ldo5|gt9768) verify_ldo5_tree trial ;; esac
     fi
 }
 verify_rtc1_tree() {
@@ -423,6 +430,18 @@ verify_ldo5_tree() {
     local phase=$1 tree=${2:-$(clock_tree_path)} supplies clocks
     local cci=$tree/soc@0/cci@ac15000 rail=$tree/soc@0/cci@ac16000/i2c-bus@0/regulator@29/regulators/ldo5
     local aux=$cci/i2c-bus@0/camera@20/aux-supply
+    local lens=$cci/i2c-bus@0/lens@c link=$cci/i2c-bus@0/camera@20/lens-focus
+    if [[ $phase == trial && $dt_probe == gt9768 ]]; then
+        cmp -s <(printf 'lenovo,tb320fc-gt9768\0') "$lens/compatible" &&
+            cmp -s <(printf '\x00\x00\x00\x0c') "$lens/reg" &&
+            cmp -s <(printf '\x00\x00\x00\xe5') "$lens/phandle" &&
+            cmp -s "$lens/phandle" "$link" &&
+            cmp -s <(printf '\x00\x00\x00\xe7') "$lens/vaf-supply" &&
+            cmp -s "$lens/vaf-supply" "$tree/soc@0/rsc@17a00000/regulators-1/bob/phandle" ||
+            die 'main-camera link, lens address or BOB supply differs'
+    else
+        [[ ! -e $lens && ! -e $link ]] || die 'unexpected main-camera lens'
+    fi
     [[ ! -e $tree/aliases/rtc1 && ! -e $cci/assigned-clocks && ! -e $cci/assigned-clock-rates ]] ||
         die 'unexpected RTC or CCI clock probe'
     cmp -s <(printf 'disabled\0') "$tree/soc@0/spmi@c400000/pmic@0/rtc@6100/status" ||
@@ -440,7 +459,11 @@ verify_ldo5_tree() {
             cmp -s <(printf '\x00\x00\x00\xe4') "$rail/phandle" && cmp -s "$rail/phandle" "$aux" ||
                 die 'HI1339 auxiliary supply does not resolve to LDO5'
             clocks=c12f32a67a2971704296384ea97c10f7de74944e1edd84191a19526ffa81aa99
-            supplies=3e680a8e5043c0251ee36dfefd56a8ee8b9340ea0f22210221dedc31e87ea714 ;;
+            supplies=3e680a8e5043c0251ee36dfefd56a8ee8b9340ea0f22210221dedc31e87ea714
+            if [[ $dt_probe == gt9768 ]]; then
+                clocks=94c3f06f9af2a8a23b7e2611ed634c0287d93ddf2eebc634805c398abae2432e
+                supplies=3be3c29575a065d707b1384aded9455d942c0244c2f77eedb9dda1a3c5a39765
+            fi ;;
         *) die 'unknown supply tree phase' ;;
     esac
     [[ $(tree_properties "$tree" -name '*-supply') == "$supplies" &&
@@ -495,7 +518,7 @@ main() {
     [[ $EUID == 0 ]] || die 'root required'
     local -a original_args=("$@")
     if [[ ${1:-} == --recovery ]]; then shift; recovery_mode
-    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 ]]; then
+    elif [[ ${1:-} == --rtc1 || ${1:-} == --cci0 || ${1:-} == --ldo5 || ${1:-} == --gt9768 ]]; then
         dt_probe_mode "${1#--}"; shift
         [[ $# == 2 && $1 =~ ^(arm|confirm|restore)$ ]] || die "usage: --$dt_probe arm|confirm|restore RUN_ID"
         set -- "$@" "$recovery_sha"

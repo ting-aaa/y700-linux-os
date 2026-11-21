@@ -6,6 +6,8 @@ In the VIMC guest, adding `--query-range /dev/v4l-subdevN` opens the specified l
 
 ## Reproduce on a PC
 
+For a linked GT9768, `--check-limits /dev/v4l-subdevN` queries the same control and reports only whether its bounds are ordered, within 10 bits, spaced by one step and contain the default. This form keeps each unit's focus codes on the device. It opens and closes the linked subdevice, so first verify the driver's open and close operations.
+
 Use the prepared Asphalt 7.3.4 kernel tree, its ARM64 LLVM toolchain, static AArch64 libc and GCC, a static ARM64 BusyBox with the guest applets, cpio, gzip and QEMU system emulation. The last argument must name a new directory. The runner compiles disposable external modules from the kernel sources and boots a diskless guest.
 
 ```sh

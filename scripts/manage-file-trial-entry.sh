@@ -25,12 +25,17 @@ elif [[ ${1:-} == --dev12.10-ldo5 ]]; then
     probe=1
     payload=y700-ldo5-12-10
     manifest=ec8957894bdbc40d2a9abd07a98c54f1066bb081c4bfd2887a42fe2e09eae6c5
+elif [[ ${1:-} == --dev12.10-gt9768 ]]; then
+    shift
+    probe=1
+    payload=y700-gt9768-12-10
+    manifest=06049cd22b6a4bb0cd98df8ddbb257569fc2431e4033e7fa59f3663d38fed621
 elif [[ ${1:-} == --dev12.10-recovery ]]; then
     shift
     payload=y700-recovery-12-10
     manifest=36132af676bfd7b14f7ef954c1d9329e1dc8eb77c0c99d5301eab412b5c18b0b
 fi
-[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1|--dev12.10-cci0|--dev12.10-ldo5] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
+[[ $# == 3 && ( $1 == add || $1 == remove ) ]] || die 'usage: manage-file-trial-entry.sh [--dev12.10|--dev12.10-recovery|--dev12.10-rtc1|--dev12.10-cci0|--dev12.10-ldo5|--dev12.10-gt9768] add|remove VERIFIED_ENTRY_DIR MOUNTED_INTERNAL_ESP'
 mode=$1
 source_dir=$(realpath -e -- "$2")
 esp=$(realpath -e -- "$3")
@@ -52,7 +57,7 @@ if (( probe )); then
     [[ $default == y700-recovery-12-10.conf ]] || die 'expected permanent recovery default'
     ! compgen -G 'loader/entries/y700-installed-*.conf' >/dev/null || die 'a counted trial is active'
     [[ ! -e loader/entries/y700-rtc1-12-10.conf && ! -e loader/entries/y700-cci0-12-10.conf &&
-       ! -e loader/entries/y700-ldo5-12-10.conf ]] || die 'unexpected uncounted DT probe entry'
+       ! -e loader/entries/y700-ldo5-12-10.conf && ! -e loader/entries/y700-gt9768-12-10.conf ]] || die 'unexpected uncounted DT probe entry'
     for prior in y700-file-12-10 y700-recovery-12-10; do
         existing=("EFI/$prior/"{kernel.efi,board.dtb,initrd} "loader/entries/$prior.conf")
         case $prior in
@@ -79,7 +84,7 @@ payloads=(kernel.efi board.dtb initrd)
 if (( probe )); then
     menu=$dir/source.conf
     payloads=(board.dtb)
-    if [[ $payload == y700-ldo5-12-10 ]]; then payloads+=(kernel.efi); fi
+    if [[ $payload == y700-ldo5-12-10 || $payload == y700-gt9768-12-10 ]]; then payloads+=(kernel.efi); fi
 fi
 check_dir() {
     local count=${#payloads[@]}

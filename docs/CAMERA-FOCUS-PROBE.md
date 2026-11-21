@@ -32,6 +32,10 @@ The separately built camera-supply EFI image pairs this kernel and device tree w
 
 Both trial entries were removed after returning to the permanent dev12.10 kernel. Its physical outer EFI partition again had the original 29 files. All hashes matched before and after each trial apart from the boot manager’s random seed. The graphical login, touchscreen, Bluetooth service and both Wi-Fi gateway checks passed on return. The board log manifest is `out/cci0-dev12.10-board/BOARD-SHA256SUMS`, SHA-256 `1ff5cec1ac476438b36c5652db73989e865f112d38bd87756d521315eafbf1ef`.
 
+### GT9768 lens candidate
+
+The subsequent GT9768 kernel candidate registers a V4L2 lens and uses the sensor's factory focus interval. The ARM64 guest exercised the real driver with a simulated I²C device. Opening and querying the lens and closing the final descriptor produced zero bus writes, while an explicit position request exercised initialization and a bounded DAC write. Two independent builds reproduced the kernel, device tree and notes. A separate ARM64 EFI test booted the single-count entry and returned to the existing recovery entry on the next boot. These tests used a simulated lens. [Driver and test results](../tests/camera-gt9768/README.md) · [Single-boot EFI fixture](../tests/installed-trial/README.md)
+
 ### Earlier observations on the original installation
 
 Linux identified `cci@ac15000/i2c-bus@0` as `Qualcomm-CCI` adapter 0, configured for 400 kHz. HI1339 was bound at `0x20`. Before each test regulator sysfs reported BOB enabled at 3.032 V and camera I/O enabled at 1.800 V. These are regulator readings reported by the kernel. Voltage at the lens connector was not measured.
