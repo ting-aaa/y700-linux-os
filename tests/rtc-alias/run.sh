@@ -1,7 +1,10 @@
 #!/bin/bash
 # Compare RTC class registration on the physical baseline kernel in two small VMs.
 set -euo pipefail
-[[ $# == 3 ]] || { echo 'Usage: run.sh PREPARED_KERNEL STATIC_ARM64_BUSYBOX NEW_LOG_DIRECTORY' >&2; exit 2; }
+awake=0
+if [[ ${1:-} == --awake ]]; then awake=1; shift; fi
+[[ $# == 3 ]] || { echo 'Usage: run.sh [--awake] PREPARED_KERNEL STATIC_ARM64_BUSYBOX NEW_LOG_DIRECTORY' >&2; exit 2; }
+here=$(cd "$(dirname "$0")" && pwd -P)
 k=$(realpath -e "$1")
 busybox=$(realpath -e "$2")
 logs=$(realpath -m "$3")
@@ -17,6 +20,12 @@ make -s -C "$k" M="$work/module" ARCH=arm64 LLVM=1 modules
 cp "$work/module/rtc-pl031.ko" "$work/root/"
 cp "$busybox" "$work/root/bin/busybox"
 ln -s busybox "$work/root/bin/sh"
+if (( awake )); then
+    cc=${AARCH64_CC:-aarch64-linux-gnu-gcc}
+    "$cc" -static -O2 -Wall -Wextra -Werror -s "$here/awake-alarm.c" -o "$work/root/board-probe"
+    "$cc" -static -O2 -Wall -Wextra -Werror -s -DRTC_QA_PL031 "$here/awake-alarm.c" -o "$work/root/guest-probe"
+    cp "$here/check-awake.sh" "$work/root/awake-qa"
+fi
 cat >"$work/root/init" <<'INIT'
 #!/bin/sh
 set -eu
@@ -27,6 +36,11 @@ $b mount -t sysfs sysfs /sys
 exec > /dev/console 2>&1
 trap '$b poweroff -f' EXIT
 test -z "$($b ls /sys/class/rtc)"
+if test -f /awake-qa; then
+    $b insmod /rtc-pl031.ko
+    $b sh /awake-qa
+    exit
+fi
 $b date -u -s '2024-01-02 03:04:05' >/dev/null
 before=$($b date -u +%s)
 $b insmod /rtc-pl031.ko
@@ -64,6 +78,7 @@ dtc -q -I dtb -O dtb -o "$work/plain.dtb" "$work/dump.dtb"
 cp "$work/plain.dtb" "$work/aliased.dtb"
 fdtput -t s "$work/aliased.dtb" /aliases rtc1 /pl031@9010000
 for variant in plain aliased; do
+    if (( awake )) && [[ $variant == plain ]]; then continue; fi
     alias_id=0
     if [[ $variant == aliased ]]; then alias_id=1; fi
     timeout 90 "${qemu[@]}" -M virt,gic-version=3 "${common[@]}" -serial "file:$logs/$variant.log" -no-reboot \
@@ -71,5 +86,6 @@ for variant in plain aliased; do
         -rtc base=2010-01-02T03:04:05,clock=vm \
         -append "console=ttyAMA0,115200 nokaslr rdinit=/init rtcqa.alias=$alias_id" \
         >"$logs/$variant.qemu.log" 2>&1
-    grep '^RTC_ALIAS_PASS ' "$logs/$variant.log"
+    if (( awake )); then grep '^RTC_AWAKE_QA_PASS ' "$logs/$variant.log"
+    else grep '^RTC_ALIAS_PASS ' "$logs/$variant.log"; fi
 done
