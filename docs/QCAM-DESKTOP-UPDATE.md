@@ -1,0 +1,22 @@
+# 相机桌面更新
+
+打开 Xfce 的「Y700 相机」时，`y7007` 预选后置主摄。点「确定」开始预览，也可以先换前摄或微距。预览中点工具栏上的镜头名称，会从当前镜头开始选。后置主摄扫描时若刚好已经合焦，随后到达的取消请求会保留相机返回的合焦或失败结果。
+
+## 平板上的验证
+
+国行 dev12.11 的旧版本在中英文界面都默认选中微距。通过同一桌面入口打开新版后，两个界面都预选主摄。普通账户在 200% 私有显示中依次切换三个选项，型号标签分别对应 HI1339、S5K4H7 和 SC202CS。点取消后退出。测试前后三颗传感器均挂起，累计运行时间没有增加。[板端选择器测试](../tests/qcam-photo/board-chooser.py)
+
+实机的 libcamera 仅向后置 HI1339 提供单次对焦与取消控件。前摄和微距为固定焦距。对焦按钮的状态变化已使用合成请求测试；后摄合焦后的实际清晰度还需对静止目标测量。[对焦驱动与运行时检查](CAMERA-FOCUS-PROBE.md) · [清晰度测量方法](../tests/camera-autofocus/optical.md)
+
+## 安装与回退
+
+参考平板的内置 dev12.11 已从 `y7005` 更新到 `y7007`。核对全部 1,240 项软件包，只有 `y700-camera-qcam` 变化。板端启动 ID 以及 SSH、LightDM 和蓝牙服务实例在安装前后一致。系统检查返回 `core_failures=0`。两版软件包和回退脚本保存在平板的 `/var/lib/y700/updates/qcam-y7007/`。
+
+dev12.12 发行镜像内含 `y7005`。本次更新单独分发，适用于已经装有该版本的 dev12.11 或 dev12.12。把 `out/dev12.12-qcam-update/` 里的更新脚本和两个 ARM64 软件包放在同一目录。脚本内置两个包的 SHA-256，并核对安装后的可执行文件。可在同一目录离线运行以下命令。
+
+```sh
+sudo bash update-qcam-focus.sh install
+sudo bash update-qcam-focus.sh rollback
+```
+
+两次独立构建生成相同的 115,428 字节新包。开发者可在准备好的 Debian 13 ARM64 构建环境中，以 `--qcam-rear-main` 构建新版、以 `--qcam-autofocus` 构建回退版。写时复制的 dev12.12 中，安装后只有相机应用的版本变化，回退恢复了原有的 1,240 项软件包清单。重装、解包后中断及配置失败后继续执行均已验证。[构建程序](../scripts/build-camera-backport.sh) · [软件包与文件摘要](../config/qcam-focus-result.lock.json) · [更新脚本](../scripts/update-qcam-focus.sh)

@@ -69,15 +69,19 @@ if [[ $mode == candidate ]]; then
     check installed_packages_1240 test "$(printf '%s\n' "$records" | wc -l)" = 1240
     package_sha=$(printf '%s\n' "$records" | sha256sum | cut -d' ' -f1)
     if [[ $edition == dev12.11 ]]; then
+        qcam_update=a49b13a679ea89313e61858bfc139cae5f0752eedf9579e2c49a80244552792f
         case $package_sha in
             be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
                 echo 'PASS installed_versions dev12.11' ;;
-            5e7c63ae4efdce57f57fa983038f5e37cce0ec1c763e56fdce1c2314ac50ca08|28746a498c221806b08e66de6e93595a18fb6a0fb6d1c7c2a3e1ee9fe652ca71|ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047)
+            5e7c63ae4efdce57f57fa983038f5e37cce0ec1c763e56fdce1c2314ac50ca08|28746a498c221806b08e66de6e93595a18fb6a0fb6d1c7c2a3e1ee9fe652ca71|ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047|"$qcam_update")
                 echo 'PASS installed_versions dev12.11 with Chromium graphics setting'
                 if [[ $package_sha == 28746a498c221806b08e66de6e93595a18fb6a0fb6d1c7c2a3e1ee9fe652ca71 ]]; then
                     check brightness_slider hash_is /usr/libexec/y700-tablet-brightness e5df07598109b52c82824ec36f0b42ee3959edd752426821a195665f2e57534c
-                elif [[ $package_sha == ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047 ]]; then
+                elif [[ $package_sha == ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047 || $package_sha == "$qcam_update" ]]; then
                     check brightness_touch_slider hash_is /usr/libexec/y700-tablet-brightness c75de4f42fbca74868fa3bce398f0d1bb8b86ce4703e6fe0d8e63a2c421b9799
+                fi
+                if [[ $package_sha == "$qcam_update" ]]; then
+                    check camera_focus_ui hash_is /opt/y700-camera/bin/qcam 63f245925613886d487b9f3441c623593bb093a7563b294bb9eb9ddb894822be
                 fi
                 check chromium_launcher_policy hash_is /etc/chromium.d/99-y700-software-rendering d6abf4aae2553dbd8fad313adc1677419f7c188ffc7ea507375ce5d64eff092a
                 check chromium_settings_entry hash_is /usr/share/applications/y700-chromium-graphics.desktop 8619926e6f99f3a3f58478f125edb04a41e6984c8502078f32aa6d3c29df748f

@@ -29,10 +29,14 @@ def inspect_chooser(locale_name, names, expect_main):
     print(f"QCAM_INITIAL_SELECTION locale={locale_name} lens={('main', 'front', 'macro')[first]}", flush=True)
     if expect_main:
         assert first == 0, "The rear main camera should be selected on first open"
-    for name, model in zip(names, ("hi1339", "s5k4h7", "sc202cs"), strict=True):
+    models = ("hi1339", "s5k4h7", "sc202cs")
+    window.find(Atspi.Role.LABEL, models[first])
+    for offset in (1, 2, 3):
+        index = (first + offset) % len(names)
         window.click(window.find(Atspi.Role.COMBO_BOX))
-        window.click(window.find(Atspi.Role.LIST_ITEM, name))
-        window.find(Atspi.Role.LABEL, model)
+        window.click(window.find(Atspi.Role.LIST_ITEM, names[index]))
+        window.find(Atspi.Role.COMBO_BOX, names[index])
+        window.find(Atspi.Role.LABEL, models[index])
     window.click(window.find(Atspi.Role.PUSH_BUTTON, "取消" if chinese else "Cancel"))
     wait_for(lambda: not (process / "exe").exists(), "exit after cancelling")
     print(f"QCAM_BOARD_CHOOSER locale={locale_name} sensors=3 scale=2 cancelled=1", flush=True)
@@ -52,9 +56,11 @@ def main():
         if name in ("hi1339", "s5k4h7", "sc202cs"):
             sensors[name] = dev / "power"
     assert len(sensors) == 3
+
     def snapshot():
         return {name: ((power / "runtime_status").read_text().strip(),
                        int((power / "runtime_active_time").read_text())) for name, power in sensors.items()}
+
     before = snapshot()
     assert all(state == "suspended" for state, _ in before.values())
     # The caller supplies a private mount and network namespace for this X server.
@@ -67,8 +73,9 @@ def main():
             os.environ.update(DISPLAY=":" + str(int(display.readline())), QT_SCALE_FACTOR="2",
                               QT_LINUX_ACCESSIBILITY_ALWAYS_ON="1", XDG_CURRENT_DESKTOP="XFCE")
             subprocess.run(["dbus-update-activation-environment", "DISPLAY"], check=True, timeout=5)
-            inspect_chooser("C.UTF-8", [c[1] for c in fixture["CAMERAS"].values()], expect_main)
-            inspect_chooser("zh_CN.UTF-8", list(fixture["CHINESE_NAMES"].values()), expect_main)
+            lenses = ("main", "front", "macro")
+            inspect_chooser("C.UTF-8", [fixture["CAMERAS"][lens][1] for lens in lenses], expect_main)
+            inspect_chooser("zh_CN.UTF-8", [fixture["CHINESE_NAMES"][lens] for lens in lenses], expect_main)
         finally:
             xvfb.terminate()
             xvfb.wait(timeout=8)

@@ -1,0 +1,38 @@
+{
+  "format": 1,
+  "edition": "dev12.12",
+  "scope": "optional qcam update for the installed dev12.11 or sealed dev12.12 desktop",
+  "parent_root_sha256": "5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3",
+  "package_digest": "a49b13a679ea89313e61858bfc139cae5f0752eedf9579e2c49a80244552792f",
+  "replaces": [
+    {
+      "package": "y700-camera-qcam",
+      "version": "0.7.2-1~bpo13+1.y7005",
+      "architecture": "arm64"
+    }
+  ],
+  "packages": [
+    {
+      "package": "y700-camera-qcam",
+      "version": "0.7.2-1~bpo13+1.y7007",
+      "architecture": "arm64",
+      "size": 115428,
+      "sha256": "3bfbc1bf91892b621af6a2ccf86b7ef4a137583f7edcf0e0cb40c2a2f353244f"
+    }
+  ],
+  "rollback": {
+    "version": "0.7.2-1~bpo13+1.y7005",
+    "size": 115712,
+    "sha256": "4e79033cc61128049b32c0265b09c00a7930a1f6bb45d48f97849709cf497d56"
+  },
+  "files": {
+    "opt/y700-camera/bin/qcam": "63f245925613886d487b9f3441c623593bb093a7563b294bb9eb9ddb894822be",
+    "usr/bin/y700-camera": "129c0986b5154dd7ed8620bece62c003990e6ec0f944d6de92c170c9c5df1c24",
+    "usr/share/applications/org.y700.Camera.desktop": "edaeb59110f15033e0d0b96f9734c6af99f9feb67e8ac8e68c6c47b03478c8f1"
+  },
+  "recipes": {
+    "packaging/camera-qcam/focus-cancel-result.patch": "705b4d749229013b36f049ff445666d2fab579702e3717107bba8f551f9b03f4",
+    "packaging/camera-qcam/preselect-rear-main.patch": "5fd378dae0217b2a01e0887b0ed2ee7446ee312d6aaa1b93890a15e790d29149",
+    "scripts/build-camera-backport.sh": "48b271726bb9c2f4cbdb865f5321e0f41e65264b0b5640fe1385e43de1a9ea9e"
+  }
+}
