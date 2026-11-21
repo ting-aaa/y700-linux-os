@@ -1,0 +1,10 @@
+# The base RAM init has already mounted and checked the lower, carrier and tmpfs overlay.
+grep -qw y700.ram_af_acm=1 /proc/cmdline || fail 'missing autofocus diagnostic flag'
+[ ! -e /run/y700-af-acm ] || fail 'diagnostic state exists'
+mkdir -m 0755 /run/y700-af-acm || fail 'cannot stage autofocus diagnostics'
+cp -a /y700-af-acm/. /run/y700-af-acm/ || fail 'cannot copy autofocus attachment'
+(cd /run/y700-af-acm && sha256sum -c SHA256SUMS) || fail 'bad autofocus attachment'
+unit=/newroot/etc/systemd/system/y700-ram-af-acm.service
+[ ! -e "$unit" ] && cp /run/y700-af-acm/diagnostic.service "$unit" || fail 'cannot install RAM service'
+chmod 0644 "$unit" || fail 'cannot set RAM service permissions'
+ln -s ../y700-ram-af-acm.service /newroot/etc/systemd/system/multi-user.target.wants/y700-ram-af-acm.service || fail 'cannot enable RAM service'

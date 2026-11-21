@@ -1,0 +1,14 @@
+[Unit]
+Description=One-shot rear camera measurement over a private RAM diagnostic port
+After=systemd-udev-trigger.service sys-kernel-config.mount
+ConditionKernelCommandLine=y700.media=ram
+ConditionKernelCommandLine=y700.ram_af_acm=1
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /run/y700-af-acm/diagnostic.sh
+Restart=no
+PrivateNetwork=yes
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0
