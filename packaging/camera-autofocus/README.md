@@ -4,7 +4,7 @@ The optional `y700-camera-runtime` version `0.7.2-1~bpo13+1.y7002` adds contrast
 
 The camera must match the board's rear `hi1339` sensor ID, its associated `gt9768` lens and a valid `V4L2_CID_FOCUS_ABSOLUTE` interval supplied by the driver. The processed stream must provide packed RGB/BGR pixels with three or four bytes per pixel through SoftISP. The previous camera graph, front and macro cameras, and a raw-only configuration retain their existing controls. The driver returns each unit's calibrated DAC interval. Optical dioptres are unknown.
 
-An application can put `AfModeAuto` and `AfTriggerStart` in the same request. Ordinary preview starts in `AfModeManual`. During a scan the runtime reads gradients from the central half of the processed image, sweeps the calibrated range, refines around the strongest position and checks that position again. Each move waits at least 50 ms and skips the first completed exposure after settling. Two distinct later frames provide each score. The cap is 19 moves. With a continuing stream the scan fails after 45 seconds.
+An application can put `AfModeAuto` and `AfTriggerStart` in the same request. Ordinary preview starts in `AfModeManual`. During a scan the runtime reads gradients from the central half of the processed image, sweeps the calibrated range, refines around the strongest position and checks that position again. The released y7002 runtime starts its 50 ms timer before issuing each synchronous lens command. It skips the first eligible completion and uses two distinct later frames for each score. The cap is 19 moves. With a continuing stream the scan fails after 45 seconds.
 
 `AfState` in completed request metadata reports Idle, Scanning, Focused or Failed. Explicit Cancel and a switch back to Manual stop an active scan. A capture error or delivered bad ISP frame terminates the scan as Failed, including when that frame carries Start. A later valid frame repeats that result. A flat scene, an invalid measurement and an actuator error also fail the scan. Stopping the camera resets the state and closes its actuator handle. Enumeration closes the query handle after reading the range, so an idle camera manager can coexist with a second process that focuses and then releases the lens.
 
@@ -33,3 +33,19 @@ sudo bash tests/camera-autofocus/packages.sh "$wifi_staged_root" "$original_thre
 ```
 
 The second command uses a read-only generic dev12.10 image with the two Wi-Fi updates and a disposable overlay. It checks APT, dpkg and ELF relocations for qcam, cam, GStreamer and the SPA plugin before and after upgrading, then restores all 1,240 original package tuples. The frozen archives and run receipts live under `out/camera-autofocus/`. Check the distributed archives and test executable against the [qualified release hashes](../../tests/camera-autofocus/release.sha256).
+
+### Candidate for delayed lens commands
+
+The candidate records a second monotonic timestamp immediately after a successful lens control returns. A completion must be at least 50 ms later than that timestamp. The first eligible completion is still discarded because its exposure can overlap that interval. The Y700 CAMSS VFE records `ktime_get_ns()`, the V4L2 queue specifies monotonic timestamps, and the CPU ISP copies the input timestamp to its output. The ARM64 Debian implementation of `steady_clock::now()` calls `clock_gettime(CLOCK_MONOTONIC)`. [Candidate source](settle-after-control.patch) · [Timing regression](../../tests/camera-autofocus/settling.cpp)
+
+Use a separate prepared y7002 source tree with the diagnostic patch applied. From the product repository, build and run the regression on that tree.
+
+```sh
+patch --fuzz=0 -d "$candidate_source" -p1 < packaging/camera-autofocus/settle-after-control.patch
+pipeline="$candidate_source/src/libcamera/pipeline/simple"
+c++ -std=c++17 -O2 -I"$pipeline" tests/camera-autofocus/settling.cpp \
+  "$pipeline/contrast_scan.cpp" -o "$candidate_source/settling-test"
+"$candidate_source/settling-test"
+```
+
+With an injected 120 ms control delay the previous build scored a frame timestamped 90 ms. The candidate rejected it, discarded the first eligible completion at 170 ms and its duplicate, then scored the frames at 190 and 220 ms. The ARM64 candidate library also loaded the two signed IPAs and passed the packaged GStreamer scan tests on a PC. Its SHA-256 is `ab1cd0e90330a2b3905d8103b5be42fa098c4f15e494e8284c13f4decfcc5d23`. The experimental library and receipts are in `out/camera-af-settling/`. The sealed RAM trial uses the previous diagnostic library. The physical trials did not measure the elapsed duration of their lens commands.

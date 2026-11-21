@@ -1,0 +1,87 @@
+Subject: [PATCH] simple: start lens settling at synchronous control completion
+
+Apply after scan-result-diagnostics.patch on the Y700 y7002 runtime.
+
+--- a/src/libcamera/pipeline/simple/contrast_scan.h
++++ b/src/libcamera/pipeline/simple/contrast_scan.h
+@@ -47,7 +47,7 @@
+ 	[[gnu::visibility("hidden")]]
+ 	State failedFrame(Diagnostic *diagnostic);
+ 	[[gnu::visibility("hidden")]]
+-	State frame(uint64_t now, uint64_t captured,
++	State frame(const std::function<uint64_t()> &monotonicNs, uint64_t captured,
+ 		    const std::function<bool(int)> &move,
+ 		    const std::function<std::optional<double>()> &score,
+ 		    Diagnostic *diagnostic);
+--- a/src/libcamera/pipeline/simple/contrast_scan.cpp
++++ b/src/libcamera/pipeline/simple/contrast_scan.cpp
+@@ -2,6 +2,7 @@
+ #include "contrast_scan.h"
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <cmath>
+ #include <limits>
+ 
+@@ -120,16 +121,23 @@
+ 					const std::function<bool(int)> &move,
+ 					const std::function<std::optional<double>()> &score)
+ {
+-	return frame(now, captured, move, score, nullptr);
++	/* Preserve callers that supply a frame-local clock epoch. Account for
++	 * elapsed time during the synchronous control call in that same epoch. */
++	const auto entered = std::chrono::steady_clock::now();
++	return frame([now, entered]() -> uint64_t {
++		return now + std::chrono::duration_cast<std::chrono::nanoseconds>(
++			std::chrono::steady_clock::now() - entered).count();
++	}, captured, move, score, nullptr);
+ }
+ 
+-ContrastScan::State ContrastScan::frame(uint64_t now, uint64_t captured,
+-					const std::function<bool(int)> &move,
++ContrastScan::State ContrastScan::frame(const std::function<uint64_t()> &monotonicNs,
++					uint64_t captured, const std::function<bool(int)> &move,
+ 					const std::function<std::optional<double>()> &score,
+ 					Diagnostic *diagnostic)
+ {
+ 	if (state_ != State::Scanning)
+ 		return state_;
++	const uint64_t now = monotonicNs();
+ 	if (!began_)
+ 		began_ = now;
+ 	/* An unresponsive or stalled stream can never report a focus lock. */
+@@ -143,7 +151,8 @@
+ 			return finish(State::Failed, "lens-control", diagnostic);
+ 		if (progress)
+ 			++progress->controls;
+-		moved_ = now;
++		/* Frames may have completed while the lens control blocked. */
++		moved_ = monotonicNs();
+ 		lastCapture_ = 0;
+ 		haveSample_ = false;
+ 		needMove_ = false;
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -1114,8 +1114,11 @@
+ 			action = ContrastScan::Trigger::Cancel;
+ 	}
+ 	focus_.request(automatic, action, &focusDiagnostic_);
+-	const uint64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+-		std::chrono::steady_clock::now().time_since_epoch()).count();
++	/* CAMSS buffer timestamps and Linux steady_clock both use CLOCK_MONOTONIC. */
++	auto monotonicNs = []() -> uint64_t {
++		return std::chrono::duration_cast<std::chrono::nanoseconds>(
++			std::chrono::steady_clock::now().time_since_epoch()).count();
++	};
+ 	const bool valid = buffer && buffer->metadata().status == FrameMetadata::FrameSuccess;
+ 	const char *input = "none";
+ 	int lensApiStatus = 0;
+@@ -1126,7 +1129,7 @@
+ 			info->metadataRequired = false;
+ 	}
+ 	auto state = !valid ? focus_.failedFrame(&focusDiagnostic_) :
+-		focus_.frame(now, buffer->metadata().timestamp, [this, &lensApiStatus](int position) {
++		focus_.frame(monotonicNs, buffer->metadata().timestamp, [this, &lensApiStatus](int position) {
+ 		focusTouched_ = true;
+ 		lensApiStatus = focusLens_->setFocusPosition(position);
+ 		return lensApiStatus == 0;
