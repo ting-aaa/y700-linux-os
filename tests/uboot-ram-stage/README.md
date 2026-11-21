@@ -57,6 +57,8 @@ uv run --offline --python 3.13 $Tool boot-staged $Bundle $Pin
 
 ## 复核
 
+日用 dev12.11 的 `/EFI/y700-file-12-11/initrd` 与此次 RAM 接收器还共享开头的 11 MiB，实机只读核对的这段 SHA-256 为 `eceb5b52c389a1c952bb94bb986f1726aea85abb141af628d677fd7a6d2823d3`。在 `stage` 或 `boot` 的 `--esp-kernel $PartUuid` 后加 `--esp-initrd-prefix`，可以从同一个分区限长读取这段，核对设备内存地址、字节数和 CRC，再从下一字节起上传新 initrd 的剩余数据。分区、文件或前缀不匹配时会上传整份 initrd。最终仍校验三件完整内容。使用 `esp-qemu.py --initrd "$Bundle/initrd"` 可复测实际 U-Boot 的限长读取、损坏和截短拒绝，以及组装后的完整 CRC。
+
 在 PC 指向早期实验区的 `asphalt-debian` 目录、候选目录和独立清单摘要，运行：
 
 ```powershell

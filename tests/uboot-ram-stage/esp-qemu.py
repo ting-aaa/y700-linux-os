@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from unittest.mock import patch
 
 
 spec = importlib.util.spec_from_file_location("ram_stage", Path(__file__).resolve().parents[2] / "scripts/uboot-ram-stage.py")
@@ -58,6 +59,7 @@ def main():
     parser.add_argument("uboot", type=Path)
     parser.add_argument("--qemu", default="qemu-system-aarch64")
     parser.add_argument("--data")
+    parser.add_argument("--initrd", type=Path, help="Also exercise a verified partial read and completing the initrd in RAM")
     args = parser.parse_args()
     kernel = args.kernel.read_bytes()
     stage.need(hashlib.sha256(kernel).hexdigest() == stage.KERNEL, "Wrong reference kernel")
@@ -74,6 +76,20 @@ def main():
         run("mkfs.vfat", "-F", "32", fat)
         run("mmd", "-i", fat, "::/EFI")
         run("mcopy", "-i", fat, args.kernel, "::" + stage.ESP_KERNEL)
+        if args.initrd:
+            initrd = args.initrd.read_bytes()
+            prefix = initrd[:stage.INITRD_PREFIX]
+            stage.need(len(initrd) > len(prefix) and hashlib.sha256(prefix).hexdigest() == stage.INITRD_PREFIX_SHA,
+                       "Unexpected initrd prefix")
+            source = Path(tmp) / "part"
+            # A daily initrd has other data after the common prefix.
+            source.write_bytes(prefix + b" daily initrd")
+            run("mmd", "-i", fat, "::/EFI/y700-file-12-11")
+            run("mcopy", "-i", fat, source, "::" + stage.ESP_INITRD)
+            source.write_bytes(initrd[len(prefix):])
+            run("mcopy", "-i", fat, source, "::/suffix")
+            source.write_bytes(b"dt")
+            run("mcopy", "-i", fat, source, "::/short")
         run("dd", f"if={fat}", f"of={disk}", "bs=1M", "seek=1", "conv=notrunc,sparse", "status=none")
         before = digest(disk)
         cmd = [args.qemu, "-nodefaults", "-no-user-config", "-machine", "virt,gic-version=3",
@@ -91,8 +107,28 @@ def main():
                 addr = stage.number("kernel_addr_r", stage.command(port, "printenv kernel_addr_r"))
                 stage.need(0x40000000 <= addr and addr + len(kernel) <= 0x60000000, "Unexpected virtual DRAM")
                 wrong = uuid.UUID(int=ident.int ^ 1)
-                stage.need(not stage.esp_kernel(port, wrong, addr, kernel), "Wrong GPT identity accepted")
-                stage.need(stage.esp_kernel(port, ident, addr, kernel), "Exact ESP kernel was not verified")
+                stage.need(stage.esp_partition(port, wrong) is None, "Wrong GPT identity accepted")
+                target = stage.esp_partition(port, ident)
+                stage.need(stage.esp_read(port, target, stage.ESP_KERNEL, addr, kernel), "Exact ESP kernel was not verified")
+                if args.initrd:
+                    ramdisk = 0x50000000
+                    dt = 0x4f000000
+                    stage.need(not stage.esp_read(port, target, "/short", ramdisk, prefix, allow_trailing_bytes=True),
+                               "Accepted a short FAT file")
+                    corrupted = bytes([prefix[0] ^ 1]) + prefix[1:]
+                    stage.need(not stage.esp_read(port, target, stage.ESP_INITRD, ramdisk, corrupted, allow_trailing_bytes=True),
+                               "Accepted damaged prefix")
+                    writes = []
+                    def complete(port, address, data):
+                        path = {dt: "/short", ramdisk + len(prefix): "/suffix"}.get(address)
+                        stage.need(path and stage.esp_read(port, target, path, address, data), "Wrong upload bytes or address")
+                        writes.append(address)
+                    with patch.object(stage, "loady", complete):
+                        stage.serial_stage(port, {"kernel.efi": kernel, "initrd": initrd, "board.dtb": b"dt"},
+                                           {"kernel.efi": addr, "initrd": ramdisk, "board.dtb": dt}, ident, True)
+                    stage.need(writes == [dt, ramdisk + len(prefix)], "Unexpected component upload")
+                    stage.verify_crc(stage.command(port, f"crc32 {ramdisk:x} {len(initrd):x}"), ramdisk, initrd)
+                    stage.receipt(prefix_reassembled=1, corrupt_and_short_rejected=1)
             finally:
                 process.terminate()
                 process.wait(timeout=10)
