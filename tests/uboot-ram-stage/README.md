@@ -32,6 +32,17 @@ uv run --offline --python 3.13 $Tool boot-staged $Bundle $Pin
 
 11 月 21 日 Windows 主机驱动库无 Google `android_winusb.inf`，历史相同 USB 型号的复合接口保留 `usbser` 绑定。本机同时有 Windows 自带的 WinUSB 驱动文件；能否用于下载取决于 fastboot 接口的实际绑定。11 月 17 日临时绑定 Google r13 需要管理员确认，用后已卸载；本地驱动目录的签名校验仍为 Valid。脚本不管理主机驱动。
 
+## 通过日常启动分区加快串口上传
+
+11 月 21 日已在此台设备的外层 `linux-boot` FAT 中核对 `/EFI/y700-display-12-11.efi`。文件为 39,410,176 字节，SHA-256 为 `0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60`，与发布内核逐字节匹配。保留此次核对所得的 GPT **PARTUUID** 作为下面的 `$PartUuid`。其他设备需要核实其自己的分区和该文件。[内核对应的显示选项](../../docs/PANEL-REFRESH-OPTION.md)
+
+```powershell
+uv run --offline --python 3.13 $Tool stage $Bundle $Pin --esp-kernel $PartUuid
+uv run --offline --python 3.13 $Tool boot-staged $Bundle $Pin
+```
+
+启用此选项允许 U-Boot 只读查询其已扫描的 SCSI LUN 0–7。找到唯一匹配标签和分区 UUID 的分区后，工具仅从上述固定路径向已验证的 RAM 地址读取文件，同时限制最大读取长度。文件大小、加载地址、实读长度和完整 RAM 的 CRC32 均通过，才跳过该内核的 YMODEM 上传，回执为 `esp_kernel_hit=1 usb_bytes_saved=39410176`。按前述实测速率可节省约 47 分钟。任一文件或身份检查未匹配且 shell 仍响应时，工具经 USB 上传全部三件。丢失 shell 提示符即中止。后续 `boot-staged` 仍验证三件与禁存储 DT。[U-Boot fatload 长度与返回值](https://docs.u-boot.org/en/latest/usage/cmd/fatload.html)
+
 ## 复核
 
 在 PC 指向早期实验区的 `asphalt-debian` 目录、候选目录和独立清单摘要，运行：
@@ -41,3 +52,9 @@ uv run --offline --no-project --python 3.13 python -B tests/uboot-ram-stage/repl
 ```
 
 回放直接读取 `physical-20261117-ram-recovery/{uboot-console,linux-handoff-console}.log` 和当时三件镜像，重新计算原机三项 CRC；另外读取 `physical-20261116-uboot-prc` 的版本记录及 PRC 控制树。合成负例覆盖错板、预约项缺失、受保护范围、地址冲突、截短数据、错误目标 DT 状态及错误命令行。模拟 YMODEM 检查重发、尾包及取消；模拟 fastboot 检查同一临时标识、合包字节、复制定位和失败退出。测试结束报告 `hardware_commands=0`。历史原始日志留在本地。
+
+Linux 主机还可运行独立的 AArch64 QEMU U-Boot FAT 检查。它使用临时合成 GPT、FAT32、随机分区 UUID 和实际 39,410,176 字节内核，通过相同的生产代码执行分区查询、加载与 RAM 校验。已实测正确身份命中、错身份拒绝和原 GPT 镜像 SHA 前后一致。此项测试的 U-Boot 为 QEMU virt 版（SHA-256 `ccfe8c4136a02adccdc68b2e7567fa4a06cc8874213064f62f20463803706c4f`）。物理机的 U-Boot 从日常分区加载这一特定文件仍待试启动验证。
+
+```sh
+uv run --offline --no-project --python /usr/bin/python3 python -B tests/uboot-ram-stage/esp-qemu.py "$Bundle/kernel.efi" "$QemuUBoot"
+```

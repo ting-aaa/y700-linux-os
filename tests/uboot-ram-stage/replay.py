@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import uuid
 import zlib
 from unittest.mock import patch
 
@@ -116,6 +117,52 @@ def ymodem():
     checked(port.sent[-1] == b"\x18" * 4 + b"\x08" * 4)
 
 
+def esp(blobs, addresses):
+    pin = uuid.UUID("e4c847c7-0c60-43e5-b7a0-32298b2025de")
+    kernel = blobs["kernel.efi"]
+    addr, size = addresses["kernel.efi"], len(kernel)
+    all_slots = [addresses[name] for name in ("board.dtb", "kernel.efi", "initrd")]
+
+    def exercise(case):
+        queries, transfers = [], []
+        def query(port, cmd, *args):
+            queries.append(cmd)
+            if cmd.startswith("part number "):
+                lun = int(cmd.split()[3])
+                return "0x12" if case != "label" and (lun == 3 or case == "duplicate" and lun == 5) else "not found"
+            if cmd.startswith("part uuid "):
+                return str(uuid.UUID(int=0) if case == "identity" else pin)
+            if cmd == f"if fatsize scsi 3:12 {stage.ESP_KERNEL}; then printenv filesize; fi":
+                return "" if case == "missing" else f"filesize={size + int(case == 'size'):x}"
+            if cmd == f"if fatload scsi 3:12 {addr:x} {stage.ESP_KERNEL} {size:x}; then printenv fileaddr filesize; fi":
+                if case == "lost":
+                    raise stage.Refused("U-Boot shell prompt missing")
+                return f"{size - int(case == 'short')} bytes read in 1 ms\nfileaddr={addr + int(case == 'address'):x}\nfilesize={size:x}"
+            if cmd == f"crc32 {addr:x} {size:x}":
+                return f"crc32 for {addr:x} ... {addr + size - 1:x} ==> {zlib.crc32(kernel) ^ int(case == 'crc'):08x}"
+            raise AssertionError(cmd)
+        with (patch.object(stage, "command", query), patch.object(stage, "receipt"),
+              patch.object(stage, "loady", lambda p, a, b: transfers.append(a))):
+            def transfer():
+                stage.serial_stage(None, blobs, addresses, None if case == "off" else pin)
+            if case == "lost":
+                rejects(transfer)
+            else:
+                transfer()
+        return queries, transfers
+
+    checked(exercise("off") == ([], all_slots))
+    for case in ("label", "identity", "duplicate", "missing", "size", "short", "address", "crc"):
+        queries, transfers = exercise(case)
+        checked(transfers == all_slots)
+        if case in ("label", "identity", "duplicate", "missing", "size"):
+            checked(not any("fatload " in command for command in queries))
+    queries, transfers = exercise("hit")
+    checked(transfers == [all_slots[0], all_slots[-1]])
+    checked(queries[-1] == f"crc32 {addr:x} {size:x}")
+    checked(exercise("lost")[1] == [])
+
+
 def bulk(address):
     blobs = dict(zip(stage.SLOTS, (b"k" * 41, b"r" * 13, b"dt"), strict=True))
     base = address["kernel.efi"]
@@ -169,5 +216,6 @@ if __name__ == "__main__":
     rejects(lambda: stage.inputs(Path(new), "0" * 64))
     final_gate(blobs, addrs, identity, cmdline)
     ymodem()
+    esp(blobs, addrs)
     bulk(addrs)
     stage.receipt(host_assertions=passed, historical_crcs=3, hardware_commands=0)

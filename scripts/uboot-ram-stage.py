@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import zlib
 
 
@@ -25,6 +26,7 @@ SLOTS = {"kernel.efi": ("kernel_addr_r", 128 * MIB), "initrd": ("ramdisk_addr_r"
 KERNEL = "0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60"
 DISKLESS_DT = "8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82"
 CONTROLLERS = ("/soc@0/ufshc@1d84000", "/soc@0/mmc@8804000")
+ESP_KERNEL = "/EFI/y700-display-12-11.efi"
 
 
 class Refused(Exception):
@@ -248,6 +250,51 @@ def loady(port, addr, blob):
     need(int(decimal) == int(hex_size, 16) == len(blob), "YMODEM receiver size mismatch")
 
 
+def esp_kernel(port, expected_uuid, addr, blob):
+    # Use the board's normal pre-scanned UFS LUNs and partition label. Never
+    # mount a filesystem, enumerate files, or use paths supplied by the host.
+    matches = []
+    for lun in range(8):
+        numbers = re.findall(r"^0x([0-9a-fA-F]{1,2})$", command(port, f"part number scsi {lun} linux-boot"), re.M)
+        if len(numbers) == 1 and int(numbers[0], 16) > 0:
+            target = f"{lun}:{int(numbers[0], 16):x}"
+            ids = re.findall(r"^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$",
+                             command(port, f"part uuid scsi {target}").lower(), re.M)
+            if ids == [str(expected_uuid)]:
+                matches.append(target)
+    if len(matches) != 1:
+        return False
+    target = matches[0]
+    size = len(blob)
+    size_text = command(port, f"if fatsize scsi {target} {ESP_KERNEL}; then printenv filesize; fi")
+    sizes = re.findall(r"^filesize=(?:0x)?([0-9a-fA-F]+)$", size_text, re.M)
+    if len(sizes) != 1 or int(sizes[0], 16) != size:
+        return False
+    # Never let unexpected file growth write beyond the authenticated image.
+    read = command(port, f"if fatload scsi {target} {addr:x} {ESP_KERNEL} {size:x}; then printenv fileaddr filesize; fi", 90)
+    counts = re.findall(r"^(\d+) bytes read(?: in .*)?$", read, re.M)
+    try:
+        if counts != [str(size)] or number("fileaddr", read) != addr or number("filesize", read) != size:
+            return False
+    except Refused:
+        return False
+    crc = command(port, f"crc32 {addr:x} {size:x}", 60)
+    try:
+        verify_crc(crc, addr, blob)
+    except Refused:
+        return False
+    return True
+
+
+def serial_stage(port, blobs, addresses, esp_uuid):
+    cached = esp_uuid is not None and esp_kernel(port, esp_uuid, addresses["kernel.efi"], blobs["kernel.efi"])
+    if esp_uuid is not None:
+        receipt(esp_kernel_hit=cached, usb_bytes_saved=len(blobs["kernel.efi"]) if cached else 0)
+    for name in ("board.dtb", "kernel.efi", "initrd"):
+        if name != "kernel.efi" or not cached:
+            loady(port, addresses[name], blobs[name])
+
+
 def fastboot(port, executable, blobs, address):
     # A volatile challenge ties fastboot (and the returned ACM shell) to this
     # exact session without recording a USB serial number or assuming a port.
@@ -331,7 +378,11 @@ def main():
     cli.add_argument("directory", type=Path)
     cli.add_argument("manifest_sha256")
     cli.add_argument("--fastboot", type=Path, help="Use this host fastboot executable instead of ACM YMODEM")
+    cli.add_argument("--esp-kernel", type=uuid.UUID, metavar="PARTUUID",
+                     help="Allow read-only UFS access to the verified linux-boot ESP to save kernel upload time")
     args = cli.parse_args()
+    if args.esp_kernel and (args.fastboot or args.action not in ("stage", "boot")):
+        cli.error("--esp-kernel applies to YMODEM stage or boot")
     blobs, cmdline = inputs(args.directory, args.manifest_sha256)
     receipt(host_verified=5, first_stage_files=3, first_stage_bytes=sum(map(len, blobs.values())))
     if args.action == "check":
@@ -349,8 +400,7 @@ def main():
             with closing(fastboot(serial_port, executable, blobs, address)) as returned:
                 finish(returned, blobs, address, cmdline, args.action == "boot")
         else:
-            for name in ("board.dtb", "kernel.efi", "initrd"):
-                loady(serial_port, address[name], blobs[name])
+            serial_stage(serial_port, blobs, address, args.esp_kernel)
             finish(serial_port, blobs, address, cmdline, args.action == "boot")
 
 
