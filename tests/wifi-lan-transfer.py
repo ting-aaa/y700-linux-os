@@ -73,14 +73,14 @@ def counters(interface):
     return {name: int((interface / "statistics" / name).read_text()) for name in COUNTERS}
 
 
-def frequency(interface, *, between_associations=False):
+def frequency(interface, *, between_associations=False, timeout=None):
     if shutil.which("iw"):
-        link = subprocess.check_output(["iw", "dev", interface.name, "link"], text=True)
+        link = subprocess.check_output(["iw", "dev", interface.name, "link"], text=True, timeout=timeout)
         match = re.search(r"^\s*freq:\s*(\d+)(?:\.0+)?(?:\s|$)", link, re.MULTILINE)
     elif shutil.which("nmcli"):
         cells = subprocess.check_output(["nmcli", "-t", "-f", "IN-USE,FREQ", "device", "wifi",
                                          "list", "ifname", interface.name, "--rescan", "no"],
-                                        text=True, env={**os.environ, "LC_ALL": "C"})
+                                        text=True, env={**os.environ, "LC_ALL": "C"}, timeout=timeout)
         match = re.search(r"^\*:(\d+) MHz$", cells, re.MULTILINE)
     else:
         return None
@@ -158,10 +158,7 @@ def run_challenges(stream, seconds):
             "gaps_over_15s": over_fifteen, "elapsed_s": round(last - started, 3)}
 
 
-def tablet(peer, size, stream_seconds):
-    import signal
-
-    signal.alarm(240)
+def wlan_route(peer):
     net = Path("/sys/class/net")
     command = ["ip", "-j", f"-{peer.version}", "route", "get", str(peer)]
     link_local = peer.version == 6 and peer.is_link_local
@@ -171,15 +168,30 @@ def tablet(peer, size, stream_seconds):
         if len(wireless) != 1:
             raise ValueError("Scoped IPv6 requires one active physical WLAN on the tablet")
         command.extend(["oif", wireless[0].name])
-    route, = json.loads(subprocess.check_output(command))
+    route, = json.loads(subprocess.check_output(command, timeout=4, stderr=subprocess.DEVNULL))
     interface = net / route["dev"]
     if "gateway" in route or not (interface / "phy80211").is_dir():
         raise ValueError("The host must be on-link via the physical WLAN interface")
-    driver = (interface / "device/driver").resolve(strict=True).name
     address = ipaddress.ip_address(route["prefsrc"])
     if address.version != peer.version or (link_local and not address.is_link_local):
         raise ValueError("Route selected an incompatible WLAN source address")
     scope = socket.if_nametoindex(interface.name) if link_local else 0
+    return interface, address, scope
+
+
+def windows_unicast_interface(stream, version, index):
+    # UNICAST_IF is 31 for both families. WinSock uses network byte order for IPv4.
+    level = socket.IPPROTO_IP if version == 4 else socket.IPPROTO_IPV6
+    stream.setsockopt(level, 31, index.to_bytes(4, "big" if version == 4 else sys.byteorder))
+
+
+def tablet(peer, size, stream_seconds):
+    import signal
+
+    signal.alarm(240)
+    interface, address, scope = wlan_route(peer)
+    driver = (interface / "device/driver").resolve(strict=True).name
+    link_local = peer.version == 6 and peer.is_link_local
     token = secrets.token_bytes(32)
     with socket.socket(socket.AF_INET6 if peer.version == 6 else socket.AF_INET) as listener:
         listener.settimeout(20)
@@ -237,11 +249,7 @@ def host(peer, size_mib, control, tablet_uv, stream_seconds, windows_ifindex, re
             with socket.socket(socket.AF_INET6 if peer.version == 6 else socket.AF_INET) as stream:
                 stream.settimeout(15)
                 if windows_ifindex:
-                    # WinSock UNICAST_IF (31) uses network byte order for IPv4 and host order for IPv6.
-                    ipv4 = peer.version == 4
-                    level = socket.IPPROTO_IP if ipv4 else socket.IPPROTO_IPV6
-                    index = windows_ifindex.to_bytes(4, "big" if ipv4 else sys.byteorder)
-                    stream.setsockopt(level, 31, index)
+                    windows_unicast_interface(stream, peer.version, windows_ifindex)
                 stream.bind(socket_address(peer, 0, scope))
                 stream.connect(socket_address(target, port, scope))
                 stream.sendall(bytes.fromhex(token))

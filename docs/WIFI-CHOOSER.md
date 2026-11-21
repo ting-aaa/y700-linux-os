@@ -162,3 +162,20 @@ On November 22 two unprivileged clients on the daily dev12.11 tablet each opened
 Both connections delivered verified responses on 2437, 5220 and again 2437 MHz. Each completed 11 downloads (579,260 bytes) in about 16.4 seconds. The longest intervals between verified responses were 2.621 seconds for IPv4 and 2.622 seconds for IPv6, including the one-second pacing interval. The station returned to its original WPA2 access point with both saved profiles and the network service invocations intact. Receipts are in `out/wifi-roam-path/first-mirror-run/{v4,v6,roam}.log`.
 
 During the same transition, an independent TCP connection from the Windows WLAN peer verified 42 bidirectional exchanges across 2437 and 5220 MHz. It reset 19.207 seconds after its last reply and yielded no verified reply on the return leg. Fresh connections from that peer using IPv4 and link-local IPv6 timed out. Both default routers still answered on the tablet. This qualifies public HTTPS on both IP families for this transition. The cause of the same-LAN peer failure remains open.
+
+### Measure each direction independently
+
+The UDP probe counts which authenticated 24-byte challenges each receiver accepts. The physical tablet chooses one temporary port and reports its counts over the existing host-key-verified USB SSH connection. Windows uses the same port, binds the local address, checks that it belongs to the selected active physical WLAN, and selects that interface for outgoing unicast. The tablet binds its on-link WLAN device. Each endpoint reads the neighbor-cache state of this peer before the round. The receipt records counts, family, and frequency without addresses or network identifiers. [Probe](../tests/wifi-rejoin/udp-peer.py) · [Windows neighbor lookup](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-getipnetentry2)
+
+In PowerShell, set `$ifIndex` to the known Wi-Fi interface, `$usbSsh` to the existing verified USB wrapper's WSL path, and `$tabletUv` to the existing executable available to the tablet's unprivileged account. Select a single assigned IPv4 address or the link-local IPv6 address on that interface. Run one IP family at a time. The command observes the current association. Coordinate any separately authorized transition after `WIFI_UDP_READY`.
+
+```powershell
+$addrs = @(Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -AddressState Preferred)
+if ($addrs.Count -ne 1) { throw 'Select one assigned WLAN address' }
+$wlanAddress = $addrs[0].IPAddress
+uv run --offline --no-project --python 3.13 python -B tests/wifi-rejoin/udp-peer.py `
+    --host $wlanAddress --windows-ifindex $ifIndex --rounds 65 --tablet-uv $tabletUv `
+    --control wsl.exe -d Ubuntu -u root --exec bash $usbSsh
+```
+
+Each round sends at most one challenge per direction. The first two rounds send only from the tablet, before Windows has sent to this peer's temporary port. A public-profile inbound firewall policy can therefore affect this count. Compare `tablet_sent` with `windows_received` and `windows_sent` with `tablet_received` in each consecutive frequency segment. Frequency 0 means the before/after samples disagreed or the current association was unavailable. Neighbor states such as STALE describe cache state and can occur during successful delivery. Local send errors and receiver errors have their own counters. The two-process Windows loopback regression covers both IP families, a receive failure in each direction, and the off-link guard. The physical outcome requires a new tablet receipt. [Loopback fixture](../tests/wifi-rejoin/udp-loopback.py)
