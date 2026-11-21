@@ -1,0 +1,18 @@
+Description: Replace the previous GTK tray menu handlers when its size changes
+ GtkStatusIcon can notify more than once while Xfce embeds/resizes it. Each
+ handler closes over the geometry at that notification. Leaving previous
+ handlers connected opens another menu and retains its GTK input grab.
+Bug: https://github.com/ibus/ibus/issues/2967
+--- a/ui/gtk3/panel.vala
++++ b/ui/gtk3/panel.vala
+@@ -489,6 +489,10 @@
+         // in gdk_window_impl_move_to_rect()
+         area.x -= win_x;
+         area.y -= win_y;
++        if (m_popup_menu_id != 0)
++            m_status_icon.disconnect(m_popup_menu_id);
++        if (m_activate_id != 0)
++            m_status_icon.disconnect(m_activate_id);
+         m_popup_menu_id = m_status_icon.popup_menu.connect((b, t) => {
+                 popup_menu_at_area_window(
+                         create_context_menu(true),
