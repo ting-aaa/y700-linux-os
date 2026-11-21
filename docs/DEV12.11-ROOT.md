@@ -19,3 +19,16 @@ sudo cat "$output/SHA256SUMS" "$output/inventory.log" "$output/filesystem-check.
 ```
 
 在已卸载并封存的根上再次只读检查，三包内 23 个普通文件和 4 个符号链接的内容、目标、权限和属主均匹配归档。21 个既有软件层收据保持原哈希，新增 `/var/lib/y700/build/camera-autofocus.lock.json`。ARM64 包账本 `packages.tsv` 的 SHA-256 为 `17473ab98cdf1190d573276bba00ceca7e0cee05688b8b496de37df8fc600d82`。五阶段 `e2fsck -fn` 通过；用户账户已锁定，首次触控建号服务及 LightDM 图形目标已就绪。设备身份、网络资料、SSH 密钥和本机校准留待个性化时导入。构建、首次启动配置和只读逐文件复核日志位于 `out/dev12.11-root/`。
+## 从已安装的 dev12.10 迁移
+
+在正在运行的 dev12.10 文件根上，以 root 读取已校验的两个普通文件，按以下顺序传入暂存程序。正常安装需要原有系统之外约 40 GiB，包含 7 GiB 封存种子、32 GiB 新根和 1 GiB 内层 ESP。迁移时退出普通用户的桌面会话，以便完整比对主目录快照。主目录的临时归档需要相应的可用内存。
+
+```sh
+cat "$generic_root" "$generic_esp" |
+  bash scripts/stage-file-trial-images.sh --dev12.11 /run/initramfs/backing
+bash scripts/personalize-file-install.sh --dev12.11 "$root_owned_trial_controller"
+```
+
+暂存目录为 `.dev12.11-input`。个人化程序从当前运行的系统迁移账户、主目录、USB 身份及设备设置，在隐含目录准备完成后，将新文件对原子发布到 `/run/initramfs/backing/var/lib/y700-trial/dev12.11/`。成功标记为 `dev12.11 personal files verified, USB identity retained`。准备途中可使用同一命令从封存种子重试。新根 UUID 为 `c0e447e4-82db-59ee-91d6-0e1ec9d5f45e`，新 ESP ID 为 `31EC-3084`。试启动控制器另行选择引导项。
+
+两次独立的 ARM64 用户空间迁移使用普通文件组成的嵌套 ext4 和 FAT，验证了 32 GiB 新根、用户文件与硬链接、四分钟回退计时器、原安装身份及离线文件系统检查。短传输、指向旧根的符号链接以及试图覆盖已发布目录均被拒绝。最终源码实测记录位于 `out/dev12.11-install-preparation/migration-arm64.log`。[可复现夹具](../tests/installed-trial/dev1211-migration.sh)

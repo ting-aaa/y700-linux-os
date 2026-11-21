@@ -6,9 +6,15 @@ umask 077
 die() { echo "File trial staging: $*" >&2; exit 1; }
 edition=dev12.5
 generic_sha=041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6
+esp_sha=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
 if [[ ${1:-} == --dev12.10 ]]; then
     edition=dev12.10
     generic_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
+    shift
+elif [[ ${1:-} == --dev12.11 ]]; then
+    edition=dev12.11
+    generic_sha=33ce23e8edac1d9c445c6b360a6355a189a151804352b032efe51320287d17a3
+    esp_sha=92d47c14c4606d106ebad21ece8f5e23f244bd5aecea0c377bbe8966f8261b36
     shift
 fi
 inherit_bt=false
@@ -17,10 +23,10 @@ if [[ ${1:-} == --inherit-bluetooth ]]; then
     inherit_bt=true
     shift
 fi
-[[ $# == 1 || $# == 2 && $inherit_bt == false && $edition == dev12.5 ]] || die 'usage: stage-file-trial-images.sh [--dev12.10] [--inherit-bluetooth] MOUNTED_BASELINE [DEV12.5_PERSONAL_ROOT_SHA256]'
+[[ $# == 1 || $# == 2 && $inherit_bt == false && $edition == dev12.5 ]] || die 'usage: stage-file-trial-images.sh [--dev12.10|--dev12.11] [--inherit-bluetooth] MOUNTED_BASELINE [DEV12.5_PERSONAL_ROOT_SHA256]'
+[[ $edition != dev12.11 || $inherit_bt == false ]] || die 'dev12.11 identity comes from the running installed desktop during personalization'
 [[ $EUID == 0 ]] || die 'the images and their staging directories must belong to root'
 root_sha=${2:-$generic_sha}
-esp_sha=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
 base=$(realpath -e -- "$1")
 [[ $root_sha =~ ^[0-9a-f]{64}$ && -d $base ]] || die 'invalid root digest or mount'
 [[ $(findmnt -nro FSTYPE -M "$base") == ext4 ]] || die 'expected the mounted ext4 baseline'
@@ -54,6 +60,10 @@ fi
 exec {lock_fd}<"$parent"
 flock -n "$lock_fd" || die 'another staging operation is active'
 target=$parent/$edition
+if [[ $edition == dev12.11 ]]; then
+    [[ ! -e $target && ! -L $target ]] || die 'the installed dev12.11 directory already exists'
+    target=$parent/.dev12.11-input
+fi
 [[ ! -e $target && ! -L $target ]] || die "$edition already exists; its saved state is retained"
 stage=$(mktemp -d -- "$parent/.stage-$edition.XXXXXXXX")
 cleanup() {
@@ -103,4 +113,4 @@ cd "$parent"
 mv -nT -- "$stage" "$target"
 [[ ! -e $stage ]] || die 'destination appeared during staging'
 sync -f "$parent"
-echo "FILE_TRIAL_STAGE_PASS files=2 published=$edition"
+echo "FILE_TRIAL_STAGE_PASS files=2 published=${target##*/}"
