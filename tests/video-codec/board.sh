@@ -6,13 +6,25 @@ export LC_ALL=C
 stage=$(realpath -e "$1")
 mode=$2
 codec=${mode%%-*}
+last_completed_sleep() {
+    awk -v entry="PM: suspend entry ($1)" '
+        /^PM: suspend entry/ {valid=(!opened && $0==entry); opened=1; done=0; next}
+        /^PM: suspend exit/ {done=(opened && valid && $0=="PM: suspend exit"); opened=0}
+        END {exit !(done && !opened)}
+    '
+}
 [[ $stage == /run/y700-iris.* && $(findmnt -nro FSTYPE -T "$stage") == tmpfs ]]
 [[ $(readlink /proc/self/ns/mnt) != "$(readlink /proc/1/ns/mnt)" ]]
 [[ $(readlink /proc/self/ns/net) != "$(readlink /proc/1/ns/net)" ]]
 grep -zFxq lenovo,asphalt /sys/firmware/devicetree/base/compatible
 notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
 installed_plugin=
-if [[ $mode == h264-after-wake ]]; then
+sleep_mode=
+case $mode in
+    h264-after-wake) sleep_mode=s2idle ;;
+    h264-after-deep) sleep_mode=deep ;;
+esac
+if [[ -n $sleep_mode ]]; then
     [[ $notes == 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ]]
     grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
     grep -Fwq y700.release=dev12.11 /proc/cmdline
@@ -20,10 +32,10 @@ if [[ $mode == h264-after-wake ]]; then
     success=$(cat /sys/power/suspend_stats/success)
     [[ $success =~ ^[1-9][0-9]*$ ]]
     journalctl -k -b -q -o cat --no-pager --grep='^PM: suspend (entry|exit)' |
-        awk '/^PM: suspend entry / {saw=($3=="entry" && $4=="(s2idle)")} /^PM: suspend exit$/ {done=saw; saw=0} END {exit !(done && !saw)}'
+        last_completed_sleep "$sleep_mode"
     installed_plugin=/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
     printf '%s  %s\n' a64bdb5bf9e4454f371638cf17c2564c3cbe3a3bc379ba5151de3c689f4a69f0 "$installed_plugin" | sha256sum --strict --status -c -
-    printf 'IRIS_WAKE_PRECHECK release=dev12.11 sleep_success=%s kernel_notes=%s\n' "$success" "$notes"
+    printf 'IRIS_WAKE_PRECHECK release=dev12.11 sleep_success=%s kernel_notes=%s sleep_mode=%s\n' "$success" "$notes" "$sleep_mode"
     mode=h264-playbin
 else
     [[ $notes == 2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066 ]]
@@ -154,4 +166,4 @@ if ! cmp -s "$codec/reference.sha256" results/frame.sha256; then
     exit 1
 fi
 frames=$((bytes / frame_bytes))
-echo "IRIS_DECODE_PASS codec=$codec frames=$frames geometry=${width}x$height linear=NV12 output=I420 matching_software_frames=$frames eos=1"
+echo "IRIS_DECODE_PASS codec=$codec frames=$frames geometry=${width}x$height linear=NV12 output=I420 matching_software_frames=$frames eos=1${sleep_mode:+ sleep_mode=$sleep_mode}"
