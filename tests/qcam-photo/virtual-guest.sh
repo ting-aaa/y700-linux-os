@@ -18,6 +18,10 @@ test "$(dpkg-deb -f ./qcam.deb Architecture)" = arm64
 dpkg-deb -x ./qcam.deb /
 printf 'QCAM_VIRTUAL_ELF '; sha256sum /opt/y700-camera/bin/qcam
 runtime=/opt/qcam-virtual/runtime-root/usr/lib/aarch64-linux-gnu
+if [[ -d ./virtual-libs ]]; then
+    install -m755 ./virtual-libs/{libcamera,libcamera-base}.so.0.7.2 "$runtime"
+    sha256sum "$runtime"/{libcamera,libcamera-base}.so.0.7.2
+fi
 test -L "$runtime/libcamera.so.0.7"
 LD_LIBRARY_PATH="$runtime" ldd /opt/y700-camera/bin/qcam > /run/qcam-libraries
 grep -F "$runtime/libcamera.so.0.7" /run/qcam-libraries

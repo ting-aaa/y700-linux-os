@@ -2,8 +2,8 @@
 # Use a signed test-only libcamera 0.7.2 with the virtual pipeline, and the
 # original qcam ELF extracted from the supplied Y700 application package.
 set -euo pipefail
-if (( $# != 7 )); then
-    echo 'Usage: run-virtual-qemu.sh ROOT.qcow2 KERNEL QCAM.deb VIRTUAL_RUNTIME_DEBS X11_DEBS ARM64_BUSYBOX ARM64_UV' >&2
+if (( $# != 7 && $# != 8 )); then
+    echo 'Usage: run-virtual-qemu.sh ROOT.qcow2 KERNEL QCAM.deb VIRTUAL_RUNTIME_DEBS X11_DEBS ARM64_BUSYBOX ARM64_UV [VIRTUAL_ONLY_LIBRARIES]' >&2
     exit 2
 fi
 disk=$(realpath -e "$1")
@@ -21,6 +21,11 @@ install -m755 "$7" "$payload/uv"
 install -m644 "$app" "$payload/qcam.deb"
 install -m644 "$fixture/"{virtual-guest.sh,virtual-session.sh,virtual-shutter.py,virtual-cameras.yaml} "$payload/"
 install -m644 "$runtime/"*.deb "$payload/runtime/"
+if (( $# == 8 )); then
+    (cd "$8" && sha256sum --strict -c SHA256SUMS)
+    install -d "$payload/virtual-libs"
+    install -m755 "$8"/{libcamera,libcamera-base}.so.0.7.2 "$payload/virtual-libs"
+fi
 install -m644 "$x11/"{libxdo3,xdotool,xvfb}_*.deb "$payload/x11/"
 printf 'QCAM_VIRTUAL_ROOT '; sha256sum "$disk"
 printf 'QCAM_VIRTUAL_KERNEL '; sha256sum "$kernel"

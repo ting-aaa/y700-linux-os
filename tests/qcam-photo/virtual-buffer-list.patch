@@ -1,0 +1,7 @@
+--- a/src/libcamera/pipeline/virtual/virtual.cpp
++++ b/src/libcamera/pipeline/virtual/virtual.cpp
+@@ -133 +133,3 @@ void VirtualCameraData::processRequest(Request *request)
+-	for (const auto &[stream, buffer] : request->buffers()) {
++	/* A completion can let the client reuse its request immediately. */
++	const auto buffers = request->buffers();
++	for (const auto &[stream, buffer] : buffers) {
