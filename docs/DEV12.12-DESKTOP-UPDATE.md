@@ -44,3 +44,5 @@ sudo bash tests/desktop-update/check.sh /path/to/dev12.12/root.ext4 \
 ```
 
 通用镜像的 SHA-256 为 `5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3`。测试按包名、版本和架构核对全部 1,240 项。原版和回退后的清单摘要均为 `ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047`，更新后为 `073a8831c0a7aa8cda470b59208cbfb258f546cd5e39cd36a792367959fb7430`。完整测试记录位于 `out/dev12.12-desktop-update/arm64-combined-lifecycle.log`。
+
+两次重复操作均未写入 dpkg 状态或日志。分别在升级、回退的解包阶段停下，重新运行后都恢复了目标清单。修改过的 Blueman 配置文件逐字节保留。额外安装一个本地包得到 1,241 项时，升级和回退同样通过，额外的软件包一直保留。测试结束后复核原始镜像摘要一致，测试日志 SHA-256 为 `a61937c54ccf540100d57772e3e9c8f98f96a0e6191eb222bc6406141abd3d78`。
