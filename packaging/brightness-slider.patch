@@ -1,0 +1,131 @@
+--- a/usr/libexec/y700-tablet-brightness
++++ b/usr/libexec/y700-tablet-brightness
+@@ -37,7 +37,9 @@
+         self.set_position(Gtk.WindowPosition.CENTER)
+         self.set_resizable(False)
+         self.original = None
+-        self.pending = False
++        self.pending = None
++        self.queued = None
++        self.closed = False
+         source = Gio.SettingsSchemaSource.get_default()
+         schema = source.lookup("org.y700.tablet", True) if source else None
+         self.settings = Gio.Settings.new_full(schema, None, None) if schema and schema.has_key(AUTO_KEY) else None
+@@ -59,7 +61,13 @@
+         self.brighter = self.button("+", label("Increase brightness", "提高亮度"), self.adjust, 1)
+         controls.add(self.brighter)
+ 
+-        self.bar = Gtk.LevelBar.new_for_interval(0, 1)
++        self.bar = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 5, 100, 1)
++        self.bar.set_draw_value(False)
++        self.bar.set_round_digits(0)
++        self.bar.set_increments(1, 10)
++        self.bar.set_size_request(-1, 56)
++        self.bar.get_accessible().set_name(label("Screen brightness", "屏幕亮度"))
++        self.bar_handler = self.bar.connect("value-changed", self.slide)
+         content.add(self.bar)
+         presets = Gtk.Box(spacing=8, homogeneous=True)
+         content.add(presets)
+@@ -166,6 +174,8 @@
+         self.sensor_gone()
+ 
+     def close_monitor(self, *_):
++        self.closed = True
++        self.queued = None
+         if self.settings:
+             self.settings.disconnect(self.pref_handler)
+         self.stop_monitor()
+@@ -175,7 +185,7 @@
+             current, maximum = read_level()
+         except (OSError, ValueError):
+             self.level.set_text("—")
+-            self.bar.set_value(0)
++            self.bar.set_sensitive(False)
+             for button in (self.dimmer, self.brighter, self.restore, *(b for _, b in self.presets)):
+                 button.set_sensitive(False)
+             self.show_status(label("Internal backlight unavailable.", "无法读取内屏背光。"))
+@@ -183,8 +193,12 @@
+         if self.original is None:
+             self.original = current
+         minimum = max(1, maximum * 5 // 100)
+-        self.level.set_text(f"{round(current * 100 / maximum)}%")
+-        self.bar.set_value(current / maximum)
++        preview = self.queued if self.queued is not None else self.pending
++        percent = round((current if preview is None else preview) * 100 / maximum)
++        self.level.set_text(f"{percent}%")
++        self.bar.set_sensitive(True)
++        with self.bar.handler_block(self.bar_handler):
++            self.bar.set_value(percent)
+         self.dimmer.set_sensitive(not self.pending and current > minimum)
+         self.brighter.set_sensitive(not self.pending and current < maximum)
+         self.restore.set_sensitive(not self.pending and 0 < self.original <= maximum and current != self.original)
+@@ -199,6 +213,15 @@
+             step = max(1, round(maximum / 100))
+             self.request(current, max(minimum, min(maximum, current + step * direction)))
+ 
++    def slide(self, scale):
++        percent = round(scale.get_value())
++        try:
++            current, maximum = read_level()
++        except (OSError, ValueError):
++            self.refresh()
++            return
++        self.request(current, max(1, maximum * percent // 100))
++
+     def set_percent(self, _button, percent):
+         values = self.refresh()
+         if values:
+@@ -213,18 +236,25 @@
+                 self.request(current, self.original)
+ 
+     def request(self, current, target):
+-        if self.pending or current == target:
++        if self.pending is not None:
++            # Keep the latest drag position while logind finishes the current write.
++            self.queued = target
++            self.refresh()
++            return
++        if current == target:
+             return
+         if self.settings and self.settings.get_boolean(AUTO_KEY) and not self.settings.set_boolean(AUTO_KEY, False):
++            self.refresh()
+             self.show_status(label("Automatic brightness is managed for this account.",
+                                    "此账户的自动亮度由管理员管理。"))
+             return
+         try:
+             bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+         except GLib.Error:
++            self.refresh()
+             self.show_status(label("The login service is unavailable.", "登录服务不可用。"))
+             return
+-        self.pending = True
++        self.pending = target
+         self.show_status("")
+         self.refresh()
+         # logind authorizes the active seat and the session owner. Its default
+@@ -236,14 +266,21 @@
+         )
+ 
+     def finished(self, bus, result, target):
+-        self.pending = False
+-        values = self.refresh()
++        self.pending = None
++        queued, self.queued = self.queued, None
+         try:
+             bus.call_finish(result)
+         except GLib.Error:
+-            self.show_status(label("Could not set brightness for this session.", "当前会话无法设置亮度。"))
++            if not self.closed:
++                self.refresh()
++                self.show_status(label("Could not set brightness for this session.", "当前会话无法设置亮度。"))
+             return
+-        if values and values[0] != target:
++        if self.closed:
++            return
++        values = self.refresh()
++        if values and queued is not None and not (self.settings and self.settings.get_boolean(AUTO_KEY)):
++            self.request(values[0], queued)
++        elif values and values[0] != target:
+             self.show_status(label("The backlight reported a different level.", "背光报告的亮度与设定不同。"))
+ 
+ 

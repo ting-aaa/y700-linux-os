@@ -4,6 +4,19 @@ Open **Settings → Hardware → Tablet brightness** in Xfce, or **设置 → �
 
 The Xfce Hardware settings category includes all three tablet display tools. The top bar also includes Xfce Power Manager on the current board image. [Power manager and battery menu](POWER-MANAGER-TOUCH.md)
 
+### Touch slider on the installed dev12.11 tablet
+
+Drag **Screen brightness** (`屏幕亮度`) to choose any whole percentage from 5 to 100. The keyboard arrow keys move one percentage point at a time. The slider occupies 56 logical pixels vertically, or 112 display pixels at 200%. The existing small-step, preset and restore controls remain available. The settings app sends manual changes through the active session's logind service and keeps the latest drag position while an earlier request is pending.
+
+The installed platform package is `0.1.0~dev12.8+gpu1.1`. Against private light and backlight inputs on this tablet's CPU, the installed English and Chinese GTK windows both reached 79% by dragging, reached 7% with Home and the arrow keys, then restored the opening value of 400/2047. The original dev12.11 archive can first receive the [Chromium platform update](CHROMIUM-GRAPHICS.md), then the slider update. Its two packages, checksums and helper are in `out/dev12.11-brightness/`.
+
+```sh
+sudo bash update-brightness-slider.sh install \
+  y700-platform_0.1.0~dev12.8+gpu1_all.deb y700-platform_0.1.0~dev12.8+gpu1.1_all.deb
+```
+
+Use `rollback` in place of `install` to restore the preceding Chromium-enabled package. Two independent builds of the slider package produced SHA-256 `aa39b033a89c8e295df4ba29a4a4fed26c91e6d4b9928fcf2e5d9cabde74d535`. [Build recipe](../scripts/build-brightness-slider.sh)
+
 ## Automatic brightness
 
 After a normal Xfce login with platform dev12.8 installed, open **Tablet brightness** and select **Automatic brightness** (简体中文 **自动亮度**). The setting defaults to off. The desktop follows ambient light while the internal panel is lit and the local session is unlocked. Choosing a different manual level turns the option off. If the sensor service is unavailable, the window displays a waiting message and the current brightness stays in effect. On the development tablet the sensor DSP normally stays offline between bounded hardware trials.
@@ -30,7 +43,7 @@ On the tablet's ARM64 CPU, an authenticated private Xvfb display ran the package
 
 In a separate guarded trial using the same GTK executable, the ordinary signed-in X11 user's process resolved to the active, local LightDM seat. With the backlight already powered down, one synthesized pointer tap on **+** requested 102 → 122 of 2047 through real logind. A second tap on **Restore opening level** returned it to 102. `bl_power` remained 4 throughout. An independent 75-second restore timer was armed before the first tap and removed after the expected value returned. The boot, active session, LightDM and USB SSH service invocations were preserved.
 
-The observations cover the on-device software path and the private graphical controls. Finger input and visible changes on a lit panel remain for an attended physical check.
+On the installed dev12.11 tablet, a separate measurement lit the internal DSI panel at the greeter. Its ordinary foreground UID requested 102 → 122 → 102 through logind. Each time, two reads of the KTZ8866's brightness and LED-enable registers agreed with the requested level. After blanking, the chip reported zero with the LEDs disabled while Linux retained the requested 102 for the next wake. The measurements establish the programmed current level. Optical luminance and a finger drag on the physical glass require separate observations. [On-device steps and register readback](../tests/brightness/lit-board-step.sh) · [KTZ8866 datasheet](https://www.kinet-ic.com/uploads/web/KTZ8866/KTZ8866-04b.pdf)
 
 ## Private UI probe
 

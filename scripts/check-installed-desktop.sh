@@ -72,8 +72,11 @@ if [[ $mode == candidate ]]; then
         case $package_sha in
             be0f181db24f72e2166b418e7b4e38999a672ffc89cb735a5afb7fd9a931941d)
                 echo 'PASS installed_versions dev12.11' ;;
-            5e7c63ae4efdce57f57fa983038f5e37cce0ec1c763e56fdce1c2314ac50ca08)
+            5e7c63ae4efdce57f57fa983038f5e37cce0ec1c763e56fdce1c2314ac50ca08|28746a498c221806b08e66de6e93595a18fb6a0fb6d1c7c2a3e1ee9fe652ca71)
                 echo 'PASS installed_versions dev12.11 with Chromium graphics setting'
+                if [[ $package_sha == 28746a498c221806b08e66de6e93595a18fb6a0fb6d1c7c2a3e1ee9fe652ca71 ]]; then
+                    check brightness_slider hash_is /usr/libexec/y700-tablet-brightness e5df07598109b52c82824ec36f0b42ee3959edd752426821a195665f2e57534c
+                fi
                 check chromium_launcher_policy hash_is /etc/chromium.d/99-y700-software-rendering d6abf4aae2553dbd8fad313adc1677419f7c188ffc7ea507375ce5d64eff092a
                 check chromium_settings_entry hash_is /usr/share/applications/y700-chromium-graphics.desktop 8619926e6f99f3a3f58478f125edb04a41e6984c8502078f32aa6d3c29df748f
                 check chromium_settings_app hash_is /usr/libexec/y700-chromium-graphics 0aaf19304acea09724fd013dce7e1fe45f6ddaa964c108bddbc6e90d48c7632b

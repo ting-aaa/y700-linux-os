@@ -60,6 +60,35 @@ def ui(lang):
     return controls, (toggle, bounds), frame
 
 
+def check_slider(lang):
+    controls, _, frame = ui(lang)
+    slider = named(frame, Atspi.Role.SLIDER, "Screen brightness" if lang == "en" else "屏幕亮度")
+    assert slider and slider.get_state_set().contains(Atspi.StateType.SENSITIVE)
+    bounds = slider.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+    assert bounds.width >= 180 and bounds.height >= 56
+    original, maximum = value("brightness"), value("max_brightness")
+    accessible = slider.get_value_iface()
+
+    def selected():
+        return round(accessible.get_current_value())
+
+    # Exercise the thumb and trough on a private X server at the real tablet scale.
+    x = lambda fraction: str(round(2 * (bounds.x + bounds.width * fraction)))
+    y = str(2 * bounds.y + bounds.height)
+    subprocess.run(["xdotool", "mousemove", x(.19), y, "mousedown", "1",
+                    "mousemove", x(.42), y, "mousemove", x(.63), y,
+                    "mousemove", x(.77), y, "mouseup", "1"], check=True, timeout=5)
+    wait(lambda: 67 <= selected() <= 87 and value("brightness") == maximum * selected() // 100,
+         "slider drag writes final level")
+    drag = selected()
+    subprocess.run(["xdotool", "key", "Home", "Right", "Right"], check=True, timeout=5)
+    wait(lambda: selected() == 7 and value("brightness") == maximum * 7 // 100, "slider key steps")
+    tap(*controls[2])
+    wait(lambda: value("brightness") == original, "slider restores exact opening level")
+    print(f"BRIGHTNESS_SLIDER locale={lang} logical_height={bounds.height} drag_percent={drag} "
+          f"keyboard_percent=7 restored={original}", flush=True)
+
+
 def main():
     assert os.getuid() == 1000 and os.environ["DISPLAY"] == ":76"
     work = Path.home() / "case"
@@ -125,6 +154,15 @@ def main():
                 wait(lambda: not settings.get_boolean(KEY), "Chinese toggle off")
                 assert level() == before and daemon.poll() is None
                 print("AMBIENT_UI english_chinese=pass preference_reopened=yes missing_sensor_hint=yes", flush=True)
+            if "--slider" in sys.argv:
+                # The sensor fixture has exited; start a new private logind and reset its state.
+                (work / "ready").unlink(missing_ok=True)
+                with running([sys.executable, "-B", str(mock), worker, str(work), "--serve"]):
+                    wait(lambda: (work / "ready").exists(), "slider services")
+                    for lang in ("en", "zh"):
+                        locale = "en_US.UTF-8" if lang == "en" else "zh_CN.UTF-8"
+                        with running([app], env=dict(os.environ, LANG=locale, LANGUAGE=lang)):
+                            check_slider(lang)
 
 
 if __name__ == "__main__":

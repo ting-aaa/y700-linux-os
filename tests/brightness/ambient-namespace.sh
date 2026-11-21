@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-[[ $# == 2 && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
+[[ ( $# == 2 || ( $# == 3 && $3 == --slider ) ) && $$ == 1 && $(findmnt -nro PROPAGATION /) == private ]]
 ulimit -c 0
 stage=$(realpath -e "$1")
 helpers=$(realpath -e "$2")
@@ -28,6 +28,7 @@ ln -s /proc/self/fd "$r/dev/fd"
 chmod 1777 "$r"/{tmp,tmp/.X11-unix,dev/shm}
 install -d -m700 -o 1000 -g 1000 "$r"/{home/y700,run/user/1000}
 install -m755 "$helpers/bin/"{Xvfb,xdotool} "$r/qa/bin/"
+if [[ -x $helpers/bin/uv ]]; then install -m755 "$helpers/bin/uv" "$r/qa/bin/"; fi
 install -m644 "$helpers/lib/aarch64-linux-gnu/libxdo.so.3" "$r/qa/lib/"
 cp -r "$stage/tests" "$r/qa/"
 chmod -R a+rX "$r/qa/tests"
@@ -45,5 +46,5 @@ exec chroot "$r" setpriv --reuid=1000 --regid=1000 --clear-groups --no-new-privs
     trap "kill $xserver 2>/dev/null || true" EXIT
     for i in {1..50}; do if xdpyinfo >/dev/null 2>&1; then break; fi; sleep .1; done
     xdpyinfo >/dev/null || { cat xvfb.log; exit 1; }
-    dbus-run-session -- bash -ec "export DBUS_SYSTEM_BUS_ADDRESS=\$DBUS_SESSION_BUS_ADDRESS; unset DBUS_SESSION_BUS_ADDRESS; exec dbus-run-session -- uv run --no-project --offline --python /usr/bin/python3 python -B /qa/tests/brightness/ambient-ui.py"
-  '
+    dbus-run-session -- bash -ec "export DBUS_SYSTEM_BUS_ADDRESS=\$DBUS_SESSION_BUS_ADDRESS; unset DBUS_SESSION_BUS_ADDRESS; exec dbus-run-session -- uv run --no-project --offline --python /usr/bin/python3 python -B /qa/tests/brightness/ambient-ui.py \"\$@\"" bash "$@"
+  ' bash "${@:3}"
