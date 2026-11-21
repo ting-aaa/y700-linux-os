@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the ARM64 virtual-camera-only libraries for the desktop regression.
 set -euo pipefail
-[[ $# == 2 && $(dpkg --print-architecture) == arm64 ]] || {
-    echo 'Usage on Debian ARM64: build-virtual-runtime.sh libcamera_0.7.2.orig.tar.gz NEW_OUTPUT_DIR' >&2
+[[ ( $# == 2 || ( $# == 3 && $3 == --rear-config-only ) ) && $(dpkg --print-architecture) == arm64 ]] || {
+    echo 'Usage on Debian ARM64: build-virtual-runtime.sh libcamera_0.7.2.orig.tar.gz NEW_OUTPUT_DIR [--rear-config-only]' >&2
     exit 2
 }
 archive=$(realpath -e "$1")
@@ -15,6 +15,11 @@ printf '%s  %s\n' e27f5670fe9443eebc8e2f24235cd20b533324ef481a3684d34c78f1c3a12a
 mkdir "$work/source"
 tar -xzf "$archive" -C "$work/source" --strip-components=1
 patch --batch --fuzz=0 -p1 -d "$work/source" < "$fixture/virtual-buffer-list.patch"
+if [[ ${3:-} == --rear-config-only ]]; then
+    patch --batch --fuzz=0 -p1 -d "$work/source" < "$fixture/../camera-autofocus/virtual-config-only.patch"
+    printf '%s  %s\n' 6b67c9bd191bb3391f232f8d55a916d9dd887c70e5a383148fcfcb09e776b843 \
+        "$work/source/src/libcamera/pipeline/virtual/virtual.cpp" | sha256sum --strict -c -
+fi
 meson setup "$work/build" "$work/source" --prefix=/usr --libdir=lib/aarch64-linux-gnu \
     --wrap-mode=nodownload --buildtype=release -Dwerror=false -Dpipelines=virtual -Dipas= \
     -Dcam=disabled -Dqcam=disabled -Dgstreamer=disabled -Ddocumentation=disabled \

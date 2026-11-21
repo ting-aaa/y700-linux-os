@@ -1,0 +1,32 @@
+--- a/src/libcamera/pipeline/virtual/virtual.cpp
++++ b/src/libcamera/pipeline/virtual/virtual.cpp
+@@ -207 +207 @@ CameraConfiguration::Status VirtualCamer
+-		if (cfg.pixelFormat != formats::NV12) {
++		if (cfg.pixelFormat != formats::NV12 && cfg.pixelFormat != formats::ABGR8888) {
+@@ -213,2 +213,4 @@ CameraConfiguration::Status VirtualCamer
+-		if (cfg.colorSpace != ColorSpace::Rec709) {
+-			cfg.colorSpace = ColorSpace::Rec709;
++		const ColorSpace &colorSpace = cfg.pixelFormat == formats::ABGR8888 ?
++					      ColorSpace::Srgb : ColorSpace::Rec709;
++		if (cfg.colorSpace != colorSpace) {
++			cfg.colorSpace = colorSpace;
+@@ -282,0 +285 @@ PipelineHandlerVirtual::generateConfigur
++		streamFormats[formats::ABGR8888] = streamFormats[pixelFormat];
+@@ -302,0 +306,3 @@ int PipelineHandlerVirtual::configure(Ca
++		const char *fail = utils::secure_getenv("Y700_QA_CONFIG_ENOSPC");
++		if (c.pixelFormat == formats::ABGR8888 && fail && std::string(fail) == "1")
++			return -ENOSPC;
+@@ -303,0 +310,3 @@ int PipelineHandlerVirtual::configure(Ca
++		/* The RGB configuration has no frame generator. */
++		if (c.pixelFormat == formats::ABGR8888)
++			continue;
+@@ -318,0 +328,2 @@ int PipelineHandlerVirtual::exportFrameB
++	if (config.pixelFormat == formats::ABGR8888)
++		return -ENOTSUP;
+@@ -333 +344,3 @@ int PipelineHandlerVirtual::start([[mayb
+-	for (auto &s : data->streamConfigs_)
++	for (auto &s : data->streamConfigs_) {
++		if (s.stream.configuration().pixelFormat == formats::ABGR8888)
++			return -ENOTSUP;
+@@ -334,0 +348 @@ int PipelineHandlerVirtual::start([[mayb
++	}
