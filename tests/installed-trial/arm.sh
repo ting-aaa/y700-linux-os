@@ -77,6 +77,10 @@ mkdir "$store/dev12.10" "$work/root"
 img=$store/dev12.10/root.ext4
 truncate -s 32G "$img"; mkfs.ext4 -q -U "$inner_uuid" -E lazy_itable_init=1 "$img"
 mount -o loop "$img" "$work/root"
+backing=$(findmnt -nro TARGET -T "$img")
+check_loop "$work/root" "$img"
+touch "$work/unrelated.ext4"
+if (check_loop "$work/root" "$work/unrelated.ext4") 2>/dev/null; then exit 1; fi
 mkdir -p "$work/root/etc/systemd/system" "$work/root/var/lib/y700/build"
 cp "$repo/config/video-player-update.lock.json" "$work/root/var/lib/y700/build/"
 bash "$repo/scripts/arm-installed-trial.sh" prepare-candidate "$work/root"

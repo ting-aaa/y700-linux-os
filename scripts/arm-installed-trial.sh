@@ -89,9 +89,9 @@ check_loop() {
     loop=$(findmnt -nro SOURCE -M "$target")
     [[ $loop =~ ^/dev/loop[0-9]+$ && -f $file && ! -L $file &&
        $(stat -c '%u:%g:%a:%h' "$file") == 0:0:600:1 &&
-       $(losetup -nO BACK-INO "$loop") == "$(stat -c %i "$file")" &&
-       $(losetup -nO BACK-MAJ:MIN "$loop") == "$(findmnt -nro MAJ:MIN -M "$backing")" &&
-       $(losetup -nO OFFSET "$loop") == 0 ]] || die 'loop backing does not match the installed image'
+       $(losetup --raw -nO BACK-INO "$loop") == "$(stat -c %i "$file")" &&
+       $(losetup --raw -nO BACK-MAJ:MIN "$loop") == "$(findmnt -nro MAJ:MIN -M "$backing")" &&
+       $(losetup --raw -nO OFFSET "$loop") == 0 ]] || die 'loop backing does not match the installed image'
 }
 locate_boot() {
     local ufs
@@ -275,6 +275,7 @@ main() {
     fi
     scratch=$(mktemp -d /run/y700-installed-trial.XXXXXXXX)
     cleanup_scratch() {
+        exec 8<&-
         if mountpoint -q "$scratch/esp"; then umount "$scratch/esp" || return 1; fi
         if [[ -d $scratch/esp ]]; then rmdir "$scratch/esp"; fi
         rm -f -- "$scratch/$timer" "$scratch/${timer%.timer}.service"

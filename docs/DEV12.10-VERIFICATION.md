@@ -43,4 +43,4 @@ bash tests/ram-userspace/run.sh "$usb_ssh" "$ram_bundle" "$device_xvfb_usr"
 
 ## 从完整 TAR 启动
 
-另一台 ARM64 虚拟机通过虚拟 U-Boot 和 EFI 从 TAR 实际解出的启动分区、内核和根文件系统启动。虚拟触屏首次输入两次不同的密码时账户保持锁定，输入相同密码后完成设密，再通过 LightDM 登录 Xfce。普通用户的 MP4 和 WebM 均关联到镜像自带的 Parole。播放 H.264 时核对了正在运行的程序和三组画面变化，虚拟机使用 libav 软件解码。平板使用物理解码器的结果列在上表。整包在实体平板上的冷启动仍待验证。[EFI 复测入口](../tests/combined-efi/README.md)
+另一台 ARM64 虚拟机通过虚拟 U-Boot 和 EFI 从 TAR 实际解出的启动分区、内核和根文件系统启动。虚拟触屏首次输入两次不同的密码时账户保持锁定，输入相同密码后完成设密，再通过 LightDM 登录 Xfce。普通用户的 MP4 和 WebM 均关联到镜像自带的 Parole。播放 H.264 时核对了正在运行的程序和三组画面变化，虚拟机使用 libav 软件解码。平板使用物理解码器的结果列在上表。实体平板已用发行内核从内置存储启动两次，其中一次使用正式默认项。完全关机再开机尚未测试。[实机安装记录](DEV12.10-INSTALLATION.md) · [EFI 复测入口](../tests/combined-efi/README.md)

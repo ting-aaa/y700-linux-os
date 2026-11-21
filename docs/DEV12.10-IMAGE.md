@@ -25,7 +25,7 @@ bash scripts/build-ram-trial.sh --dev12.10 "$images" dev12.10-ram-trial
 (cd dev12.10-ram-trial && sha256sum --strict -c SHA256SUMS)
 ```
 
-在现有平板上通过 USB 试用镜像内的软件时，平板沿用当前运行的内核。验证新内核在物理平板上独立启动，需要另做一次整机启动测试。[内存试用原理](DEV12.8-RAM-TRIAL.md)
+在现有平板上通过 USB 试用镜像内的软件时，平板沿用当前运行的内核。该版本的内核已在物理平板上从内置存储独立启动两次，第二次从已设为默认的启动项进入图形登录界面。[实机安装、数据迁移与回退](DEV12.10-INSTALLATION.md) · [内存试用原理](DEV12.8-RAM-TRIAL.md)
 
 ## 从 dev12.9 重建
 

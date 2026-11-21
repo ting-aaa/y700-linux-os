@@ -4,15 +4,22 @@ set -euo pipefail
 export LC_ALL=C
 umask 077
 die() { echo "File trial staging: $*" >&2; exit 1; }
+edition=dev12.5
+generic_sha=041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6
+if [[ ${1:-} == --dev12.10 ]]; then
+    edition=dev12.10
+    generic_sha=18e75eff99d13c9aa6e446eaf03d79d5ac0122f9815f9419d96715a2e6e426fd
+    shift
+fi
 inherit_bt=false
 if [[ ${1:-} == --inherit-bluetooth ]]; then
     set +x
     inherit_bt=true
     shift
 fi
-[[ $# == 1 || $# == 2 && $inherit_bt == false ]] || die 'usage: stage-file-trial-images.sh [--inherit-bluetooth] MOUNTED_BASELINE [EXPECTED_PERSONAL_ROOT_SHA256]'
+[[ $# == 1 || $# == 2 && $inherit_bt == false && $edition == dev12.5 ]] || die 'usage: stage-file-trial-images.sh [--dev12.10] [--inherit-bluetooth] MOUNTED_BASELINE [DEV12.5_PERSONAL_ROOT_SHA256]'
 [[ $EUID == 0 ]] || die 'the images and their staging directories must belong to root'
-root_sha=${2:-041fcf2e04b5d05edbfa3147f442a019d2f260f6544b9182087bf911ff8e55b6}
+root_sha=${2:-$generic_sha}
 esp_sha=495e63f8fa663db2ffcec1b2f3dc4146002604572835bffb725d57926fb520e6
 base=$(realpath -e -- "$1")
 [[ $root_sha =~ ^[0-9a-f]{64}$ && -d $base ]] || die 'invalid root digest or mount'
@@ -46,9 +53,9 @@ fi
 [[ $(findmnt -nro TARGET -T "$parent") == "$base" ]] || die 'trial data must reside directly on the baseline filesystem'
 exec {lock_fd}<"$parent"
 flock -n "$lock_fd" || die 'another staging operation is active'
-target=$parent/dev12.5
-[[ ! -e $target && ! -L $target ]] || die 'dev12.5 already exists; its saved state is retained'
-stage=$(mktemp -d -- "$parent/.stage-dev12.5.XXXXXXXX")
+target=$parent/$edition
+[[ ! -e $target && ! -L $target ]] || die "$edition already exists; its saved state is retained"
+stage=$(mktemp -d -- "$parent/.stage-$edition.XXXXXXXX")
 cleanup() {
     if [[ -d $stage ]]; then rm -f -- "$stage/root.ext4" "$stage/linux-boot.fat" "$stage/.bluetooth-input"; rmdir -- "$stage"; fi
 }
@@ -96,4 +103,4 @@ cd "$parent"
 mv -nT -- "$stage" "$target"
 [[ ! -e $stage ]] || die 'destination appeared during staging'
 sync -f "$parent"
-echo 'FILE_TRIAL_STAGE_PASS files=2 published=dev12.5'
+echo "FILE_TRIAL_STAGE_PASS files=2 published=$edition"
