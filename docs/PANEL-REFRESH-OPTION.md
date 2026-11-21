@@ -33,4 +33,6 @@ bash panel-refresh-option.sh remove option "$esp"
 
 真实 FAT 副本测试通过重复添加、重复移除、篡改拒绝和限次试验期间的拒绝。移除后原清单逐字节相同。ARM64 QEMU 从 U-Boot 进入真实 systemd-boot 菜单，用方向键选择新项，客体由 EFI 变量读回 `y700-display-12-11.conf` 并核对双速内核 notes。随后在同一块虚拟磁盘上等待菜单超时，读回原来的 `y700-file-12-11.conf` 和原内核 notes。两次均加载共享的正式 initrd，另附观察器和虚拟机 DT。[FAT 事务回归](../tests/panel-refresh/optional-menu.sh) · [ARM64 EFI 两次启动](../tests/panel-refresh/optional-firmware.sh)
 
+另一个无网络的 ARM64 客体以只读方式挂载原 1,240 包镜像，在 1600 × 2560、GTK 200% 下以普通账户打开原版 Xfce 显示设置。测试通过辅助功能接口选择 60.00 Hz，点击「应用」和「保留此配置」，随后用相同流程选择 120.00 Hz。两次确认后均从 Xorg 读回所选模式。这项测试使用虚拟输出和 GTK 控件。[200% 显示对话框回归](../tests/panel-refresh/xfce-dialog.sh)
+
 实机已使用同一内核的限次入口完成两轮 120 → 60 → 120 Hz 的扫描测量。随后在国行平板的外层 EFI 安装了新的普通入口。实机复核确认上表两份新文件和原 32 份文件的摘要，默认项仍为正式 dev12.11。实机手动选择新菜单、Xfce 选择、重登录后的刷新率，以及 60 Hz 下的休眠与唤醒仍待验证。[面板时序及限次验证](PANEL-REFRESH.md)
