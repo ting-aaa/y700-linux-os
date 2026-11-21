@@ -92,3 +92,20 @@ LD_LIBRARY_PATH=/opt/y700-camera/lib timeout 20 ./bracket-build/bracket-test "$(
 The PC full-system QEMU replay ran as UID 1000 with `no_new_privs`, without a virtual camera or disk. The release Simple pipeline selected the private module through normal discovery. In the 21-frame matching-geometry case, every frame delivered an ISP parameter event, a next-sensor-control proposal and metadata for the earlier applied settings. The automatic request restored the stock proposal. With an incompatible line length, the stock proposal passed through. A second boot repeated both cases with the current RAM receiver's diagnostic libcamera `ab1cd0e9…` first in the loader path. These tests use synthetic delayed sensor controls and anonymous statistics buffers. A physical exposure sequence remains open.
 
 The PC receipts are `out/camera-bracket/isolated-release.log` (SHA-256 `0b0f54d7cc57bfdb0fa644eeadc4c49a59a7dac153c7495bd3ebc5d00f0f75a8`) and `isolated-ram-library.log` (`457f72774eb0230dcc00118e4a37ed531b9c3e44d69bda409ba5f14421739c6d`). A third boot with an empty module directory selected the stock IPA and failed the manual-mode check as expected (`missing-adapter.log`). Two independent builds produced identical bytes for the measurement client (`f491720d006ef35464e85e5dde184bc6fa74f548d9644d2cdbe0fd03aa5193e9`), isolated adapter (`3dcde9a32e58714e7fae70dc05e816fdb52afbc0a391e5f39e5e64eec61db87f`) and synthetic fixture (`531a07c45d0a6d30bf115155c12d002f9d3e6a6244f1c7ac5a19a67a11a488bf`).
+
+## Physical exposure bracket on 22 November
+
+The reference tablet booted the dev12.13 receiver from RAM with UFS and microSD disabled. The private IPA processed four consecutive matching metadata reports at each target before measuring that RAW/RGB pair. The sensor stayed pointed at the stationary scene. Light on the target and at the lens was not measured. The table shows the green-site RAW means and the processed green mean from the same central positions, with RAW black level 64.
+
+| Sequence | Reported exposure and gain | Gr mean / 1023 | Gb mean / 1023 | Green mean / 255 | Near-black processed green |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 6 | 2 ms, 1× | 64.0179 | 64.0556 | 0.0000 | 100% |
+| 16 | 32 ms, 1× | 64.0090 | 64.0500 | 0.0000 | 100% |
+| 26 | 32 ms, 8× | 64.1571 | 64.0676 | 0.3334 | 98.21% |
+| 36 | 2 ms, 1× | 64.0316 | 64.0074 | 0.0000 | 100% |
+
+At unit gain, increasing integration sixteenfold produced no measurable increase in the mean green signal. At 8× gain, 58.63% and 61.20% of the two RAW green sites were at or below the pedestal, compared with 86.56% and 85.19% at the preceding 32 ms, 1× step. The sample distribution changed, yet every RAW site's mean stayed within 0.16 count of the pedestal. There was no sampled clipping near white. The final short exposure again yielded zero in all three processed channels. This records the response of the received pixels and libcamera's per-frame control accounting. It does not provide register readback, known illumination or proof of optical focus.
+
+These sparse samples cover about 0.585% of the sensor. The camera app's ordinary full-resolution shutter was separately verified with a 4200×3120 rear JPEG. A repeat with the rear lens clear and a lit, textured target centred in the frame can distinguish a dark target from a continuing signal fault. [Camera shutter verification](QCAM.md)
+
+The program completed four further automatic-mode requests, sent no AF or flash command and suspended the rear sensor after 5,859 ms of cumulative additional activity. No image was stored or transferred. The acknowledged receiver returned to daily dev12.11. Both ext4 filesystems passed direct write/readback, the 1,248-package ledger matched and all four core services were active. The PC receipt `out/camera-bracket/physical-nov22/bracket.log` has SHA-256 `5f9330466b0b229944fefc69ddbe09a12ce7e9316a0451fd1d06f9e43630e2bc`. [All validated channel statistics](../tests/camera-autofocus/physical-bracket.txt)

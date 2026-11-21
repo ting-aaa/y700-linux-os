@@ -1,0 +1,39 @@
+BRACKET_STEP index=1 target_us=2000 target_gain=1
+SIGNAL_PAIR sequence=6 time_us=2000 analogue_gain=1.0000 crop_x=1784 crop_y=1320
+SIGNAL_RAW site=R n=2160 mean10=64.0051 pedestal10=64 at_or_below_pedestal=0.8718 near_white=0.0000
+SIGNAL_RAW site=Gr n=2120 mean10=64.0179 pedestal10=64 at_or_below_pedestal=0.8670 near_white=0.0000
+SIGNAL_RAW site=Gb n=2160 mean10=64.0556 pedestal10=64 at_or_below_pedestal=0.8352 near_white=0.0000
+SIGNAL_RAW site=B n=2120 mean10=63.9910 pedestal10=64 at_or_below_pedestal=0.8741 near_white=0.0000
+SIGNAL_RGB channel=R n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=G n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=B n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+BRACKET_STEP index=2 target_us=32000 target_gain=1
+SIGNAL_PAIR sequence=16 time_us=32000 analogue_gain=1.0000 crop_x=1784 crop_y=1320
+SIGNAL_RAW site=R n=2160 mean10=64.0051 pedestal10=64 at_or_below_pedestal=0.8704 near_white=0.0000
+SIGNAL_RAW site=Gr n=2120 mean10=64.0090 pedestal10=64 at_or_below_pedestal=0.8656 near_white=0.0000
+SIGNAL_RAW site=Gb n=2160 mean10=64.0500 pedestal10=64 at_or_below_pedestal=0.8519 near_white=0.0000
+SIGNAL_RAW site=B n=2120 mean10=64.0014 pedestal10=64 at_or_below_pedestal=0.8708 near_white=0.0000
+SIGNAL_RGB channel=R n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=G n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=B n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+BRACKET_STEP index=3 target_us=32000 target_gain=8
+SIGNAL_PAIR sequence=26 time_us=32000 analogue_gain=8.0000 crop_x=1784 crop_y=1320
+SIGNAL_RAW site=R n=2160 mean10=64.0792 pedestal10=64 at_or_below_pedestal=0.6028 near_white=0.0000
+SIGNAL_RAW site=Gr n=2120 mean10=64.1571 pedestal10=64 at_or_below_pedestal=0.5863 near_white=0.0000
+SIGNAL_RAW site=Gb n=2160 mean10=64.0676 pedestal10=64 at_or_below_pedestal=0.6120 near_white=0.0000
+SIGNAL_RAW site=B n=2120 mean10=64.1425 pedestal10=64 at_or_below_pedestal=0.5958 near_white=0.0000
+SIGNAL_RGB channel=R n=8560 mean8=0.1647 near_black=0.9912 near_white=0.0000
+SIGNAL_RGB channel=G n=8560 mean8=0.3334 near_black=0.9821 near_white=0.0000
+SIGNAL_RGB channel=B n=8560 mean8=0.2034 near_black=0.9893 near_white=0.0000
+BRACKET_STEP index=4 target_us=2000 target_gain=1
+SIGNAL_PAIR sequence=36 time_us=2000 analogue_gain=1.0000 crop_x=1784 crop_y=1320
+SIGNAL_RAW site=R n=2160 mean10=64.0171 pedestal10=64 at_or_below_pedestal=0.8671 near_white=0.0000
+SIGNAL_RAW site=Gr n=2120 mean10=64.0316 pedestal10=64 at_or_below_pedestal=0.8642 near_white=0.0000
+SIGNAL_RAW site=Gb n=2160 mean10=64.0074 pedestal10=64 at_or_below_pedestal=0.8639 near_white=0.0000
+SIGNAL_RAW site=B n=2120 mean10=64.0175 pedestal10=64 at_or_below_pedestal=0.8627 near_white=0.0000
+SIGNAL_RGB channel=R n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=G n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+SIGNAL_RGB channel=B n=8560 mean8=0.0000 near_black=1.0000 near_white=0.0000
+BRACKET_DONE pairs=4 stable_frames=4 auto_requests_completed=4 af_commands=0
+AF_CLEANUP mode=--rear-bracket rear=suspended sensor_active_ms_delta=5859 exit=0
+AF_ALLOCATOR cleanup=1 original_unchanged=1

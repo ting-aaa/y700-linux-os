@@ -1,5 +1,7 @@
 # Hardware and system status
 
+The rear HI1339 completed a four-step exposure/gain bracket on the reference tablet. The four RAW channel means stayed close to the black level in the sampled centre; processed green at 32 ms and 8× gain averaged 0.3334/255. Changing back to 2 ms and 1× returned the sampled RGB channels to zero. Target illumination and optical focus remain unverified. [Physical values](CAMERA-SIGNAL.md#physical-exposure-bracket-on-22-november)
+
 The reference tablet ran separate stock and candidate dev12.13 kernels from RAM to check UFS. Both returned matching direct reads after runtime suspend and Hibern8. The kernel reported ICE moving from about 850 to 75 MHz on the candidate and staying at 300 MHz on stock. The original daily system passed its two filesystem readbacks after each boot. Mixed-workload stability and power consumption remain open. [Measurements and receipts](UFS-SCALING.md#实机对照结果)
 
 On the reference tablet, a matched rear-camera frame had RAW channel means of 63.9986–64.0208 against a black level of 64 and zero mean in all three processed channels. The dark centre was present before software debayering at this exposure. The tablet automatically returned to daily dev12.11 and both filesystems passed direct readback. [Physical camera receipt](CAMERA-SIGNAL.md#physical-paired-frame-on-22-november)
