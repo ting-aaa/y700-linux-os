@@ -204,8 +204,12 @@ def main():
     cli.add_argument("--already-open", action="store_true")
     cli.add_argument("--pointer", action="store_true", help="tap and drag the visible X11 transport controls")
     cli.add_argument("--seek-cycles", type=int, choices=range(1, 6), default=1)
+    cli.add_argument("--single-seek", action="store_true",
+                     help="verify one GStreamer seek per completed pointer gesture")
     cli.add_argument("--require-iris", choices=("v4l2h264dec", "v4l2h265dec", "v4l2vp9dec"))
     args = cli.parse_args()
+    if args.single_seek and not (args.pointer and args.require_iris):
+        cli.error("--single-seek requires --pointer and --require-iris")
     clip = args.clip.resolve(strict=True)
     assert os.getuid() != 0
     Gtk.init([])
@@ -253,8 +257,15 @@ def main():
                     stream.seek(previous)
                     return len(re.findall(expression, stream.read()))
             count = until(new_buffers, 4, f"No new {args.require_iris} buffers after {step}")
+        detail = ""
+        if args.single_seek and step.startswith("seek-"):
+            with log.open("rb") as stream:
+                stream.seek(previous)
+                seeks = len(re.findall(rb"<multiqueue\d+:sink_\d+> Got upstream event seek", stream.read()))
+            assert seeks == 1, f"{step} sent {seeks} seek events"
+            detail = f" seek_events={seeks}"
         print(f"PAROLE_TRANSPORT_STEP file={clip.name} pid={pid} action={step} pixels={colour} "
-              f"new_decoder_buffers={count}", flush=True)
+              f"new_decoder_buffers={count}{detail}", flush=True)
 
     def toggle():
         assert pid_for_file() == pid

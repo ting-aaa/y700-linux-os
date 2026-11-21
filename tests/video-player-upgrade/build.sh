@@ -23,7 +23,7 @@ mkdir -p "$top"/{candidate,stock,source/parole}
 install -m755 "$here/install.sh" "$here/repack.sh" "$top"
 install -m644 "$here/"{README.md,baseline.sha256,payload.sha256} "$top"
 install -m644 "$parole/stock/parole_4.18.2-1_arm64.deb" "$top/stock"
-install -m644 "$parole/parole_4.18.2-1+y7001_arm64.deb" "$top/candidate"
+install -m644 "$parole/parole_4.18.2-1+y7002_arm64.deb" "$top/candidate"
 install -m644 "$elf" "$top/candidate/libgstvideo4linux2.so"
 tar -xOzf "$old" y700-parole-iris/payload/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so > "$top/stock/libgstvideo4linux2.so"
 (cd "$top"; sha256sum --strict -c payload.sha256)
@@ -31,6 +31,9 @@ tar -xOzf "$old" y700-parole-iris/payload/usr/local/lib/y700-parole/gstreamer-1.
 while read -r digest name; do install -m644 "$parole/source/$name" "$top/source/parole/"; done < "$repo/packaging/parole-touch/sources.sha256"
 install -m644 "$repo/packaging/parole-touch/"{changelog,sources.sha256,transport.patch} "$top/source/parole/"
 install -m755 "$repo/packaging/parole-touch/build.sh" "$top/source/parole/"
+install -d "$top/source/parole/seek"
+install -m644 "$repo/packaging/parole-touch/seek/"{changelog,scrub.patch} "$top/source/parole/seek/"
+install -m755 "$repo/packaging/parole-touch/seek/build.sh" "$top/source/parole/seek/"
 tar -xzf "$old" --strip-components=1 -C "$top/source" y700-parole-iris/source
 mv "$top/source/source" "$top/source/gstreamer"
 install -m644 "$repo/tests/video-vp9/iris-seek.patch" "$top/source/gstreamer/"

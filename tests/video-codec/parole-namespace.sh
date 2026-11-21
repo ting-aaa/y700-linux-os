@@ -78,7 +78,12 @@ if [[ -f upgrade.tgz ]]; then
     installer=/run/y700-player-update/install.sh
     if ! chroot root bash "$installer" install >install-upgrade.log 2>&1; then tail -25 install-upgrade.log; exit 1; fi
     chroot root bash "$installer" verify
-    [[ $(chroot root dpkg-query -W -f='${db:Status-Status} ${Version}' parole) == 'installed 4.18.2-1+y7001' ]]
+    version=$(chroot root dpkg-query -W -f='${db:Status-Status} ${Version}' parole)
+    case "$version" in
+        'installed 4.18.2-1+y7001') ;;
+        'installed 4.18.2-1+y7002') touch root/qa/single-seek ;;
+        *) exit 1 ;;
+    esac
     echo "PLAYER_TRIAL_UPGRADE storage=tmpfs sha256=$(sha256sum upgrade.tgz | cut -d' ' -f1)"
 fi
 touch "root/dev/$dev"

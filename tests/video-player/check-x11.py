@@ -165,8 +165,11 @@ def main(work):
         samples = 0
         if args.transport:
             decoder = {"h264.mp4": "v4l2h264dec", "hevc.mp4": "v4l2h265dec", "vp9.webm": "v4l2vp9dec"}[name]
+            gesture_args = []
+            if Path("/qa/single-seek").is_file():
+                gesture_args.append("--single-seek")
             subprocess.run([sys.executable, "-B", str(args.transport), str(path), "--already-open",
-                            "--pointer", "--seek-cycles", "3", "--require-iris", decoder],
+                            "--pointer", "--seek-cycles", "3", "--require-iris", decoder, *gesture_args],
                            check=True, timeout=55)
         else:
             while time.monotonic() < deadline and len(observed) < 3:

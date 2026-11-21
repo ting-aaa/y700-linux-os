@@ -33,8 +33,8 @@ Inside a clean extracted `y700-player-update` directory, the following commands 
 
 ```sh
 work=$(mktemp -d)
-bash source/parole/build.sh "$PWD/source/parole" "$work/debs"
-cmp "$work/debs/parole_4.18.2-1+y7001_arm64.deb" candidate/parole_4.18.2-1+y7001_arm64.deb
+bash source/parole/seek/build.sh "$PWD/source/parole" "$work/debs"
+cmp "$work/debs/parole_4.18.2-1+y7002_arm64.deb" candidate/parole_4.18.2-1+y7002_arm64.deb
 bash source/gstreamer/build-seek.sh "$PWD/source/gstreamer" "$work/gst" # append the machine file when cross-building
 cmp "$work/gst/seek/private/libgstvideo4linux2.so" candidate/libgstvideo4linux2.so
 cmp "$work/gst/color-r2/private/libgstvideo4linux2.so" stock/libgstvideo4linux2.so
@@ -42,4 +42,4 @@ bash repack.sh "$work/rebuilt.tar.gz"
 cmp "$work/rebuilt.tar.gz" ../y700-dev12.9-player-update-arm64.tar.gz
 ```
 
-This revision installs the private Iris ELF with SHA-256 `8936aa22a16ed3ffd61fcfe6d0ea4c225407bdef01b3bd67ec01e82cb2cd5d70`. It handles a delayed flush during VP9 CAPTURE negotiation. If you installed the earlier trial ELF `1c159893…`, restore its stock pair with that trial archive's `rollback` before installing this revision. The PC transaction test covers package state, integrity checks, retry and rollback. Hardware playback and seeking have separate tablet receipts.
+Parole y7002 lets the slider follow a HiDPI drag and seeks once at release. Its companion Iris plugin handles a second flush during CAPTURE negotiation. If a previous trial package is installed, run that archive's `rollback` to restore the stock pair before installing this revision. The archive's `payload.sha256` identifies all four files. The PC transaction test covers package state, integrity checks, retry and rollback. Hardware playback and seeking have separate tablet receipts.

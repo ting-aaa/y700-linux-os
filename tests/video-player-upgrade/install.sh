@@ -21,7 +21,7 @@ cd "$bundle"
 sha256sum --strict --quiet -c SHA256SUMS
 sha256sum --strict --quiet -c payload.sha256
 stock=4.18.2-1
-candidate=4.18.2-1+y7001
+candidate=4.18.2-1+y7002
 target_version=${!target}
 record=/var/lib/y700/build
 plugin=/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
@@ -67,13 +67,15 @@ inventory=$(dpkg-query -W '-f=${Package}\t${Version}\t${Architecture}\t${db:Stat
 [[ ${inventory%% *} == 89aa7038cac0d6591b9977608f137e1412bebdd52f6125ac2521d882f8633d1d ]] ||
     die 'Target inventory differs from sealed dev12.9'
 check_parole() {
-    local expected
+    local component expected report
     case $1 in
-        "$stock") expected=6acdbe64ee9789d6f258ea28d9e7a45ff313cf708f5c25039f4714e3dda30f34 ;;
-        "$candidate") expected=c7ef09931ec8605fff065e8fe02bebc3adf9abe06a529c387c10ef79e3f9ea42 ;;
+        "$stock") component=stock ;;
+        "$candidate") component=candidate ;;
         *) return 1 ;;
     esac
-    local report
+    expected=$(dpkg-deb --fsys-tarfile "$component/parole_${1}_arm64.deb" |
+        tar -xO -f - ./usr/bin/parole | sha256sum) || return 1
+    expected=${expected%% *}
     regular /usr/bin/parole && printf '%s  /usr/bin/parole\n' "$expected" | sha256sum --quiet -c - &&
         report=$(dpkg --verify parole) && [[ -z $report ]]
 }
