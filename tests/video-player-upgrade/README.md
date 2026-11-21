@@ -19,15 +19,27 @@ Run `sudo bash install.sh rollback` and then `bash install.sh verify-stock` to r
 
 ## Rebuild and check on a PC
 
-From the product checkout, pass the complete retained combined Parole archive, the directory holding the stock and HiDPI Parole debs and signed Debian source archives, the candidate Iris ELF, its source patch and a new output TAR filename. The builder rejects mismatched inputs. The Parole build recipe and source archives are under `source/parole` in the transport. The original GStreamer source archives, r2 build scripts and the additional seek patch are under `source/gstreamer`.
+From the product checkout, pass the retained combined Parole archive, the directory holding the stock and HiDPI Parole debs and verified Debian source archives, the tested Iris ELF and a new output TAR filename. The builder takes the seek patch and build script from `tests/video-vp9/` and checks their hashes.
 
 ```sh
 bash tests/video-player-upgrade/build.sh \
     out/video-player-integration/y700-dev12.8-parole-iris-arm64.tar.gz \
-    out/parole-touch out/video-seek/plugin-session/libgstvideo4linux2.so \
-    .local/iris-session-seek.patch out/video-player-upgrade/y700-dev12.9-player-update-arm64.tar.gz
+    out/parole-touch "$TESTED_SEEK_PLUGIN" out/video-player-upgrade/y700-dev12.9-player-update-arm64.tar.gz
 sudo bash tests/video-player-upgrade/test-overlay.sh "$DEV12_9_ROOT" \
     out/video-player-upgrade/y700-dev12.9-player-update-arm64.tar.gz
 ```
 
-The PC transaction test exercises the candidate ELF with SHA-256 `1c159893127fbb4842aea2c0120be3292d6a1f32fe0596a0847417097ae7c367`. Its result covers package state, integrity checks, retry and rollback. Hardware playback and seeking are measured separately on the tablet.
+Inside a clean extracted `y700-player-update` directory, the following commands rebuild both modified components and reproduce the transport. Put build output outside the extraction. The Parole step needs Debian trixie arm64 with its build dependencies. The GStreamer step needs uv, Meson, Ninja and arm64 development libraries. The reference cross build used Meson 1.7.0, Clang 21.1.8 targeting `aarch64-linux-gnu`, GNU ld.bfd 2.46 and `STRIP=aarch64-linux-gnu-strip`. Set `MESON_PYTHON` to the installed interpreter containing Meson and pass the machine file as the last argument to `build-seek.sh` when cross-building.
+
+```sh
+work=$(mktemp -d)
+bash source/parole/build.sh "$PWD/source/parole" "$work/debs"
+cmp "$work/debs/parole_4.18.2-1+y7001_arm64.deb" candidate/parole_4.18.2-1+y7001_arm64.deb
+bash source/gstreamer/build-seek.sh "$PWD/source/gstreamer" "$work/gst" # append the machine file when cross-building
+cmp "$work/gst/seek/private/libgstvideo4linux2.so" candidate/libgstvideo4linux2.so
+cmp "$work/gst/color-r2/private/libgstvideo4linux2.so" stock/libgstvideo4linux2.so
+bash repack.sh "$work/rebuilt.tar.gz"
+cmp "$work/rebuilt.tar.gz" ../y700-dev12.9-player-update-arm64.tar.gz
+```
+
+This revision installs the private Iris ELF with SHA-256 `8936aa22a16ed3ffd61fcfe6d0ea4c225407bdef01b3bd67ec01e82cb2cd5d70`. It handles a delayed flush during VP9 CAPTURE negotiation. If you installed the earlier trial ELF `1c159893…`, restore its stock pair with that trial archive's `rollback` before installing this revision. The PC transaction test covers package state, integrity checks, retry and rollback. Hardware playback and seeking have separate tablet receipts.
