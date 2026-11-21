@@ -49,6 +49,9 @@
     gsub("/boot/platform-tested.lock", "/run/y700-ram-qa/platform-tested.lock")
     gsub("/boot/media-update-tested.lock", "/run/y700-ram-qa/media-update-tested.lock")
     gsub("/boot/media-tested.lock", "/run/y700-ram-qa/media-tested.lock")
+    gsub("/boot/camera-autofocus.lock.json", "/run/y700-ram-qa/camera-autofocus.lock.json")
+    gsub("/boot/wifi-sae-update.lock.json", "/run/y700-ram-qa/wifi-sae-update.lock.json")
+    gsub("/boot/platform-desktop-update.lock.json", "/run/y700-ram-qa/platform-desktop-update.lock.json")
     gsub("/boot/lock-mode", "/run/y700-ram-qa/lock-mode")
     gsub("/boot/combined-", "/run/y700-ram-qa/combined-")
     print

@@ -26,3 +26,21 @@ RAM_TRIAL_BASELINE_KERNEL="$baseline_kernel" bash tests/ram-handover/efi-first.s
 ```
 
 Tool overrides are `QEMU_SYSTEM_AARCH64`, `QEMU_DATA`, `AARCH64_CC` and `UV_BIN`. The fixture uses the virtual board; a successful result covers the diskless ARM64 kernel and Debian desktop path in QEMU.
+## dev12.12 RAM desktop with onboard storage disabled
+
+On a Linux build PC, start with the unmodified dev12.12 release's `images` directory and a new output path. The builder verifies the 6 GiB ext4 and 1 GiB EFI file, extracts the default dual-refresh kernel and firmware initrd, and derives the diagnostic PRC device tree from the release tree. It changes the UFS and microSD host statuses to `disabled` and verifies the rest of the canonical tree byte-for-byte. The final initrd includes a SquashFS carrier containing the intact ext4.
+
+```bash
+bash scripts/build-ram-trial.sh --dev12.12 "$images" "$ram_bundle"
+(cd "$ram_bundle" && sha256sum --strict -c SHA256SUMS)
+sudo bash tests/ram-trial/check-storage-guard.sh "$ram_bundle"
+RAM_TRIAL_VERSION=dev12.12 bash tests/ram-trial/run.sh "$ram_bundle" "$virt_dtb" "$new_log_dir"
+```
+
+The ARM64 VM uses the exact release kernel and RAM initrd, a virtual device tree, no disks and no NIC. The guest checks the 1,240-package inventory, the running kernel notes, the absence of a boot mount and disk-backed swap, two read-only loops and a tmpfs upper layer. It exercises first enrollment, LightDM/PAM and an ordinary Xfce desktop. The storage guard test runs the packaged check in an isolated filesystem with simulated PRC device-tree statuses. Disabled controllers pass. A missing status, an enabled controller or an enumerated UFS/SD disk or partition triggers the power-off path.
+
+On the physical PRC board the RAM init requires the supplied storage-disabled tree. If early setup fails, it requests power-off and then halt. Board-level RAM entry, USB recovery and camera operation require separate physical verification. An existing EFI system that boots a file-backed Debian root uses persistent storage. The Android recovery menu depends on the contents of its recovery partition. This build creates host files for a dedicated RAM boot.
+
+The sealed `SHA256SUMS` digest is `2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453`. The 1,363,224,164-byte initrd has SHA-256 `02d1b27418805d79a813763f9e3001e24768f4dd4360d55e37b93e7c152721b2` and the diagnostic board tree has SHA-256 `8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82`.
+
+The sealed root installs the USB and SSH maintenance units. They require `/etc/y700/maintenance.env` and `/etc/y700/maintenance-sshd.conf`. These files, the enrolled public key, the SSH host key and a USB serial getty are absent from the fresh image. The VM witness communicates over a virtual serial port. A physical diagnostic boot needs a separate volatile reporting channel so the PC can verify the running kernel, device tree and RAM mounts before starting a hardware test. [Maintenance configuration generator](../../scripts/provision-maintenance.py)

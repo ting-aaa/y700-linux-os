@@ -24,9 +24,15 @@ trap 'exit 130' INT
 echo "RAM_TRIAL_EVIDENCE=$logs"
 echo "RAM_TRIAL_WORK=$work"
 check_inputs() {
+    local kernel_sha=4e23cb29a382da7d66f4476d72fd8ac3b11960749649875b00cd8453f4aa3bf1
+    if [[ ${RAM_TRIAL_VERSION:-} == dev12.12 ]]; then
+        kernel_sha=0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
+        printf '%s  %s\n' 2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453 "$trial/SHA256SUMS" | sha256sum --strict -c -
+        printf '%s  %s\n' 8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82 "$trial/board.dtb" | sha256sum --strict -c -
+    fi
     (cd "$trial" && sha256sum --strict -c SHA256SUMS)
     printf '%s  %s\n' \
-        4e23cb29a382da7d66f4476d72fd8ac3b11960749649875b00cd8453f4aa3bf1 "$trial/kernel.efi" \
+        "$kernel_sha" "$trial/kernel.efi" \
         a89bc8f2ee12f118656c6963fb9d45b862e6d5a1aeedf2630ddbe08f03079d31 "$dtb" | sha256sum --strict -c -
 }
 check_inputs | tee "$logs/before.log"
@@ -55,19 +61,25 @@ seed_limit=1048576
 case ${RAM_TRIAL_VERSION:-dev12.5} in
     dev12.5) echo baseline > "$seed/lock-mode" ;;
     dev12.6) echo installed > "$seed/lock-mode" ;;
-    dev12.8|dev12.9|dev12.10)
+    dev12.8|dev12.9|dev12.10|dev12.12)
         echo installed > "$seed/lock-mode"
         cp "$here/../../config/blueman.lock.json" "$seed/blueman-tested.lock"
         cp "$here/../../config/platform.lock.json" "$seed/platform-tested.lock"
         cp "$here/check-volatile-desktop.sh" "$seed/"
         extras=(blueman-tested.lock platform-tested.lock check-volatile-desktop.sh)
-        if [[ $RAM_TRIAL_VERSION == dev12.9 || $RAM_TRIAL_VERSION == dev12.10 ]]; then
+        if [[ $RAM_TRIAL_VERSION != dev12.8 ]]; then
             cp "$here/../../config/video-player.lock.json" "$seed/media-tested.lock"
             extras+=(media-tested.lock)
         fi
-        if [[ $RAM_TRIAL_VERSION == dev12.10 ]]; then
+        if [[ $RAM_TRIAL_VERSION == dev12.10 || $RAM_TRIAL_VERSION == dev12.12 ]]; then
             cp "$here/../../config/video-player-update.lock.json" "$seed/media-update-tested.lock"
             extras+=(media-update-tested.lock)
+        fi
+        if [[ $RAM_TRIAL_VERSION == dev12.12 ]]; then
+            for file in camera-autofocus.lock.json wifi-sae-update.lock.json platform-desktop-update.lock.json; do
+                cp "$here/../../config/$file" "$seed/$file"
+                extras+=("$file")
+            done
         fi
         if [[ $sleep_trial == 1 ]]; then
             fdtput -t s "$work/ram.dtb" /aliases rtc1 /pl031@9010000
@@ -77,7 +89,7 @@ case ${RAM_TRIAL_VERSION:-dev12.5} in
         fi
         args+=" y700.combined_power=1"
         ;;
-    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6, dev12.8, dev12.9 or dev12.10)' >&2; exit 2 ;;
+    *) echo 'Unknown RAM_TRIAL_VERSION (expected dev12.5, dev12.6, dev12.8, dev12.9, dev12.10 or dev12.12)' >&2; exit 2 ;;
 esac
 combined=$here/../combined-efi
 awk -f "$here/adapt-observer.awk" "$combined/observe.sh" > "$seed/combined-observe.sh"
