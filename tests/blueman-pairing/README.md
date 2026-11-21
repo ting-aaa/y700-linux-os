@@ -91,3 +91,18 @@ The English and Chinese Xvfb receipts are
 `out/dev12.12-bt-desktop/manager-landscape-en-final.log` and
 `out/dev12.12-bt-desktop/manager-portrait-zh-maximize2.log`.
 [配对步骤](../../docs/BLUETOOTH-MANAGER.md)
+
+`run-manager-touch.sh` also boots the released ARM64 kernel and dev12.12
+root in QEMU, installs y7003 in guest RAM, and runs the portrait test with
+a Type-B kernel input device instead of XTest. See the usage line for the
+eight inputs and `BLUEMAN_MANAGER_DEB`. The Xorg log must identify libinput
+and the private evdev reader checks every contact's unique tracking ID and
+release. Ten taps cover the error and its details, retry, device selection,
+pairing and trust for both peers. The GTK app runs as uid 1000. The headless
+guest gives that user read access to its empty rfkill device while it models
+the two HID accessories on the private BlueZ bus.
+
+The Chinese portrait run closed the Manager via its own Quit action before
+removing the test buses. The guest and host exited successfully. Receipt
+`out/dev12.12-bt-desktop/manager-typeb-final.log`, SHA-256
+`8b4bf91a3141b17efaa7b832f39acc0af48080075fbb9659b8ed7031b3bf5f4a`.

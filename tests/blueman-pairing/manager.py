@@ -42,9 +42,12 @@ def main():
     await_value(lambda: owner(bus, BLUEZ), "mock-absent", 35)
     adapter = call(bus, BLUEZ, "/", "org.bluez.Mock", "AddAdapter",
                    GLib.Variant("(ss)", ("hci0", "Fixture adapter")))[0]
-    applet = subprocess.Popen(["blueman-applet"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    applet = subprocess.Popen(["blueman-applet"])
     try:
-        await_value(lambda: registered(bus), "applet-agent-absent", 45)
+        def applet_ready():
+            require(applet.poll() is None, "applet-exited-before-registering")
+            return registered(bus)
+        await_value(applet_ready, "applet-agent-absent", 90)
         language = Path(__file__).with_name("language").read_text().strip()
         locale = "zh_CN.UTF-8" if language == "zh" else "C.UTF-8"
         subprocess.run(["gio", "launch", "/usr/share/applications/blueman-manager.desktop"],
@@ -158,7 +161,15 @@ def main():
             require(min(w, h, trust_w, trust_h) >= 96, "toolbar-target-too-small")
             await_value(lambda: read_property(bus, peer, "org.bluez.Device1", "Trusted"), "not-trusted")
             emit(f"MANAGER_ACCESSORY kind={label.split()[1]} row={row_w}x{row_h} pair={w}x{h} trust={trust_w}x{trust_h} paired=1 trusted=1")
-        emit("BLUEMAN_MANAGER_PASS selected=2 original_desktop_entry=1 real_radio=0")
+        # Quit through the application's own action before its radio bus and
+        # applet are torn down, as when closing the Manager on a running seat.
+        call(session, "org.blueman.Manager", "/org/blueman/Manager", "org.gtk.Actions",
+             "Activate", GLib.Variant("(sava{sv})", ("Quit", [], {})))
+        await_value(lambda: not call(session, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                     "org.freedesktop.DBus", "NameHasOwner",
+                                     GLib.Variant("(s)", ("org.blueman.Manager",)))[0],
+                    "manager-did-not-quit")
+        emit("BLUEMAN_MANAGER_PASS selected=2 original_desktop_entry=1 manager_closed=1 real_radio=0")
     finally:
         applet.terminate()
         applet.wait(timeout=8)
