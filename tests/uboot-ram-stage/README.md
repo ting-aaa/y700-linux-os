@@ -16,7 +16,7 @@ uv run --offline --python 3.13 $Tool check $Bundle $Pin
 
 ## 在已有 U-Boot 中接管
 
-11 月 18 日此板实测的入口是在重启时按住**音量下**进入 U-Boot 菜单。板级配置为 `bootdelay=0`，音量下触发 `bootmenu -1`，进入菜单后可等主机就绪。菜单实录提供 **Enable USB serial console** 和 **Drop to shell**；部分构建已在 preboot 开启 ACM。接入 USB，确保为该次试启动保留的 U-Boot 菜单或 `=>` shell。PC 工具等待唯一匹配的 ACM，发 Escape/Ctrl-C 请求 shell，收到行首 `=>` 后才发送带回车的命令。实机从运行中的 Debian 自动停在此提示符仍待验证。此板的 U-Boot preboot 自己会尝试 `scsi scan`；Linux 所用 DT 才是禁用 UFS/SD 的边界。[板级环境](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/u-boot/sm8475/asphalt/asphalt.env)（实机原始记录见下方）
+11 月 18 日此板实测的入口是在重启时按住**音量下**进入 U-Boot 菜单。板级配置为 `bootdelay=0`，音量下触发 `bootmenu -1`，进入菜单后可等主机就绪。菜单实录提供 **Enable USB serial console** 和 **Drop to shell**；部分构建已在 preboot 开启 ACM。接入 USB，确保为该次试启动保留的 U-Boot 菜单或 `=>` shell。PC 工具等待唯一匹配的 ACM，发 Escape/Ctrl-C 请求 shell，收到行首 `=>` 后才发送带回车的命令。下节记录了从运行中的 Debian 经正常重启和 USB 接管提示符的实机流程。此板的 U-Boot preboot 自己会尝试 `scsi scan`；Linux 所用 DT 才是禁用 UFS/SD 的边界。[板级环境](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/u-boot/sm8475/asphalt/asphalt.env)（实机原始记录见下方）
 
 ```powershell
 uv run --offline --python 3.13 $Tool inspect $Bundle $Pin
@@ -30,7 +30,7 @@ uv run --offline --python 3.13 $Tool boot-staged $Bundle $Pin
 
 机主按住音量减重启时，这台平板的同一个 USB 串口还可能显示 systemd-boot 的系统选择菜单。此次实机在该菜单按小写 `v` 得到 `systemd-boot 262 (aa64), UEFI Specification 2.110, Vendor Das U-Boot 8230.4096`。随后大写 `Q` 结束 EFI 程序，出现 `Press any key to continue...`。此时发送一次 Ctrl-C，串口显示板级维护菜单，其中有 `Boot NixOS`、`Enable USB serial console` 和 `Drop to shell`。进入 shell 后原工具核实了 PRC 身份和三个 RAM 地址槽，并从日常 ESP 命中已校验的内核。EFI 退出实机收据为 `out/camera-optical-qa/physical-menu-efi-exit.log`，SHA-256 为 `0652623f5fea46f445de95266b91593fbb02c19a6b3906ca8c8e9f3938200246`。
 
-在已确认停于菜单或空闲 shell 时，可显式使用以下命令。使用该选项时，工具核对当次版本查询、EFI 返回提示和完整维护菜单，随后通过原有提示符检查。遇到其他版本或缺少预期答复会停止。此过程退出当前 EFI 程序，保留已有默认项。无人按键冷启动到该菜单的路径仍待实机验证。
+在已确认停于菜单或空闲 shell 时，可显式使用以下命令。使用该选项时，工具核对当次版本查询、EFI 返回提示和完整维护菜单，随后通过原有提示符检查。遇到其他版本或缺少预期答复会停止。此过程退出当前 EFI 程序，保留已有默认项。11 月 22 日从日用 Debian 正常重启时，主机在重启前就绪，本轮无需再请机主按键，即取得 EFI 版本、返回提示、维护菜单及 PRC shell。产品固件（SHA-256 `f6c60193…`）在普通启动分支执行 `run boot_linux; pause; run menucmd`。串口在检查音量键和扫描 UFS 之前启用。主机须赶上 EFI 菜单窗口；若错过，可在下次重启时按住音量减。收据为 `out/camera-optical-qa/physical-allocator-stage.log`。[普通启动分支](https://github.com/dianqk/nixos-android-devices/blob/8dcb481fc2ce91794fd294630e06f15a52ec7513/pkgs/u-boot/charger.env)
 
 ```powershell
 uv run --offline --python 3.13 $Tool inspect $Bundle $Pin --exit-efi-menu
