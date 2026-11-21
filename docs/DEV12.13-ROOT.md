@@ -25,3 +25,7 @@ sudo env UV_BIN="$(command -v uv)" bash tests/tablet-desktop-root/check.sh \
 输出目录包含根镜像、`SHA256SUMS`、`packages.tsv`、`tablet-desktop.lock.json` 及构建日志。镜像内的 `/var/lib/y700/build/` 保留 23 个旧锁，并记录本次四包的归档和文件哈希。构建器检查四包的 416 个普通文件和两个链接，以及登记的属主和权限。另运行 `dpkg --verify`、`dpkg --audit`、`apt-get check` 和卸载后的 `e2fsck -fn`。
 
 只读复核重新挂载两个封存根，比较原有板级软件包和 `/opt`、`/usr/local` 中的载荷。21 个沿用的定制软件包及本地运行时共核对 866 个文件和链接。图形首启设密仍已启用，通用账户处于锁定状态，机器 ID 为空。设备网络、SSH 密钥、蓝牙身份及单机校准留待首次配置。还原旧相机可执行文件、去掉快捷设置的执行权限或改变启动链接目标，都会在一次性写层中被校验器拒绝。日志位于 `out/dev12.13-root/`。[独立只读验收](../tests/tablet-desktop-root/check.sh)
+
+## 实板 RAM 桌面
+
+从本次发行包提取的压缩根经 USB 传入实板 RAM，用时 55 秒。板上逐字节核对完整根和 1,241 项软件包后，以普通账户在独立 200% Xfce 会话中启动了桌面、窗口管理器、面板和屏幕键盘。「快捷设置」由桌面的 XDG 自动启动项拉起。发行版相机在虚拟三镜头后端打开，中文和英文界面都默认选中后置主摄，三项切换后取消。日用系统的席位、服务、背光、镜头电源、网络及存储状态在测试前后吻合。板端临时 RAM 文件、loop 和挂载命名空间均已释放。[复现与实机收据](../tests/tablet-desktop-ram/README.md)

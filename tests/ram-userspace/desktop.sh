@@ -4,7 +4,7 @@ umask 077
 [[ $(id -un) == y700 && -z $(ls -A /sys) && ! -e /dev/input && ! -e /dev/dri && ! -e /dev/snd ]]
 [[ ! -e /run/dbus/system_bus_socket && -z $(find /dev -type b -print -quit) ]]
 [[ $(awk '/CapEff:/ {print $2}' /proc/self/status) == 0000000000000000 ]]
-if [[ ${1:-} == dev12.8 || ${1:-} == dev12.9 || ${1:-} == dev12.10 ]]; then
+if [[ ${1:-} == dev12.8 || ${1:-} == dev12.9 || ${1:-} == dev12.10 || ${1:-} == dev12.13 ]]; then
     # Provide the system-bus connection expected by desktop clients without a
     # logind, sensor proxy, host bus or any activatable service directory.
     export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/qa-system-bus"
@@ -52,6 +52,10 @@ for process in xfwm4 xfce4-panel xfdesktop onboard; do
     fi
 done
 echo 'RAM_USERSPACE ordinary_xfce=xfwm4,panel,xfdesktop,onboard display=2560x1600 gtk_scale=2'
+if [[ ${1:-} == dev12.13 ]]; then
+    bash /qa/tablet-apps.sh
+    exit
+fi
 rc=0
 if [[ ${1:-} == dev12.8 || ${1:-} == dev12.9 || ${1:-} == dev12.10 ]]; then
     export UV_CACHE_DIR="$XDG_RUNTIME_DIR/uv" UV_PYTHON_DOWNLOADS=never
