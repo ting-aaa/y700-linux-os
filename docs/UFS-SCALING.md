@@ -49,3 +49,26 @@ bash tests/ufs-scaling/boot-smoke.sh "$new_output" "$busybox_arm64" "$new_log"
 ```
 
 下一次有授权的硬件比较应记录普通启动与候选运行时 notes、设备树、UFS devfreq、当前 AXI/UniPro/ICE 频率、RPMh 可观察的投票、运行时电源状态和 UFS 错误计数。通过已知只读数据的有界读取、空闲及再次读取，比较首次恢复延迟，并记录 `ufshcd_clk_scaling` 和 `ufshcd_uic_command` 可用事件。应分别记录主机运行时省电、链路 Hibern8 和整机深睡，只有完整观察到的转换才算对应资格。现有完全无盘诊断 DT 已禁用 UFS，无法测到这条链路。试验内核和板树应从独立入口共同加载，并保留正式启动项和现场恢复条件。
+
+## 从独立 RAM 环境观测
+
+这台板的私有 `out/ufs-scaling/observer/initrd` 为 6,988,639 字节，SHA-256 `380711f0df5fc76809b6e8ba62a3dc2c6a4d54a66c08f7659d173eae3db9736e`，两次完整交叉编译、封装结果一致。它同时支持上面的两版内核。PID 1 核对运行内核 notes、PRC 与板上 UFS 节点的时钟数。包内有一份静态 AArch64 程序、已核验的七个 PMIC/UCSI 模块和 ADSP 固件、这台板私有的分区匹配输入。分发源码，硬件准备时从本机已核对的输入生成私有产物。[构建入口](../tests/ufs-scaling/build-observer.sh)
+
+```bash
+bash tests/ufs-scaling/build-observer.sh out/dev12.12-ram-receiver/initrd \
+    .local/ufs-trial-partuuid "$new_private_directory"
+```
+
+启动参数要求 `rdinit=/init y700.ufs_observe=1 noresume`；板端使用配对的内核与保留 UFS、禁用 microSD 的 PRC DT。内核枚举设备和 GPT 后，观察程序通过 `BLKROSET` 给已出现的实物块设备及分区设置本次启动的只读策略，随后每 250 ms 检查新出现的节点。程序仅挂载内核伪文件系统。指令入口是 USB ACM `Y700_UFS_OBSERVER`，其余没有 shell、网络接口配置、块文件系统挂载、udev、swap 或包管理。主机端显式选择端口和预期版本。0 是原版、1 是候选。[采集工具](../tests/ufs-scaling/collect.py)
+
+```powershell
+uv run --with pyserial python tests/ufs-scaling/collect.py --port COM<n> --variant 0 --output stock-receipt.txt
+```
+
+发出读取请求后，程序按 UFS 主控拓扑、GPT 分区号 41、`boot_b` 名称、196,608 个 512 字节扇区和私有 GUID 限定对象。只读打开同一父设备，核对主 GPT 头 CRC、第 41 项与内核报告的起点和长度；显式读取的 GPT 元数据是两个逻辑扇区。两次对分区偏移零 `O_DIRECT` 读取 65,536 字节并验证 SHA-256 `4316fe356d9244f97b0623abc1e6fc820b295738af24fbe0f3a0f82482d07cad`。中间板端空闲 12 秒。确认父 LUN 已完成写请求数及能读到的错误计数无变化。回执只发读耗时、状态和计数，启动数据及 GUID 留在本地。[定位和读取](../tests/ufs-scaling/observer-storage.c)
+
+四组数值分别在第一次读取之前、第一次之后、空闲结束、第二次之后取得。`RANGE` 给出 devfreq 当前允许上下限与可用 OPP 范围，不应用日用系统的限频规则。`PHASE` 中的 runtime 为 0 活动、1 已挂起、2 正挂起、3 正恢复、4 不支持；link 为 0 OFF、1 ACTIVE、2 HIBERN8、3 BROKEN、4 UNKNOWN。`-1` 表示接口没有提供该数值。时钟是 Linux CCF 对三个分支的频率记账值，link 是驱动记账状态。单次采样可能略过中间切换，耗时只覆盖 `pread`。这条试验不进行吞吐压测，不启用 tracing，也无法测出电源轨上的电压、电流或证明进入系统深睡。[采样实现](../tests/ufs-scaling/observer-io.c)
+
+主机先保存并校验数字回执，再用摘要 ACK。已开始的操作可以用 `--resume` 取回缓存，设备不会为回放再读分区。正常 ACK 或等待命令约 105 秒到期后会请求重启；独立 PID 1 另有从用户态启动算起的 155 秒上限。若内核整体停止调度、控制器在内核关机阶段锁死，仍需现场恢复。此软件计时器没有硬件 watchdog 保证。[PID 1](../tests/ufs-scaling/observer-init.c)
+
+PC 在两个真实内核上均从相同 initrd 启动，以 320 MiB ARM64 QEMU、virtio 串口和一份可写的合成 GPT 文件验证正常读回、保存、ACK 与重启。GUID 错误、缺少 `boot_b`、只检查且原始设备仍可写都在分区数据读取前拒绝。已知前缀故意损坏在第一次读后拒绝。每次测试后比对整份虚拟磁盘字节。无主机命令的单独测试覆盖超时返回。该虚拟机缺少 UFS、PRC USB/电源硬件，故所有对应的时钟及错误接口报告 `-1`。各项数值收据位于 `out/ufs-scaling/observer-verified/`。[QEMU 正反例](../tests/ufs-scaling/observer-vm.sh)
