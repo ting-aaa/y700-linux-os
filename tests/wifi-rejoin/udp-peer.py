@@ -117,7 +117,10 @@ def windows_subnet(local, index):
     $ErrorActionPreference='Stop'
     $nic=@(Get-NetAdapter -Physical | Where-Object { $_.ifIndex -eq [int]$env:Y700_UDP_INDEX })
     if ($nic.Count -ne 1 -or $nic[0].InterfaceType -ne 71 -or $nic[0].Status -ne 'Up') {exit 2}
-    $local=@(Get-NetIPAddress -InterfaceIndex $nic[0].ifIndex -IPAddress $env:Y700_UDP_LOCAL)
+    # NetTCPIP reports IPv6 link-local IPAddress with a numeric zone on real radios.
+    $expected=[ipaddress]$env:Y700_UDP_LOCAL
+    $local=@(Get-NetIPAddress -InterfaceIndex $nic[0].ifIndex -AddressState Preferred |
+        Where-Object { ([ipaddress]($_.IPAddress.Split('%')[0])).Equals($expected) })
     if ($local.Count -ne 1) {exit 3}
     [int]$local[0].PrefixLength
     """

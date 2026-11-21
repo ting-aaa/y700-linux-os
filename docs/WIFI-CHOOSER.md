@@ -178,4 +178,21 @@ uv run --offline --no-project --python 3.13 python -B tests/wifi-rejoin/udp-peer
     --control wsl.exe -d Ubuntu -u root --exec bash $usbSsh
 ```
 
-Each round sends at most one challenge per direction. The first two rounds send only from the tablet, before Windows has sent to this peer's temporary port. A public-profile inbound firewall policy can therefore affect this count. Compare `tablet_sent` with `windows_received` and `windows_sent` with `tablet_received` in each consecutive frequency segment. Frequency 0 means the before/after samples disagreed or the current association was unavailable. Neighbor states such as STALE describe cache state and can occur during successful delivery. Local send errors and receiver errors have their own counters. The two-process Windows loopback regression covers both IP families, a receive failure in each direction, and the off-link guard. The physical outcome requires a new tablet receipt. [Loopback fixture](../tests/wifi-rejoin/udp-loopback.py)
+Each round sends at most one challenge per direction. The first two rounds send only from the tablet, before Windows has sent to this peer's temporary port. A public-profile inbound firewall policy can therefore affect this count. Compare `tablet_sent` with `windows_received` and `windows_sent` with `tablet_received` in each consecutive frequency segment. Frequency 0 means the before/after samples disagreed or the current association was unavailable. Neighbor states such as STALE describe cache state and can occur during successful delivery. Local send errors and receiver errors have their own counters. The two-process Windows loopback regression covers both IP families, a receive failure in each direction, and the off-link guard. [Loopback fixture](../tests/wifi-rejoin/udp-loopback.py)
+
+### Physical UDP delivery over both bands
+
+On November 22 the daily dev12.11 tablet began on 5220 MHz. Two independent 51-round trials used the original saved WPA2 profile, one for IPv4 and one for link-local IPv6. Each kept its UDP socket open across 5220 → 2437 → 5220 MHz. Each receiver checked the direction, sequence and authenticator. The table gives verified receives divided by local sends for rounds whose two radio readings agreed.
+
+| Family | Tablet frequency | Windows → tablet | Tablet → Windows |
+| --- | ---: | ---: | ---: |
+| IPv4 | 5220 MHz before roam | 15/15 | 15/17 |
+| IPv4 | 2437 MHz | 0/10 | 0/10 |
+| IPv4 | 5220 MHz after return | 23/23 | 23/23 |
+| Link-local IPv6 | 5220 MHz before roam | 14/14 | 14/16 |
+| Link-local IPv6 | 2437 MHz | 0/10 | 0/10 |
+| Link-local IPv6 | 5220 MHz after return | 23/23 | 23/23 |
+
+For each family at 2437 MHz, Windows reported the tablet's neighbor entry REACHABLE in all ten rounds. On the tablet the Windows peer was absent once, INCOMPLETE seven times and FAILED twice. A read-only snapshot during the IPv6 trial showed the tablet's gateway entries as IPv4 REACHABLE and IPv6 DELAY. During the first two tablet-only rounds on 5220 MHz, Windows received zero in each trial. Its WLAN used the Public network profile. All subsequent stable 5220 MHz rounds delivered in both directions. The UDP receipts localize the lost delivery to the peer path on this 2.4 GHz association. They leave the cause of the failed neighbor resolution open.
+
+The controller requested return after ten 2437 MHz rounds without bidirectional delivery. In both trials the same socket resumed on the original 5220 MHz AP. The tablet verified both saved profile files byte-for-byte, the active association, boot and service invocations. Windows retained its WLAN addresses, routes and network profile across the IPv6 trial. The two transient units exited and the private tmpfs files were removed. Receipts are under `out/wifi-roam-path/udp-physical/`. For fixtures starting on 5 GHz, `--target-band 2` selects the saved network's compatible 2.4 GHz AP and restores the original AP when the time limit expires or the controller requests return. [Physical roam fixture](../tests/wifi-rejoin/physical-roam.py)

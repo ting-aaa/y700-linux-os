@@ -95,9 +95,26 @@ def wrong_endpoint():
         raise AssertionError("Off-link endpoint accepted")
 
 
+def scoped_wlan_prefix(address, index):
+    assert sys.platform == "win32"
+    scoped = ipaddress.IPv6Address(address)
+    assert scoped.is_link_local and scoped.scope_id == str(index)
+    local = ipaddress.IPv6Address(scoped.packed)
+    assert local in udp.windows_subnet(local, index)
+    try:
+        udp.windows_subnet(local, 0)
+    except udp.ProbeError:
+        pass
+    else:
+        raise AssertionError("Unassigned interface accepted")
+    print("WINDOWS_WLAN_IPV6 scoped_source_validated=1 wrong_ifindex_refused=1 datagrams_sent=0")
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "--peer":
         tablet_fixture(int(sys.argv[2]), sys.argv[3])
+    elif sys.argv[1] == "--check-wlan-prefix":
+        scoped_wlan_prefix(sys.argv[2], int(sys.argv[3]))
     else:
         assert ctypes.sizeof(udp.NeighborRow) == 88 and udp.NeighborRow.state.offset == 76
         wrong_endpoint()
