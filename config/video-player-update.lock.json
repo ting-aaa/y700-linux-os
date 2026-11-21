@@ -1,0 +1,19 @@
+{
+  "edition": "dev12.10",
+  "archive": "y700-dev12.9-player-update-arm64.tar.gz",
+  "size": 5237744,
+  "sha256": "d9ee91f23a6b6177e770378203e8bd220b328134c6534ac798cfc1d86609ff04",
+  "packages": [
+    {
+      "package": "parole",
+      "version": "4.18.2-1+y7002",
+      "architecture": "arm64",
+      "sha256": "f49b70eece107e02a69c67dee445500a182cfe19138e76bf7ed8e18e3eee1968"
+    }
+  ],
+  "replaces": [{"package": "parole", "version": "4.18.2-1", "architecture": "arm64"}],
+  "files": {
+    "usr/bin/parole": "76cb6ec197596e29ee5a720160b0b1683c38864b80f10dec6759a8fa5a49f2cb",
+    "usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so": "a64bdb5bf9e4454f371638cf17c2564c3cbe3a3bc379ba5151de3c689f4a69f0"
+  }
+}

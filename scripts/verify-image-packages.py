@@ -125,15 +125,42 @@ elif args.camera_lock:
 build = args.root / 'var/lib/y700/build'
 media_receipt = build / 'video-player.lock.json'
 media_packages = build / 'video-player-debian.lock.json'
-if media_receipt.exists() or media_receipt.is_symlink() or media_packages.exists() or media_packages.is_symlink():
+player_update = build / 'video-player-update.lock.json'
+prior_media = build / 'video-player-dev12.9.lock.json'
+if any(path.exists() or path.is_symlink() for path in (media_receipt, media_packages, player_update, prior_media)):
     lock = json.loads((repo / 'config/video-player.lock.json').read_text())
-    if media_receipt.is_symlink() or not media_receipt.is_file() or json.loads(media_receipt.read_text()) != lock:
-        raise SystemExit('Combined player receipt differs from the build input lock')
+    updated = player_update.exists() or player_update.is_symlink()
+    if not updated and (prior_media.exists() or prior_media.is_symlink()):
+        raise SystemExit('Historical player receipt lacks the update receipt')
+    original = prior_media if updated else media_receipt
+    if (original.is_symlink() or not original.is_file()
+            or original.read_bytes() != (repo / 'config/video-player.lock.json').read_bytes()):
+        raise SystemExit('Original combined player receipt differs from the sealed build input')
     if (media_packages.is_symlink() or not media_packages.is_file()
             or hashlib.sha256(media_packages.read_bytes()).hexdigest() != lock['debian_lock_sha256']):
         raise SystemExit('Debian player package receipt differs from the authenticated input')
     wanted.update(map(package_tuple, json.loads(media_packages.read_text())['packages']))
-    for name, digest in lock['files'].items():
+    files = lock['files'].copy()
+    if updated:
+        update_lock = repo / 'config/video-player-update.lock.json'
+        for receipt in (media_receipt, player_update):
+            if receipt.is_symlink() or not receipt.is_file() or receipt.read_bytes() != update_lock.read_bytes():
+                raise SystemExit(f'{receipt.name} differs from the sealed player update lock')
+        ledger = build / 'packages.tsv'
+        # ${binary:Package} depends on the native architecture of dpkg-query.
+        # Pin the ledger produced inside the ARM64 root. The independent
+        # ${Package} tuple check below works on either architecture.
+        ledger_digest = '5e820094693eca3db71affff0a7845f489c60ed5d556b76d62664c1b3b325dce'
+        if ledger.is_symlink() or not ledger.is_file() or hashlib.sha256(ledger.read_bytes()).hexdigest() != ledger_digest:
+            raise SystemExit('Sealed player update package ledger differs from the ARM64 inventory')
+        update = json.loads(update_lock.read_text())
+        for original in replacements(update):
+            if original not in wanted:
+                raise SystemExit(f'Player update parent differs from the locked media layer: {original}')
+            wanted.remove(original)
+        wanted.update(map(package_tuple, update['packages']))
+        files.update(update['files'])
+    for name, digest in files.items():
         file = args.root / name
         if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise SystemExit(f'Player file differs from the build input: {name}')
