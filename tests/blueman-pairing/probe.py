@@ -1,6 +1,7 @@
 """Drive the packaged Blueman pairing controls on two private buses."""
 
 import os
+from pathlib import Path
 import re
 import secrets
 import subprocess
@@ -125,11 +126,12 @@ def bounds(window_id):
     return tuple(int(dimensions[key]) for key in ("Absolute upper-left X", "Absolute upper-left Y", "Width", "Height"))
 
 
-def tap(node, dialog, title="Bluetooth"):
-    xid = bluetooth_window(title)
+def tap(node, dialog, title="Bluetooth", xid=None):
+    xid = xid or bluetooth_window(title)
     origin_x, origin_y, width, height = bounds(xid)
-    require(0 <= origin_x < origin_x + width <= 2560 and 0 <= origin_y < origin_y + height <= 1600,
-            "pairing-dialog-outside-screen")
+    screen_w, screen_h = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    require(0 <= origin_x < origin_x + width <= screen_w and 0 <= origin_y < origin_y + height <= screen_h,
+            f"window-outside-screen-client={origin_x},{origin_y},{width},{height}-screen={screen_w}x{screen_h}")
     frame = dialog.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
     button = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
     require(frame.width > 0 and frame.height > 0, "pairing-dialog-empty-geometry")
@@ -142,10 +144,16 @@ def tap(node, dialog, title="Bluetooth"):
     require(abs(sx - sy) < 0.05 and 0.95 <= sx <= 2.05, "pairing-dialog-inconsistent-coordinate-scale")
     x = origin_x - left + round((button.x + button.width / 2 - frame.x) * sx)
     y = origin_y - top + round((button.y + button.height / 2 - frame.y) * sy)
-    require(button.width > 0 and button.height > 0 and 0 < x < 2560 and 0 < y < 1600,
+    require(button.width > 0 and button.height > 0 and 0 < x < screen_w and 0 < y < screen_h,
             "pairing-button-invalid-geometry")
-    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True,
-                   timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if os.environ.get("BLUEMAN_TYPE_B") == "1":
+        require("y700.topology_fixture=1" in Path("/proc/cmdline").read_text().split() and
+                (screen_w, screen_h) == (1600, 2560), "expected-private-portrait-touch-fixture")
+        with Path("/run/topology/feed").open("w") as feed:
+            print("tap", x * 10, y * 10, file=feed)
+    else:
+        subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True,
+                       timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return round(button.width * sx), round(button.height * sy)
 
 
@@ -375,7 +383,7 @@ def main():
         stock = os.environ["BLUEMAN_EXPECTED_VERSION"] == "2.4.4-1"
         display_passkey(system, agent, keyboard, applet.pid, display_key, stock)
         if os.environ.get("BLUEMAN_TOUCH_ENTRY") == "1":
-            fixed = os.environ["BLUEMAN_EXPECTED_VERSION"] == "2.4.4-1+y7002"
+            fixed = os.environ["BLUEMAN_EXPECTED_VERSION"] in ("2.4.4-1+y7002", "2.4.4-1+y7003")
             zero_confirmation(system, agent, keyboard, applet.pid, fixed)
             other = call(system, BLUEZ, "/", "org.bluez.Mock", "AddDevice",
                          GLib.Variant("(sss)", (adapter, "02:00:00:00:00:02", "Second fixture device")))[0]

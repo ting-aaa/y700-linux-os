@@ -66,3 +66,28 @@ the package inventory, APT consistency and a locally modified conffile.
 On a running system Debian's package script reloads systemd and requests a
 restart of `blueman-mechanism.service`. Open the Manager again to load the
 new interface. [Package versions and inventories](../../config/blueman-manager-update.lock.json)
+
+## Search, select, pair and trust on the desktop
+
+Set `BLUEMAN_MANAGER_ORIENTATION=landscape` and `BLUEMAN_MANAGER_LANGUAGE=en`
+when invoking `tests/blueman-passkey-lifetime/run.sh` on the dev12.12 raw root.
+Pass the X11 archive directory, python3-dbusmock archive, ARM64 uv and the
+y7003 archive and SHA-256 in the order printed by that runner. Repeat with
+`portrait` and `zh`. The test installs Blueman on a temporary copy-on-write
+root, launches the package's desktop entry as an ordinary user and maximizes
+the actual Xfce window. GTK scale is two. The system and session buses,
+accessories, desktop and home all belong to the fixture.
+
+Both runs opened and read the 2,379-character discovery failure, searched
+again successfully, and selected, paired and trusted the mouse and keyboard
+in sequence. Each peer received one Device1.Pair. In English landscape
+(2560×1600) Search measured 208×96 physical pixels and Pair 174×96. In
+Chinese portrait (1600×2560), both controls measured 178×96. The Xvfb
+runs clicked the GTK controls with XTest. They check the installed manager's
+D-Bus actions on modeled HID peers. The separate KeyboardOnly test above
+uses real BlueZ pairing, encryption and HID over virtual HCI.
+
+The English and Chinese Xvfb receipts are
+`out/dev12.12-bt-desktop/manager-landscape-en-final.log` and
+`out/dev12.12-bt-desktop/manager-portrait-zh-maximize2.log`.
+[配对步骤](../../docs/BLUETOOTH-MANAGER.md)

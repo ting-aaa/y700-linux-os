@@ -2,7 +2,7 @@
 # Run the packaged applet on a read-only ext4 base and private GTK/BlueZ sessions.
 set -euo pipefail
 if [[ $EUID != 0 || ( $# != 4 && $# != 6 ) ]]; then
-    echo 'Usage as root: run.sh DEV12.6.ext4 ARM64_X11_DEB_DIR DBUSMOCK.deb ARM64_UV [Y7002.deb SHA256]' >&2
+    echo 'Usage as root: run.sh DEV12.6.ext4 ARM64_X11_DEB_DIR DBUSMOCK.deb ARM64_UV [CANDIDATE.deb SHA256]; BLUEMAN_MANAGER_ORIENTATION selects dev12.12 manager tests' >&2
     exit 2
 fi
 if [[ ${BLUEMAN_LIFETIME_NS:-} != 1 ]]; then
@@ -11,7 +11,12 @@ if [[ ${BLUEMAN_LIFETIME_NS:-} != 1 ]]; then
 fi
 here=$(cd "$(dirname "$0")" && pwd -P)
 base=$(realpath -e "$1")
-printf '%s  %s\n' 74374ce94db4d88c20ba49d7cdff4cdbe6b5931ba047bea3460cede2c93b70cd "$base" | sha256sum --strict -c -
+case ${BLUEMAN_MANAGER_ORIENTATION:-} in
+    '') root_hash=74374ce94db4d88c20ba49d7cdff4cdbe6b5931ba047bea3460cede2c93b70cd ;;
+    portrait|landscape) root_hash=5ebb7a1ffcbdb0b4265ed7b662965592e9b4f038dd5f5d6d779cb0303a00ada3 ;;
+    *) exit 2 ;;
+esac
+printf '%s  %s\n' "$root_hash" "$base" | sha256sum --strict -c -
 work=$(mktemp -d /var/tmp/blueman-lifetime.XXXXXXXX)
 root=$work/root
 cleanup() {
@@ -34,14 +39,26 @@ bundle=$root/opt/blueman-pairing
 install -d "$bundle"
 install -m755 "$4" "$bundle/uv"
 install -m644 "$here/../blueman-pairing/run-session.sh" "$bundle/"
-install -m644 "$here/../blueman-pairing/probe.py" "$bundle/pairing.py"
-install -m644 "$here/probe.py" "$bundle/"
 version=2.4.4-1+y7001
+candidate_version=2.4.4-1+y7002
+if [[ -n ${BLUEMAN_MANAGER_ORIENTATION:-} ]]; then
+    case ${BLUEMAN_MANAGER_LANGUAGE:-en} in en|zh) ;; *) exit 2 ;; esac
+    if [[ $# == 6 ]]; then [[ $6 == f0b06bc9c290ce3d7b6ee78dbb1ca41fee5a2143a6af03c63cfeb80059c2597b ]]; fi
+    version=2.4.4-1+y7002
+    candidate_version=2.4.4-1+y7003
+    install -m644 "$here"/../blueman-pairing/{probe,manager}.py "$bundle/"
+    printf '%s\n' "$BLUEMAN_MANAGER_ORIENTATION" > "$bundle/orientation"
+    printf '%s\n' "${BLUEMAN_MANAGER_LANGUAGE:-en}" > "$bundle/language"
+    export BLUEMAN_TOUCH_ENTRY=1
+else
+    install -m644 "$here/../blueman-pairing/probe.py" "$bundle/pairing.py"
+    install -m644 "$here/probe.py" "$bundle/"
+fi
 [[ $(chroot "$root" dpkg-query -W -f='${Version}' blueman) == "$version" ]]
 if [[ $# == 6 ]]; then
     [[ $6 =~ ^[0-9a-f]{64}$ ]]
     printf '%s  %s\n' "$6" "$5" | sha256sum --strict -c -
-    version=2.4.4-1+y7002
+    version=$candidate_version
     [[ $(dpkg-deb -f "$5" Version) == "$version" && $(dpkg-deb -f "$5" Package) == blueman ]]
     install -m644 "$5" "$root/run/candidate.deb"
     chroot "$root" env SYSTEMD_OFFLINE=1 dpkg -i /run/candidate.deb

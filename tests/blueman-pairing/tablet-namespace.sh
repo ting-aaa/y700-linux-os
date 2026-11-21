@@ -12,6 +12,12 @@ mount --make-rprivate /
 mount --rbind / /
 mount -o remount,bind,ro /
 findmnt -nr -o OPTIONS --target / | grep -Eq '(^|,)ro(,|$)'
+if [[ -d "$stage/manager" ]]; then
+    for file in /usr/lib/python3/dist-packages/blueman/main/Manager.py /usr/share/blueman/ui/manager-main.ui; do
+        mount --bind "$stage/manager/${file##*/}" "$file"
+        mount -o remount,bind,ro "$file"
+    done
+fi
 mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp
 mount -t tmpfs -o mode=755,nosuid,nodev tmpfs /run
 mount -t tmpfs -o mode=555,ro,nosuid,nodev,noexec tmpfs /sys

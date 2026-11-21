@@ -1,0 +1,109 @@
+Description: Keep search errors and primary pairing controls usable on the tablet
+Origin: other, Y700 Linux OS
+Forwarded: no
+
+--- a/usr/share/blueman/ui/manager-main.ui
++++ b/usr/share/blueman/ui/manager-main.ui
+@@ -288,6 +288,8 @@
+             <property name="can-focus">False</property>
+             <child>
+               <object class="GtkToolButton" id="b_search">
++                <property name="height-request">48</property>
++                <property name="width-request">48</property>
+                 <property name="visible">True</property>
+                 <property name="sensitive">False</property>
+                 <property name="can-focus">False</property>
+@@ -313,6 +315,9 @@
+             </child>
+             <child>
+               <object class="GtkToolButton" id="b_bond">
++                <property name="height-request">48</property>
++                <property name="width-request">48</property>
++                <property name="is-important">True</property>
+                 <property name="visible">True</property>
+                 <property name="sensitive">False</property>
+                 <property name="can-focus">False</property>
+@@ -327,6 +332,9 @@
+             </child>
+             <child>
+               <object class="GtkToolButton" id="b_trust">
++                <property name="height-request">48</property>
++                <property name="width-request">48</property>
++                <property name="is-important">True</property>
+                 <property name="visible">True</property>
+                 <property name="sensitive">False</property>
+                 <property name="can-focus">False</property>
+@@ -341,6 +349,8 @@
+             </child>
+             <child>
+               <object class="GtkToolButton" id="b_remove">
++                <property name="height-request">48</property>
++                <property name="width-request">48</property>
+                 <property name="visible">True</property>
+                 <property name="sensitive">False</property>
+                 <property name="can-focus">False</property>
+@@ -365,6 +375,8 @@
+             </child>
+             <child>
+               <object class="GtkToolButton" id="b_send">
++                <property name="height-request">48</property>
++                <property name="width-request">48</property>
+                 <property name="visible">True</property>
+                 <property name="can-focus">False</property>
+                 <property name="tooltip-text" translatable="yes">Send file(s) to the device</property>
+@@ -674,7 +686,10 @@
+                     <property name="visible">True</property>
+                     <property name="can-focus">False</property>
+                     <property name="selectable">True</property>
+-                    <property name="single-line-mode">True</property>
++                    <property name="wrap">True</property>
++                    <property name="wrap-mode">word-char</property>
++                    <property name="max-width-chars">32</property>
++                    <property name="xalign">0</property>
+                   </object>
+                   <packing>
+                     <property name="expand">False</property>
+--- a/usr/lib/python3/dist-packages/blueman/main/Manager.py
++++ b/usr/lib/python3/dist-packages/blueman/main/Manager.py
+@@ -226,13 +226,11 @@
+         msg_lbl = self.builder.get_widget("ib_message", Gtk.Label)
+         image.set_from_icon_name(icon_name, 16)
+ 
+-        if bt is not None:
+-            msg_lbl.set_text(f"{message}…")
+-            self._infobar_bt = f"{message}\n{bt}"
+-            more_button.show()
+-        else:
+-            more_button.hide()
+-            msg_lbl.set_text(f"{message}")
++        summary = message.partition("\n")[0]
++        needs_details = bt is not None or summary != message or len(summary) > 48
++        self._infobar_bt = f"{message}\n{bt}" if bt is not None else message
++        msg_lbl.set_text(f"{summary[:48]}…" if needs_details else summary)
++        more_button.set_visible(needs_details)
+ 
+         self._infobar.set_visible(True)
+         self._infobar.set_revealed(True)
+@@ -248,11 +246,18 @@
+             info_bar.set_revealed(False)
+             GLib.timeout_add(250, hide)  # transition is 250.
+         elif response_id == 0:
+-            dialog = Gtk.MessageDialog(parent=self.window, type=Gtk.MessageType.INFO, modal=True,
+-                                       buttons=Gtk.ButtonsType.CLOSE, text=self._infobar_bt)
++            dialog = Gtk.Dialog(title=_("Bluetooth"), transient_for=self.window, modal=True,
++                                destroy_with_parent=True)
++            dialog.add_button(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE)
++            dialog.set_default_size(440, 260)
++            details = Gtk.TextView(editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR,
++                                   left_margin=12, right_margin=12, top_margin=8, bottom_margin=8)
++            details.get_buffer().set_text(self._infobar_bt)
++            scroll = Gtk.ScrolledWindow()
++            scroll.add(details)
++            dialog.get_content_area().pack_start(scroll, True, True, 0)
+             dialog.connect("response", lambda d, _i: d.destroy())
+-            dialog.connect("close", lambda d: d.destroy())
+-            dialog.show()
++            dialog.show_all()
+ 
+     @staticmethod
+     def bond(device: Device) -> None:
