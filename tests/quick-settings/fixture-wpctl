@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+value=$XDG_RUNTIME_DIR/qa-volume
+mute=$XDG_RUNTIME_DIR/qa-mute
+case "$1" in
+get-volume)
+    test "$2" = '@DEFAULT_AUDIO_SINK@'
+    level=$(cat "$value")
+    printf 'Volume: %d.%02d' "$((level/100))" "$((level%100))"
+    if test "$(cat "$mute")" = 1; then printf ' [MUTED]'; fi
+    printf '\n'
+    ;;
+set-volume)
+    test "$2 $3 $4" = '-l 1.0 @DEFAULT_AUDIO_SINK@'
+    printf '%s\n' "${5%\%}" >"$value" ;;
+set-mute)
+    test "$2" = '@DEFAULT_AUDIO_SINK@'
+    printf '%s\n' "$3" >"$mute" ;;
+*) exit 2 ;;
+esac
