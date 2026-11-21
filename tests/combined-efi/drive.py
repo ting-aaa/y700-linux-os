@@ -185,10 +185,13 @@ def exercise(work, secret, cold=False):
             from drive_lock import unlock
             unlock(work, stream, secret)
         edition = os.environ.get("MEDIA_EDITION")
-        if edition == "dev12.12":
+        if edition in ("dev12.12", "dev12.13"):
             tap_reported_control(work, stream, "COMBINED_GPU_ON_BUTTON")
             tap_reported_control(work, stream, "COMBINED_GPU_OFF_BUTTON")
-        if edition in ("dev12.11", "dev12.12"):
+        if edition == "dev12.13":
+            for marker in ("TRAY", "ON", "OFF", "CLOSE"):
+                tap_reported_control(work, stream, f"COMBINED_QUICK_{marker}_BUTTON")
+        if edition in ("dev12.11", "dev12.12", "dev12.13"):
             tap_reported_control(work, stream, "COMBINED_CAMERA_BUTTON")
         wait_marker(work, "COMBINED_PASS", 420)
 

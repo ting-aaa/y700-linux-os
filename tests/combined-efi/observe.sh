@@ -63,9 +63,11 @@ if [[ $1 == setup ]]; then
         if [[ -f /boot/blueman-tested.lock ]]; then
             expected=685d01f30932a5dd7df5ccbf99c66f3908e29c5cdeda2b7abe91d727f9c09511
             cmp /boot/blueman-tested.lock /var/lib/y700/build/blueman.lock.json
-            [[ $(dpkg-query -W -f='${Version} ${Architecture}' blueman) == '2.4.4-1+y7002 arm64' ]]
+            blueman_version=2.4.4-1+y7002
+            if [[ -f /boot/tablet-desktop.lock.json ]]; then blueman_version=2.4.4-1+y7003; fi
+            [[ $(dpkg-query -W -f='${Version} ${Architecture}' blueman) == "$blueman_version arm64" ]]
             [[ -z $(dpkg -V blueman) ]]
-            echo 'COMBINED_BLUEMAN version=2.4.4-1+y7002 architecture=arm64 receipt=verified files=verified'
+            echo "COMBINED_BLUEMAN version=$blueman_version architecture=arm64 receipt=verified files=verified"
             if [[ -f /boot/platform-tested.lock ]]; then
                 platform='0.1.0~dev12.8'
                 expected=a1a2498f80dc382dde6db1f3e0282193c10b78110089ea0db8ae002b1c3abb84
@@ -97,10 +99,21 @@ if [[ $1 == setup ]]; then
         camera='0.7.2-1~bpo13+1.y7005'
         test -z "$(dpkg -V y700-camera-runtime y700-camera-pipewire network-manager wpasupplicant)"
         if [[ -f /boot/platform-desktop-update.lock.json ]]; then
-            grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
             cmp /boot/platform-desktop-update.lock.json /var/lib/y700/build/platform-desktop-update.lock.json
             platform='0.1.0~dev12.8+gpu1.2'
-            expected=ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047
+            if [[ -f /boot/tablet-desktop.lock.json ]]; then
+                grep -Fxq IMAGE_VERSION=dev12.13 /etc/os-release
+                cmp /boot/tablet-desktop.lock.json /var/lib/y700/build/tablet-desktop.lock.json
+                count=1241
+                expected=5f991636f274f7d21c38f4eaf4e119d6491a1c7c901fdb818518548333574098
+                camera='0.7.2-1~bpo13+1.y7008'
+                [[ $(dpkg-query -W -f='${Version}' y700-quick-settings) == 0.1.0 ]]
+                [[ $(dpkg-query -W -f='${Version}' ibus) == '1.5.32-2+0y7001' ]]
+                [[ -z $(dpkg -V ibus y700-quick-settings) ]]
+            else
+                grep -Fxq IMAGE_VERSION=dev12.12 /etc/os-release
+                expected=ef9dea42fb4990e05025bdaa9ac6aac8b0f49e48f14cd57a4ff13d0207e08047
+            fi
         else
             grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
         fi
@@ -251,6 +264,12 @@ if [[ -f /boot/media-tested.lock ]]; then
         setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
             LANGUAGE=en LC_ALL=C.UTF-8 GDK_SCALE=2 UV_CACHE_DIR="/run/user/$uid/uv-media-check" \
             timeout 160 "$media/uv" run --offline --no-project --python /usr/bin/python3 python -B "$media/desktop-settings.py"
+    fi
+    if [[ -f /boot/quick-session.py ]]; then
+        install -m644 /boot/quick-session.py "$media/"
+        setpriv --reuid="$uid" --regid="$(id -g y700)" --init-groups env -i "${desktop_environment[@]}" \
+            UV_CACHE_DIR="/run/user/$uid/uv-media-check" timeout 170 "$media/uv" run --offline --no-project \
+            --python /usr/bin/python3 python -B "$media/quick-session.py"
     fi
     if [[ -f /boot/camera-autofocus.lock.json ]]; then
         install -m644 /boot/camera-session.py "$media/"
