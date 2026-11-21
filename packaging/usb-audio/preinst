@@ -1,0 +1,29 @@
+#!/bin/sh
+# This optional package targets two board kernel binaries that share a uname.
+set -eu
+case "$1" in install|upgrade) ;; *) exit 0 ;; esac
+pkg=y700-usb-audio-modules
+release=7.3.4-asphalt-prc
+refuse() { printf 'USB audio package refused: %s\n' "$1" >&2; exit 1; }
+[ "$(uname -m)" = aarch64 ] && [ "$(uname -r)" = "$release" ] || refuse kernel_release
+notes=$(sha256sum /sys/kernel/notes) || refuse kernel_notes
+case "${notes%% *}" in
+    c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063|35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6) ;;
+    *) refuse kernel_notes ;;
+esac
+dir=/usr/lib/modules/$release
+target=$dir/updates/$pkg
+[ -d "$dir/kernel" ] && [ "$(realpath -m "$target")" = "$target" ] || refuse module_tree
+for name in snd-hwdep snd-rawmidi snd-usbmidi-lib snd-usb-audio; do
+    underscored=$(printf '%s' "$name" | tr - _)
+    # Match normalized kmod names, compressed or plain, in every search directory.
+    paths=$(find "$dir" \( -name "$name.ko" -o -name "$name.ko.*" -o -name "$underscored.ko" -o -name "$underscored.ko.*" \) -print)
+    if [ -z "$paths" ]; then
+        [ ! -e "/sys/module/$underscored" ] || refuse already_loaded
+        if modinfo -k "$release" "$name" >/dev/null 2>&1; then refuse existing_module; fi
+        continue
+    fi
+    current=$target/$name.ko.zst
+    [ "$paths" = "$current" ] && [ -f "$current" ] && [ ! -L "$current" ] || refuse existing_module
+    [ "$(dpkg-query -S "$current" 2>/dev/null)" = "$pkg: $current" ] || refuse file_ownership
+done

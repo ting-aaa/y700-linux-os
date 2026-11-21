@@ -1,5 +1,7 @@
 # TB320FC internal microphones
 
+A digital USB-C headset provides a separate capture path with its own converter. The optional four-module Debian package and ARM64 desktop checks are documented in [Digital USB audio](USB-AUDIO.md).
+
 The dev12.9 ARM64 desktop can select a two-channel microphone when the candidate ALSA profile sees the matching capture PCM and mixer controls. On the PC, an ordinary application recorded independent synthetic channels while the speaker monitor carried a third tone. Two kernel fixes also passed an original-versus-patched ARM64 test. Physical capture on the tablet is still open. [Stereo driver verification](#stereo-driver-and-audioreach-verification) · [Application and duplex verification](../tests/microphone/virtual/README.md)
 
 The physical Lenovo Y700 Gen 2 running `y700-platform 0.1.0~dev12.6` and `7.3.4-asphalt-prc` has **zero capture PCMs**. ALSA card `LenovoY700` exposes MultiMedia1 and MultiMedia2 playback. The board UCM profile lists only Speaker. Applications can encounter a speaker monitor source even on a system without a microphone PCM. Lenovo specifies two microphones for the Snapdragon 8+ Gen 1 TB320FC. [Lenovo product reference](https://psref.lenovo.com/syspool/Sys/PDF/Lenovo_Tablets/Legion_Tab/Legion_Tab_Spec.PDF) · [Shipping board UCM](../packaging/root/usr/share/alsa/ucm2/Lenovo-Y700/HiFi.conf)
