@@ -44,3 +44,20 @@ On the physical PRC board the RAM init requires the supplied storage-disabled tr
 The sealed `SHA256SUMS` digest is `2cdddecb410b4aa3d9b63b229fc8df5fc8de61b00ed3a209a34c633d82adb453`. The 1,363,224,164-byte initrd has SHA-256 `02d1b27418805d79a813763f9e3001e24768f4dd4360d55e37b93e7c152721b2` and the diagnostic board tree has SHA-256 `8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82`.
 
 The sealed root installs the USB and SSH maintenance units. They require `/etc/y700/maintenance.env` and `/etc/y700/maintenance-sshd.conf`. These files, the enrolled public key, the SSH host key and a USB serial getty are absent from the fresh image. The VM witness communicates over a virtual serial port. A physical diagnostic boot needs a separate volatile reporting channel so the PC can verify the running kernel, device tree and RAM mounts before starting a hardware test. [Maintenance configuration generator](../../scripts/provision-maintenance.py)
+
+### Receiving the sealed root over USB
+
+The early initrd accepts the 1,351,581,696-byte SquashFS over a dedicated USB ACM endpoint after the bootloader starts Linux. Both the early receiver and the Debian RAM init check the PRC storage-disabled device tree. The receiver verifies the exact byte count and SHA-256 before it hands the file to the Debian RAM init. The optional camera attachment runs in the temporary root and reports numerical results over a second ACM endpoint.
+
+```bash
+bash scripts/build-ram-receiver.sh "$images" "$ram_bundle" "$new_receiver_dir" "$af_addon" "$af_addon_sha256"
+bash tests/ram-trial/check-receiver.sh "$new_receiver_dir" "$receiver_manifest_sha256" "$new_log_dir"
+```
+
+The VM exercises both stages with the real release kernel and sealed root. Its sensor input is synthetic. On the running PRC tablet, the existing maintenance ACM carried this same SquashFS into tmpfs in **93.578 seconds** on the Windows host. The tablet checked SHA-256 `ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a` before cleanup. Physical enumeration by the early initrd and actual lens movement are separate checks.
+
+After the bootloader has handed control to Linux, run the sender from the PC. It selects the receiver by VID, PID and USB serial, verifies the local file and waits for the tablet to confirm the digest. The camera endpoint becomes available after the RAM desktop starts. [U-Boot staging](../uboot-ram-stage/README.md) · [Camera diagnostic and host commands](../ram-af-acm/README.md)
+
+```powershell
+uv run --offline --python 3.13 tests/ram-trial/send-carrier.py out/dev12.12-ram-receiver/carrier.squashfs --usb
+```

@@ -1,0 +1,21 @@
+#!/bin/busybox sh
+set -eu
+port=$1 bytes=$2 digest=$3 target=$4
+umask 077
+exec 3<>"$port"
+case "$port" in /dev/ttyGS*) stty raw -echo -ixon -ixoff <&3;; esac
+while :; do
+    # The virtio port and USB tty can exist before a host has opened them.
+    if ! IFS= read -r line <&3; then sleep .25; continue; fi
+    case "$line" in
+        INFO) printf 'Y700_RAM_INFO %s %s\n' "$bytes" "$digest" >&3 ;;
+        "BEGIN $digest") break ;;
+        *) exit 1 ;;
+    esac
+done
+printf 'Y700_RAM_SEND\n' >&3
+head -c "$bytes" <&3 >"$target"
+[ "$(stat -c %s "$target")" = "$bytes" ]
+printf '%s  %s\n' "$digest" "$target" | sha256sum -c - >/dev/null
+printf 'Y700_RAM_VERIFIED\n' >&3
+IFS= read -r line <&3 && [ "$line" = CONTINUE ]

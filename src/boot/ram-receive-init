@@ -1,0 +1,71 @@
+#!/bin/busybox sh
+# Small first stage for a diskless boot. The USB peer supplies the sealed carrier only.
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev || exit 1
+exec </dev/console >/dev/console 2>&1
+. /ram-receive/storage-check
+mount -t proc proc /proc && mount -t sysfs sysfs /sys || fail 'early kernel interfaces'
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+cmdline=" $(cat /proc/cmdline) "
+case "$cmdline" in *' y700.media=ram '*) ;; *) fail 'RAM boot parameter missing';; esac
+case "$cmdline" in *' root='*|*' resume='*) fail 'unexpected disk parameter';; esac
+check_storage
+bytes=1351581696
+digest=ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a
+available=$(awk '$1=="MemAvailable:" {print $2}' /proc/meminfo)
+[ "$available" -gt 4194304 ] || fail 'too little available RAM'
+target=/y700-root.squashfs
+[ ! -e "$target" ] || fail 'RAM carrier already exists'
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    [ "$(tr -d '\000' </proc/device-tree/region_country)" = PRC ] || fail 'board region'
+    while IFS= read -r module; do insmod "/ram-receive/modules/$module" || fail "early module $module"; done </ram-receive/modules/order
+    udc=a600000.usb
+    for n in $(seq 1 45); do [ ! -e "/sys/class/udc/$udc" ] || break; sleep 1; done
+    [ -e "/sys/class/udc/$udc" ] || fail 'USB device controller unavailable'
+    mount -t configfs configfs /sys/kernel/config || fail 'USB configfs mount'
+    g=/sys/kernel/config/usb_gadget/y700-ram-receive
+    mkdir "$g" && cd "$g" || fail 'USB gadget directory'
+    # Same composite class as the product maintenance gadget; the only function is ACM.
+    for spec in idVendor:0x18d1 idProduct:0x4e11 bDeviceClass:0xef bDeviceSubClass:0x02 bDeviceProtocol:0x01; do
+        echo "${spec#*:}" >"${spec%%:*}" || fail 'USB descriptor'
+    done
+    mkdir -p strings/0x409 configs/c.1/strings/0x409 functions/acm.ram || fail 'ACM function'
+    echo 'Y700 Linux' >strings/0x409/manufacturer
+    echo 'Y700 RAM receiver' >strings/0x409/product
+    echo 'Y700_RAM_RECEIVER' >strings/0x409/serialnumber
+    echo 'RAM transfer' >configs/c.1/strings/0x409/configuration
+    ln -s "$g/functions/acm.ram" configs/c.1/acm && echo "$udc" >UDC || fail 'ACM bind'
+    cd /
+    port=/dev/ttyGS0
+elif [ "$compat" = linux,dummy-virt ]; then
+    case "$cmdline" in *' y700.ram_receiver_qa=1 '*) ;; *) fail 'unknown virtual board request';; esac
+    for n in $(seq 1 45); do
+        for dev in /sys/class/virtio-ports/*; do
+            [ -f "$dev/name" ] && [ "$(cat "$dev/name")" = y700.ram.receive ] && port=/dev/${dev##*/} && break
+        done
+        [ -z "${port:-}" ] || break; sleep 1
+    done
+else
+    fail 'unknown board'
+fi
+[ -c "${port:-/missing}" ] || fail 'RAM input port unavailable'
+echo 'Y700_RAM_RECEIVER_READY'
+timeout -k 3 600 /bin/sh /ram-receive/transfer "$port" "$bytes" "$digest" "$target" || fail 'RAM transfer rejected or timed out'
+if [ -n "${g:-}" ]; then
+    cd "$g" && echo '' >UDC && rm configs/c.1/acm &&
+        rmdir functions/acm.ram configs/c.1/strings/0x409 configs/c.1 strings/0x409 || fail 'ACM cleanup'
+    cd / && rmdir "$g" && umount /sys/kernel/config || fail 'USB configfs cleanup'
+fi
+echo 'Y700_RAM_RECEIVER_VERIFIED'
+next=/y700-ram-trial-init
+case "$cmdline" in *' y700.ram_af_acm=1 '*) next=/y700-af-acm-init;; esac
+[ -x "$next" ] || fail 'second stage unavailable'
+exec 0</ram-receive/storage-check 1>/ram-receive/transition.log 2>&1
+for fs in /sys /dev /proc; do
+    # Defer the last kernel console reference to devtmpfs if it is still open.
+    # Keep /proc available for BusyBox's mount table until the final detach.
+    case "$fs" in /dev) umount -l /dev;; *) umount "$fs";; esac ||
+        fail "early mount cleanup $fs"
+done
+exec "$next"
