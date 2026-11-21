@@ -1,0 +1,319 @@
+Subject: [PATCH] simple: report terminal focus scan diagnostics on demand
+
+Enable with LIBCAMERA_LOG_LEVELS='*:FATAL,V4L2:ERROR,Y700Af:DEBUG'.
+The opt-in AF_DIAG row reports a terminal phase and reason. Its three
+counter columns are coarse/fine/verify. Controls count successful
+CameraLens calls. Lens API status may normalize the driver errno. The
+existing V4L2 error log carries the original ioctl error text. Neither
+control success nor the status poll measures mechanical lens travel.
+
+The row contains no images, image measurements, positions or calibration
+values. It does not change the decision or capture sequence. The pipeline
+owns the diagnostic counters, preserving the older ContrastScan ABI.
+Apply after simple-focus.patch and installation of contrast_scan.{cpp,h}.
+---
+
+diff --git a/src/libcamera/pipeline/simple/contrast_scan.h b/src/libcamera/pipeline/simple/contrast_scan.h
+--- a/src/libcamera/pipeline/simple/contrast_scan.h
++++ b/src/libcamera/pipeline/simple/contrast_scan.h
+@@ -1,6 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ #pragma once
+ 
++#include <array>
+ #include <cstddef>
+ #include <cstdint>
+ #include <functional>
+@@ -15,6 +16,17 @@
+ public:
+ 	enum class State { Idle, Scanning, Focused, Failed };
+ 	enum class Trigger { None, Start, Cancel };
++	struct PhaseProgress {
++		unsigned int controls = 0;
++		unsigned int samples = 0;
++		unsigned int timestampRejects = 0;
++	};
++	struct Diagnostic {
++		const char *phase = nullptr;
++		const char *reason = nullptr;
++		/* Coarse, Fine, Verify, in that order. */
++		std::array<PhaseProgress, 3> progress;
++	};
+ 
+ 	static bool supportsLens(std::string_view id, std::string_view sensor,
+ 				 std::string_view lens, int low, int high);
+@@ -30,6 +42,16 @@
+ 		    const std::function<bool(int)> &move,
+ 		    const std::function<std::optional<double>()> &score);
+ 
++	[[gnu::visibility("hidden")]]
++	void request(std::optional<bool> automatic, Trigger trigger, Diagnostic *diagnostic);
++	[[gnu::visibility("hidden")]]
++	State failedFrame(Diagnostic *diagnostic);
++	[[gnu::visibility("hidden")]]
++	State frame(uint64_t now, uint64_t captured,
++		    const std::function<bool(int)> &move,
++		    const std::function<std::optional<double>()> &score,
++		    Diagnostic *diagnostic);
++
+ private:
+ 	bool automatic_ = false;
+ 	State state_ = State::Idle;
+@@ -42,6 +64,8 @@
+ 	bool haveSample_ = false, needMove_ = false;
+ 
+ 	void addRange(int low, int high, int intervals);
++	[[gnu::visibility("hidden")]]
++	State finish(State state, const char *reason, Diagnostic *diagnostic);
+ };
+ 
+ } /* namespace libcamera */
+diff --git a/src/libcamera/pipeline/simple/contrast_scan.cpp b/src/libcamera/pipeline/simple/contrast_scan.cpp
+--- a/src/libcamera/pipeline/simple/contrast_scan.cpp
++++ b/src/libcamera/pipeline/simple/contrast_scan.cpp
+@@ -62,31 +62,57 @@
+ 
+ void ContrastScan::request(std::optional<bool> automatic, Trigger trigger)
+ {
++	request(automatic, trigger, nullptr);
++}
++
++void ContrastScan::request(std::optional<bool> automatic, Trigger trigger, Diagnostic *diagnostic)
++{
+ 	if (automatic)
+ 		automatic_ = *automatic;
+ 	if (!automatic_ || (trigger == Trigger::Cancel && state_ == State::Scanning)) {
+-		state_ = State::Idle;
++		if (state_ == State::Scanning)
++			finish(State::Idle, trigger == Trigger::Cancel ? "cancelled" : "manual",
++			       diagnostic);
++		else
++			state_ = State::Idle;
+ 		return;
+ 	}
+ 	if (trigger != Trigger::Start || state_ == State::Scanning)
+ 		return;
++	phase_ = Phase::Coarse;
++	if (diagnostic)
++		*diagnostic = {};
+ 	if (low_ < 0 || high_ > 1023 || high_ <= low_) {
+-		state_ = State::Failed;
++		finish(State::Failed, "invalid-range", diagnostic);
+ 		return;
+ 	}
+ 	addRange(low_, high_, 8);
+ 	state_ = State::Scanning;
+-	phase_ = Phase::Coarse;
+ 	best_ = -1;
+ 	worst_ = std::numeric_limits<double>::max();
+ 	began_ = 0;
+ 	needMove_ = true;
+ }
+ 
++ContrastScan::State ContrastScan::finish(State state, const char *reason, Diagnostic *diagnostic)
++{
++	if (diagnostic) {
++		static constexpr const char *phases[] = { "coarse", "fine", "verify" };
++		diagnostic->phase = phases[static_cast<size_t>(phase_)];
++		diagnostic->reason = reason;
++	}
++	return state_ = state;
++}
++
+ ContrastScan::State ContrastScan::failedFrame()
+ {
++	return failedFrame(nullptr);
++}
++
++ContrastScan::State ContrastScan::failedFrame(Diagnostic *diagnostic)
++{
+ 	if (state_ == State::Scanning)
+-		state_ = State::Failed;
++		return finish(State::Failed, "capture", diagnostic);
+ 	return state_;
+ }
+ 
+@@ -94,18 +120,29 @@
+ 					const std::function<bool(int)> &move,
+ 					const std::function<std::optional<double>()> &score)
+ {
++	return frame(now, captured, move, score, nullptr);
++}
++
++ContrastScan::State ContrastScan::frame(uint64_t now, uint64_t captured,
++					const std::function<bool(int)> &move,
++					const std::function<std::optional<double>()> &score,
++					Diagnostic *diagnostic)
++{
+ 	if (state_ != State::Scanning)
+ 		return state_;
+ 	if (!began_)
+ 		began_ = now;
+ 	/* An unresponsive or stalled stream can never report a focus lock. */
+ 	if (now - began_ > 45000000000ULL)
+-		return state_ = State::Failed;
++		return finish(State::Failed, "deadline", diagnostic);
+ 
++	PhaseProgress *progress = diagnostic ? &diagnostic->progress[static_cast<size_t>(phase_)] : nullptr;
+ 	if (needMove_) {
+ 		position_ = phase_ == Phase::Verify ? bestPosition_ : positions_[index_];
+ 		if (!move(position_))
+-			return state_ = State::Failed;
++			return finish(State::Failed, "lens-control", diagnostic);
++		if (progress)
++			++progress->controls;
+ 		moved_ = now;
+ 		lastCapture_ = 0;
+ 		haveSample_ = false;
+@@ -116,8 +153,11 @@
+ 	 * The board CAMSS timestamps are CLOCK_MONOTONIC. Reject duplicate/stale
+ 	 * exposures, and allow a complete mechanical settling interval. */
+ 	if (captured < moved_ || captured - moved_ < 50000000 || captured > now ||
+-	    captured <= lastCapture_)
++	    captured <= lastCapture_) {
++		if (progress)
++			++progress->timestampRejects;
+ 		return state_;
++	}
+ 	/* CAMSS timestamps frame completion. An exposure crossing the settling
+ 	 * interval can therefore finish after it. Discard that first completion. */
+ 	if (!lastCapture_) {
+@@ -127,15 +167,20 @@
+ 	lastCapture_ = captured;
+ 	auto value = score();
+ 	if (!value || !std::isfinite(*value))
+-		return state_ = State::Failed;
++		return finish(State::Failed, "invalid-score", diagnostic);
++	if (progress)
++		++progress->samples;
+ 	if (!haveSample_) {
+ 		previousScore_ = *value;
+ 		haveSample_ = true;
+ 		return state_;
+ 	}
+ 	double mean = (*value + previousScore_) / 2.0;
+-	if (phase_ == Phase::Verify)
+-		return state_ = mean >= best_ * 0.75 ? State::Focused : State::Failed;
++	if (phase_ == Phase::Verify) {
++		if (mean >= best_ * 0.75)
++			return finish(State::Focused, "focused", diagnostic);
++		return finish(State::Failed, "verify-drop", diagnostic);
++	}
+ 
+ 	if (mean > best_) {
+ 		best_ = mean;
+@@ -145,8 +190,10 @@
+ 	needMove_ = true;
+ 	if (++index_ < positions_.size())
+ 		return state_;
+-	if (best_ < 0.025 || best_ < worst_ * 1.12)
+-		return state_ = State::Failed;
++	if (best_ < 0.025)
++		return finish(State::Failed, "low-contrast", diagnostic);
++	if (best_ < worst_ * 1.12)
++		return finish(State::Failed, "flat-contrast", diagnostic);
+ 	if (phase_ == Phase::Coarse) {
+ 		const int radius = std::max(1, (high_ - low_ + 7) / 8);
+ 		addRange(std::max(low_, bestPosition_ - radius),
+diff --git a/src/libcamera/pipeline/simple/simple.cpp b/src/libcamera/pipeline/simple/simple.cpp
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -60,6 +60,11 @@
+ 
+ LOG_DEFINE_CATEGORY(SimplePipeline)
+ 
++namespace {
++LOG_DEFINE_CATEGORY(Y700Af)
++}
++
++
+ /* -----------------------------------------------------------------------------
+  *
+  * Overview
+@@ -306,6 +311,7 @@
+ 	CameraLens *focusLens_ = nullptr;
+ 	Stream *focusStream_ = nullptr;
+ 	ContrastScan focus_;
++	ContrastScan::Diagnostic focusDiagnostic_;
+ 	int focusMin_ = 0;
+ 	int focusMax_ = 0;
+ 	unsigned int focusPixelBytes_ = 0;
+@@ -1084,6 +1090,7 @@
+ {
+ 	focusRunning_ = false;
+ 	focus_.reset(focusMin_, focusMax_);
++	focusDiagnostic_ = {};
+ 	if (focusTouched_) {
+ 		focusLens_->releaseFocus();
+ 		focusTouched_ = false;
+@@ -1106,30 +1113,53 @@
+ 		else if (*value == controls::AfTriggerCancel)
+ 			action = ContrastScan::Trigger::Cancel;
+ 	}
+-	focus_.request(automatic, action);
++	focus_.request(automatic, action, &focusDiagnostic_);
+ 	const uint64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+ 		std::chrono::steady_clock::now().time_since_epoch()).count();
+ 	const bool valid = buffer && buffer->metadata().status == FrameMetadata::FrameSuccess;
++	const char *input = "none";
++	int lensApiStatus = 0;
+ 	if (!valid) {
++		input = buffer ? "buffer-status" : "missing-buffer";
+ 		/* A failed RGB frame may not produce IPA statistics. */
+ 		if (auto *info = frameInfo_.find(request->sequence()))
+ 			info->metadataRequired = false;
+ 	}
+-	auto state = !valid ? focus_.failedFrame() : focus_.frame(now, buffer->metadata().timestamp, [this](int position) {
++	auto state = !valid ? focus_.failedFrame(&focusDiagnostic_) :
++		focus_.frame(now, buffer->metadata().timestamp, [this, &lensApiStatus](int position) {
+ 		focusTouched_ = true;
+-		return focusLens_->setFocusPosition(position) == 0;
+-	}, [this, buffer]() -> std::optional<double> {
+-		if (buffer->planes().size() != 1 || buffer->metadata().planes().size() != 1)
++		lensApiStatus = focusLens_->setFocusPosition(position);
++		return lensApiStatus == 0;
++	}, [this, buffer, &input]() -> std::optional<double> {
++		if (buffer->planes().size() != 1 || buffer->metadata().planes().size() != 1) {
++			input = "plane-count";
+ 			return {};
++		}
+ 		DmaSyncer sync(buffer->planes()[0].fd, DmaSyncer::SyncType::Read);
+ 		MappedFrameBuffer mapped(buffer, MappedFrameBuffer::MapFlag::Read);
+-		if (!mapped.isValid() || mapped.planes().size() != 1)
++		if (!mapped.isValid() || mapped.planes().size() != 1) {
++			input = "map";
+ 			return {};
++		}
+ 		const auto plane = mapped.planes()[0];
+ 		const auto &cfg = focusStream_->configuration();
+-		return ContrastScan::contrast(plane.data(), std::min<size_t>(plane.size(), buffer->metadata().planes()[0].bytesused),
+-					      cfg.size.width, cfg.size.height, cfg.stride, focusPixelBytes_);
+-	});
++		auto score = ContrastScan::contrast(plane.data(), std::min<size_t>(plane.size(), buffer->metadata().planes()[0].bytesused),
++						    cfg.size.width, cfg.size.height, cfg.stride, focusPixelBytes_);
++		if (!score)
++			input = "plane-layout";
++		return score;
++	}, &focusDiagnostic_);
++	if (focusDiagnostic_.reason) {
++		const auto &[coarse, fine, verify] = focusDiagnostic_.progress;
++		LOG(Y700Af, Debug) << "AF_DIAG phase=" << focusDiagnostic_.phase
++				   << " reason=" << focusDiagnostic_.reason
++				   << " input=" << input << " lens_api_status=" << lensApiStatus
++				   << " controls=" << coarse.controls << '/' << fine.controls << '/' << verify.controls
++				   << " samples=" << coarse.samples << '/' << fine.samples << '/' << verify.samples
++				   << " timestamp_rejects=" << coarse.timestampRejects << '/'
++				   << fine.timestampRejects << '/' << verify.timestampRejects;
++		focusDiagnostic_ = {};
++	}
+ 	int32_t afState = controls::AfStateIdle;
+ 	switch (state) {
+ 	case ContrastScan::State::Idle: break;
+@@ -1782,6 +1812,7 @@
+ 	int ret;
+ 
+ 	data->focus_.reset(data->focusMin_, data->focusMax_);
++	data->focusDiagnostic_ = {};
+ 	data->focusRunning_ = data->focusStream_ != nullptr;
+ 	const MediaPad *pad = acquirePipeline(data);
+ 	if (pad) {
