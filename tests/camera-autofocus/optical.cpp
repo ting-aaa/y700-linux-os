@@ -2,6 +2,7 @@
 #include "optical-metric.h"
 #include "optical-config-resources.h"
 #include "signal-metric.h"
+#include "bracket.h"
 #include <libcamera/camera.h>
 #include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
@@ -270,7 +271,7 @@ static void reportPair(const Request &req, const FrameBuffer &rgb, unsigned rgbS
 	}
 }
 
-static void capture(Camera &camera, const CameraConfiguration &config, bool signalOnly)
+static void capture(Camera &camera, const CameraConfiguration &config, bool signalOnly, bool manual)
 {
 	const auto &cfg = config.at(0);
 	require(cfg.stride >= width * 4, "invalid_rgb_stride");
@@ -281,6 +282,11 @@ static void capture(Camera &camera, const CameraConfiguration &config, bool sign
 	Stream *stream = cfg.stream();
 	require(allocator.allocate(stream) > 0, "buffer_allocation");
 	Stream *raw = signalOnly ? config.at(1).stream() : nullptr;
+	if (manual)
+		require(camera.controls().count(&controls::ExposureTimeMode) &&
+			camera.controls().count(&controls::AnalogueGainMode) &&
+			camera.controls().count(&controls::ExposureTime) &&
+			camera.controls().count(&controls::AnalogueGain), "no_manual_bracket_controls");
 	if (raw)
 		require(allocator.allocate(raw) > 0 && allocator.buffers(raw).size() == allocator.buffers(stream).size(),
 			"raw_buffer_allocation");
@@ -300,8 +306,26 @@ static void capture(Camera &camera, const CameraConfiguration &config, bool sign
 	require(rc == 0, "start_failed");
 	try {
 		const auto deadline = Clock::now() + std::chrono::seconds(60);
+		bracket::Progress bracket;
+		unsigned autoFrames = 0, drainFrames = 0;
+		auto queue = [&](Request *req) {
+			if (manual) {
+				auto &c = req->controls();
+				if (bracket.index < bracket::points.size()) {
+					const auto &point = bracket::points[bracket.index];
+					c.set(controls::ExposureTimeMode, controls::ExposureTimeModeManual);
+					c.set(controls::AnalogueGainMode, controls::AnalogueGainModeManual);
+					c.set(controls::ExposureTime, point.timeUs);
+					c.set(controls::AnalogueGain, point.gain);
+				} else {
+					c.set(controls::ExposureTimeMode, controls::ExposureTimeModeAuto);
+					c.set(controls::AnalogueGainMode, controls::AnalogueGainModeAuto);
+				}
+			}
+			require(camera.queueRequest(req) == 0, "queue_failed");
+		};
 		for (const auto &req : requests)
-			require(camera.queueRequest(req.get()) == 0, "queue_failed");
+			queue(req.get());
 		Trial trial;
 		uint64_t lastTimestamp = 0;
 		unsigned attempts = 0;
@@ -317,12 +341,35 @@ static void capture(Camera &camera, const CameraConfiguration &config, bool sign
 				require(buffer.metadata().timestamp > lastTimestamp, "stale_frame");
 				lastTimestamp = buffer.metadata().timestamp;
 				if (raw) {
-					if (++trial.frames == Trial::warmup + 1) {
+					++trial.frames;
+					if (manual && bracket.index == bracket::points.size()) {
+						require(++drainFrames <= bracket::limitPerPoint, "bracket_auto_timeout");
+						if (req->controls().get(controls::ExposureTimeMode) == controls::ExposureTimeModeAuto &&
+						    req->controls().get(controls::AnalogueGainMode) == controls::AnalogueGainModeAuto &&
+						    ++autoFrames == bracket::stableFrames)
+							break;
+					} else if (manual) {
+						const auto &point = bracket::points[bracket.index];
+						const auto &sent = req->controls();
+						const auto &observed = req->metadata();
+						bool target = sent.get(controls::ExposureTime) == point.timeUs &&
+							      sent.get(controls::AnalogueGain) == point.gain;
+						if (bracket.observe(target ? observed.get(controls::ExposureTime).value_or(0) : 0,
+								    observed.get(controls::AnalogueGain).value_or(0))) {
+							std::cout << "BRACKET_STEP index=" << bracket.index + 1
+								  << " target_us=" << point.timeUs << " target_gain="
+								  << static_cast<int>(point.gain) << std::endl;
+							reportPair(*req, buffer, cfg.stride, *req->buffers().at(raw), config.at(1).stride);
+							bracket.advance();
+						} else {
+							require(bracket.frames < bracket::limitPerPoint, "bracket_applied_timeout");
+						}
+					} else if (trial.frames == Trial::warmup + 1) {
 						reportPair(*req, buffer, cfg.stride, *req->buffers().at(raw), config.at(1).stride);
 						break;
 					}
 					req->reuse(Request::ReuseBuffers);
-					require(camera.queueRequest(req) == 0, "requeue_failed");
+					queue(req);
 					continue;
 				}
 				auto state = req->metadata().get(controls::AfState);
@@ -344,7 +391,7 @@ static void capture(Camera &camera, const CameraConfiguration &config, bool sign
 				req->controls().set(controls::AfMode, controls::AfModeAuto);
 				req->controls().set(controls::AfTrigger, controls::AfTriggerStart);
 			}
-			require(camera.queueRequest(req) == 0, "requeue_failed");
+			queue(req);
 		}
 	} catch (...) {
 		camera.stop();
@@ -461,7 +508,8 @@ try {
 		return 0;
 	}
 	const bool configOnly = mode == "--check-rear-config";
-	const bool signalOnly = mode == "--rear-signal";
+	const bool manual = mode == "--rear-bracket";
+	const bool signalOnly = mode == "--rear-signal" || manual;
 	require(configOnly || signalOnly || mode == "--rear-af", "unknown_mode");
 	const rlimit noCore{0, 0};
 	requireBeforeConfigure(setrlimit(RLIMIT_CORE, &noCore) == 0, "core_dump_limit");
@@ -485,7 +533,7 @@ try {
 	try {
 		auto config = configureRear(*camera, signalOnly);
 		if (!configOnly)
-			capture(*camera, *config, signalOnly);
+			capture(*camera, *config, signalOnly, manual);
 	} catch (...) {
 		release();
 		throw;
@@ -496,7 +544,9 @@ try {
 	if (configOnly)
 		std::cout << "AF_CONFIG_ONLY result=pass allocated=0 started=0 queued=0 af_triggered=0 pixels_read=0"
 			  << std::endl;
-	if (signalOnly)
+	if (manual)
+		std::cout << "BRACKET_DONE pairs=4 stable_frames=4 auto_requests_completed=4 af_commands=0" << std::endl;
+	else if (signalOnly)
 		std::cout << "SIGNAL_DONE pairs=1 measured_after_warmup=24 af_commands=0" << std::endl;
 	return 0;
 } catch (const std::runtime_error &error) {

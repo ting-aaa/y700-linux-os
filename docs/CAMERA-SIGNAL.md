@@ -10,7 +10,7 @@ The pinned CN350 module declares white at 1023 and a black pedestal of 64 for ea
 
 ## PC replay
 
-The stock decoder also resolves two HI1339 test-pattern register tables. CN350 mode 0 writes `0b04=00fc,0c0a=0000` and mode 5 writes `0b04=00fd,0c0a=0100`. The board driver's V4L2 control list does not expose a test-pattern selector. The register tables alone do not specify what mode 5 should look like.
+The stock decoder also resolves two HI1339 test-pattern tables. CN350 mode 0 writes `0b04=00fc,0c0a=0000` and mode 5 writes `0b04=00fd,0c0a=0100`. The associated optical-black rectangle has four zero fields, so it supplies no reference pixels for this analysis. The board driver's V4L2 control list lacks a test-pattern selector. The CN350 register records do not establish a known bright output. In Samsung's public HI1339 driver, the alternative pattern write is compiled out and the active function reports the feature as unsupported. The exposure comparison below uses the driver's documented controls. [CN350 decoder](../tests/camera-autofocus/stock-signal.py) · [Samsung HI1339 implementation](https://github.com/VH-Devices/android_kernel_samsung_a24/blob/9ca068ff2a485c85841d8b1fa5da529d200df44b/drivers/misc/mediatek/imgsensor/src/common/v1_1/hi1339_mipi_raw/hi1339mipiraw_Sensor.c#L1075-L1096)
 
 The fixture executed `DebayerCpu::configure/start/process/stop` from the release's ARM64 libcamera under QEMU user emulation. Each synthetic test fills an aligned centre rectangle, leaves the surrounding sensor area bright and adds 20 bytes of row padding. An independent four-level mosaic checks the order of the two green photosites. The transfer for the four rows below used the HI1339 black pedestal, unit white-balance gains, gamma 0.5, unit contrast and disabled CCM. The normal AF metric read the resulting green channel. [ARM64 replay source](../tests/camera-autofocus/signal-isp.cpp)
 
@@ -62,3 +62,33 @@ The reference PRC tablet booted the dev12.13 signal receiver from RAM with UFS a
 All four sites had zero near-white samples. The three processed channels each averaged 0/255 across the 8,560 sampled positions. At this exposure the sampled signal was already at the black level before debayering. Whether the lens received enough light, and how the sensor responds to a known change in light or exposure, remain open. The earlier 664-frame run used different exposure and gain. No focus command was sent and no image was saved or transferred.
 
 The rear sensor returned to runtime suspend. After receipt acknowledgement the tablet rebooted into its original dev12.11 kernel. Both ext4 filesystems were writable with zero recorded errors and passed a 4 KiB write, fsync and direct readback. The 1,248-package inventory matched and the display manager, SSH, NetworkManager and Bluetooth were active. The local receipts are `out/camera-signal/physical-nov22/signal.log` (SHA-256 `ca7f5d8eadaa716ee9824814691d9786ba31b20a5c7ce882ae88124498348d88`) and `daily-return.log` (`190bb6fdfe6b544b762abbb7128a22dd4bf0af3dbaa79f4433ebe57e68a2041d`).
+
+## Controlled exposure comparison
+
+The separate `--rear-bracket` diagnostic measures the same centre crop at four settings during one stream. Use a fixed matte target with visible light and dark detail and independently check that the main lens is unobstructed and illuminated throughout the run. Returning to the first setting helps identify motion or illumination changes during the sequence. Rebuild the previous single-pair executable from commit `811c06f` to reproduce its sealed digest.
+
+| Step | Exposure | Analogue gain | Comparison |
+| ---: | ---: | ---: | --- |
+| 1 | 2 ms | 1× | Initial reference |
+| 2 | 32 ms | 1× | 16× longer integration |
+| 3 | 32 ms | 8× | 8× greater analogue gain at the same integration time |
+| 4 | 2 ms | 1× | Repeat the reference |
+
+Each accepted point requires four consecutive completed requests with the intended settings and matching exposure and gain metadata. The fourth frame supplies one pair with equal RAW and RGB timestamps and sequence numbers. A point expires after 32 successful frames. The entire capture has a 60-second deadline. The client then completes four requests in automatic mode, stops and releases the camera. The receipt carries four `BRACKET_STEP` rows, each followed by one `SIGNAL_PAIR`, four `SIGNAL_RAW` rows and three `SIGNAL_RGB` rows. The final `BRACKET_DONE` is issued after successful release. All frame buffers stay in memory. [Measurement client](../tests/camera-autofocus/optical.cpp)
+
+The released Simple IPA computes automatic exposure. Its per-frame metadata comes from libcamera's delayed sensor-control bookkeeping. A private IPA delegates metering, ISP parameters and metadata to that exact release and substitutes the **next** exposure and gain proposal only for an explicit supported manual request. It verifies the sensor model, geometry and control ranges. It does not query a hardware-embedded register readback. The test uses the normal pipeline writer and two standard V4L2 controls. [Adapter](../tests/camera-autofocus/bracket-ipa.cpp) · [libcamera delayed controls](https://github.com/libcamera-org/libcamera/blob/v0.7.2/src/libcamera/delayed_controls.cpp)
+
+Compare individual RAW channels after subtracting their reported pedestal. With stable illumination and usable unsaturated signal, a rise at step 2 and another rise at step 3, followed by a return near step 1, shows that the received data responds to both controls. Inspect ISP processing if RAW responds while matched RGB stays black. Saturation, noise near the pedestal and automatic ISP processing limit exact ratios. If all four pairs cluster at black with confirmed illumination, investigate the physical optical path, sensor control application and readout/CSI. A missing metadata match leaves that point unmeasured.
+
+To build, use the prepared ARM64 release libraries and matching source and generated headers. The helper verifies the hashes of both shared libraries, the release IPA and its worker. Use an ordinary account inside a device-free ARM64 VM for the IPC fixture. The stock worker uses Linux namespaces through `clone3`; ARM64 user-mode emulation on this PC returned `ENOSYS`. The full-system VM supports that operation. The two environment variables used for the physical client are `LIBCAMERA_IPA_MODULE_PATH` pointing at the root-owned temporary module directory and `LIBCAMERA_IPA_FORCE_ISOLATION=1`. [Build helper](../tests/camera-autofocus/build-bracket.sh) · [Device-free IPC fixture](../tests/camera-autofocus/bracket-ipa-test.cpp)
+
+```sh
+bash tests/camera-autofocus/build-bracket.sh "$libcamera_src" "$libcamera_build" ./bracket-build
+mkdir -p ./bracket-build/ipa
+install -m644 ./bracket-build/ipa_bracket.so ./bracket-build/ipa/
+LD_LIBRARY_PATH=/opt/y700-camera/lib timeout 20 ./bracket-build/bracket-test "$(realpath ./bracket-build/ipa)"
+```
+
+The PC full-system QEMU replay ran as UID 1000 with `no_new_privs`, without a virtual camera or disk. The release Simple pipeline selected the private module through normal discovery. In the 21-frame matching-geometry case, every frame delivered an ISP parameter event, a next-sensor-control proposal and metadata for the earlier applied settings. The automatic request restored the stock proposal. With an incompatible line length, the stock proposal passed through. A second boot repeated both cases with the current RAM receiver's diagnostic libcamera `ab1cd0e9…` first in the loader path. These tests use synthetic delayed sensor controls and anonymous statistics buffers. A physical exposure sequence remains open.
+
+The PC receipts are `out/camera-bracket/isolated-release.log` (SHA-256 `0b0f54d7cc57bfdb0fa644eeadc4c49a59a7dac153c7495bd3ebc5d00f0f75a8`) and `isolated-ram-library.log` (`457f72774eb0230dcc00118e4a37ed531b9c3e44d69bda409ba5f14421739c6d`). A third boot with an empty module directory selected the stock IPA and failed the manual-mode check as expected (`missing-adapter.log`). Two independent builds produced identical bytes for the measurement client (`f491720d006ef35464e85e5dde184bc6fa74f548d9644d2cdbe0fd03aa5193e9`), isolated adapter (`3dcde9a32e58714e7fae70dc05e816fdb52afbc0a391e5f39e5e64eec61db87f`) and synthetic fixture (`531a07c45d0a6d30bf115155c12d002f9d3e6a6244f1c7ac5a19a67a11a488bf`).

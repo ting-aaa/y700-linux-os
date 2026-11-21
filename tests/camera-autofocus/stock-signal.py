@@ -20,11 +20,12 @@ def main():
     data = module.payload(module.top_level("sensorDriverData", 584))
     # colorLevelInfo sits between the testPatternData and optical-black dimension refs.
     patterns = module.reference(data, 0x1C0, "testPatternData", 12)
-    module.reference(data, 0x1DC, "dimension", 16)
+    optical_black = struct.unpack("<4I", module.reference(data, 0x1DC, "dimension", 16))
     white, red, gr, gb, blue = struct.unpack_from("<5I", data, 0x1C8)
     frame, line, coarse = struct.unpack_from("<3I", data, 0x70)
     gain, = struct.unpack_from("<I", data, 0x8C)
     print(f"CN350 white={white} black_r_gr_gb_b={red},{gr},{gb},{blue}")
+    print("CN350 optical_black_region=" + ",".join(map(str, optical_black)))
     print(f"CN350 frame_length=0x{frame:04x} line_length=0x{line:04x} exposure=0x{coarse:04x} analogue_gain=0x{gain:04x}")
     for start in range(0, len(patterns), 12):
         mode, = struct.unpack_from("<I", patterns, start)
