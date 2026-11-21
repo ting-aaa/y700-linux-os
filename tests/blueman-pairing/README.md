@@ -41,3 +41,28 @@ the released kernel and a private Xorg display. The peer's BlueZ agent submits
 the completed passkey. Separate GUI tests exercise intermediate digit-count
 updates. [BlueZ Agent1 specification](https://github.com/bluez/bluez/blob/5.82/doc/org.bluez.Agent.rst)
 · [bluetoothctl passkey input](https://github.com/bluez/bluez/blob/5.82/client/agent.c#L143-L165)
+
+## Bluetooth Manager offline update
+
+Build the two-package TAR from the qualified Blueman archives and run its
+install, reinstall and rollback checks on an ARM64-capable Linux/WSL host.
+The test mounts the sealed root read-only under an ephemeral overlay and
+repeats the upgrade with the optional qcam y7007 package installed.
+
+```sh
+bash scripts/package-blueman-manager-update.sh "$BLUEMAN_DEBS" "$BUNDLE_TAR"
+sudo bash tests/blueman-pairing/update-lifecycle.sh "$DEV1212_ROOT_EXT4" "$BUNDLE_TAR" "$QCAM7_DEB"
+```
+
+Extract the verified TAR into an empty directory. From `blueman-update`,
+run `sha256sum -c SHA256SUMS`, then `sudo ./update-blueman-manager.sh install`.
+Use `check` to validate the installed revision, `rollback` to return to y7002,
+or `reinstall` to rerun dpkg for the current revision. An ordinary repeat
+install verifies the existing bytes. The COW test also interrupts the normal
+package sequence after unpacking in both directions, checks that verification
+detects the pending configuration, and finishes the selected action. It checks
+the package inventory, APT consistency and a locally modified conffile.
+
+On a running system Debian's package script reloads systemd and requests a
+restart of `blueman-mechanism.service`. Open the Manager again to load the
+new interface. [Package versions and inventories](../../config/blueman-manager-update.lock.json)
