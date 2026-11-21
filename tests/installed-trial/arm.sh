@@ -29,6 +29,19 @@ done
 echo -e 'default debian.conf\ntimeout 3' > "$esp/loader/loader.conf"
 entry_sha=$(sha "$esp/loader/entries/$entry")
 id=cold1; state=$store/control-$id
+qa_boot=00000000-0000-4000-8000-000000000001
+qa_timer=inactive; qa_service=inactive; qa_shutdown='b false'; qa_jobs=; qa_candidate=1
+current_trial() { [[ $qa_candidate == 1 ]] || die 'test baseline'; }
+current_boot() { echo "$qa_boot"; }
+busctl() { printf '%s\n' "$qa_shutdown"; }
+systemctl() {
+    case "$1:${*: -1}" in
+        show:"$timer") echo "$qa_timer";;
+        show:"${timer%.timer}.service") echo "$qa_service";;
+        list-jobs:*) echo "$qa_jobs";;
+        *) return 1;;
+    esac
+}
 menu arm; menu arm
 [[ $(cat "$esp/loader/loader.conf") == $'default y700-installed-cold1-*.conf\ntimeout 3' ]]
 [[ -f $entries/$prefix-trial+1.conf && -f $entries/$prefix-base.conf ]]
@@ -40,6 +53,12 @@ cp "$work/entry" "$entries/$entry"
 mv "$entries/$prefix-trial+1.conf" "$entries/$prefix-trial+0-1.conf"
 if (menu arm) 2>/dev/null || (menu promote) 2>/dev/null; then exit 1; fi
 printf '00000000-0000-4000-8000-000000000001\n' > "$state/confirmed"
+if (qa_candidate=0; menu promote) 2>/dev/null ||
+   (qa_boot=00000000-0000-4000-8000-000000000002; menu promote) 2>/dev/null ||
+   (qa_timer=active; menu promote) 2>/dev/null ||
+   (qa_service=activating; menu promote) 2>/dev/null ||
+   (qa_shutdown='b true'; menu promote) 2>/dev/null ||
+   (qa_jobs='572 reboot.target start waiting'; menu promote) 2>/dev/null; then exit 1; fi
 original=$(cat "$conf"); echo -e 'default externally-edited.conf\ntimeout 3' > "$conf"
 if (menu promote) 2>/dev/null; then exit 1; fi
 printf '%s\n' "$original" > "$conf"
@@ -63,5 +82,9 @@ cp "$repo/config/video-player-update.lock.json" "$work/root/var/lib/y700/build/"
 bash "$repo/scripts/arm-installed-trial.sh" prepare-candidate "$work/root"
 bash "$repo/scripts/arm-installed-trial.sh" prepare-candidate "$work/root"
 umount "$work/root"
+if (check_prepared_image) 2>/dev/null; then exit 1; fi
+printf 'incomplete\n' > "$store/dev12.10/installed.ok"
+if (check_prepared_image) 2>/dev/null; then exit 1; fi
+printf '%s\n' 'dev12.10 personal files verified, USB identity retained' > "$store/dev12.10/installed.ok"
 check_prepared_image
-echo 'INSTALLED_TRIAL_QA FAT=1 interrupted_edits_rejected=1 exhausted_cannot_rearm=1 confirmed_promote=1 original_restored=1 deadline_units=verified offline_candidate=32GiB'
+echo 'INSTALLED_TRIAL_QA FAT=1 interrupted_edits_rejected=1 exhausted_cannot_rearm=1 same_boot_promote=1 queued_reboot_rejected=1 original_restored=1 deadline_units=verified personalized_candidate=32GiB'

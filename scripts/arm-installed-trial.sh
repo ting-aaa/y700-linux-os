@@ -65,7 +65,11 @@ prepare_candidate() {
     echo 'INSTALLED_TRIAL_PREPARED deadline_seconds=240'
 }
 check_prepared_image() {
-    local img=$store/dev12.10/root.ext4
+    local dir=$store/dev12.10 img=$store/dev12.10/root.ext4 marker=$store/dev12.10/installed.ok
+    [[ $(realpath -e "$dir") == "$dir" && $(stat -c '%u:%g:%a' "$dir") == 0:0:700 ]] || die 'unsafe image directory'
+    regular "$marker"
+    [[ $(stat -c '%u:%g:%a:%h' "$marker") == 0:0:600:1 ]] || die 'unsafe personalization receipt'
+    match <(printf '%s\n' 'dev12.10 personal files verified, USB identity retained') "$marker"
     [[ $(realpath -e "$img") == "$img" && $(stat -c '%u:%g:%a:%h' "$img") == 0:0:600:1 &&
        $(stat -c %s "$img") == 34359738368 && $(blkid -p -s UUID -o value "$img") == "$inner_uuid" ]] ||
         die 'expected private 32 GiB candidate root'
@@ -146,7 +150,7 @@ put_entry() {
 }
 check_state() {
     [[ -d $state && ! -L $state && $(stat -c '%u:%g:%a' "$state") == 0:0:700 ]] || die 'unknown trial run'
-    (cd "$state" && sha256sum --quiet --strict -c state.sha256)
+    (cd "$state" && sha256sum --quiet --strict -c state.sha256) || die 'saved trial state changed'
     [[ $(sha "$state/source.conf") == "$entry_sha" ]] || die 'wrong candidate digest for this run'
 }
 initialize() {
@@ -186,7 +190,7 @@ menu() {
     if [[ $action == arm && ! -e $state ]]; then initialize; fi
     check_state
     match "$state/baseline.conf" "$entries/debian.conf"; match "$state/source.conf" "$entries/$entry"
-    (cd "$esp" && sha256sum --quiet --strict -c "$state/payload.sha256")
+    (cd "$esp" && sha256sum --quiet --strict -c "$state/payload.sha256") || die 'installed firmware payload changed'
     for file in "$entries"/y700-installed-*.conf; do
         [[ -e $file ]] || continue
         case "$file" in
@@ -208,7 +212,7 @@ menu() {
     else
         next=$state/original.conf
         if [[ $action == promote ]]; then
-            valid_confirmation
+            promotable_boot
             [[ -e $used || -e $state/promoting ]] || die 'no consumed firmware boot count'
             [[ -e $fallback || -e $state/promoting ]] || die 'fallback entry missing'
             [[ ! -e $state/closed || $(cat "$state/closed") == promote ]] || die 'trial already restored'
@@ -219,6 +223,7 @@ menu() {
             if [[ $action == restore ]] && cmp -s "$state/promoted.conf" "$conf"; then previous=$state/promoted.conf; fi
             match "$previous" "$conf"
             if [[ $action == promote ]]; then touch "$state/promoting"; sync -f "$state"; fi
+            if [[ $action == promote ]]; then promotable_boot; fi
             write_loader "$previous" "$next"
         fi
         for file in "$pending" "$used" "$fallback"; do
@@ -235,6 +240,32 @@ menu() {
 valid_confirmation() {
     regular "$state/confirmed"
     grep -Exq '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' "$state/confirmed" || die 'missing confirmed candidate boot identity'
+}
+current_trial() {
+    [[ $baseline == 0 ]] && grep -Fqw "y700.installed_trial=$id" /proc/cmdline || die 'wrong running trial'
+}
+current_boot() { cat /proc/sys/kernel/random/boot_id; }
+no_reboot_pending() {
+    local jobs preparing service_state
+    [[ ! -e /run/systemd/shutdown/scheduled ]] || die 'system shutdown is scheduled'
+    preparing=$(busctl --system --timeout=5 get-property org.freedesktop.login1 /org/freedesktop/login1 \
+        org.freedesktop.login1.Manager PreparingForShutdown) || die 'cannot inspect logind shutdown state'
+    [[ $preparing == 'b false' ]] || die 'logind is preparing to shut down'
+    service_state=$(systemctl show -p ActiveState --value "${timer%.timer}.service") || die 'cannot inspect reboot service'
+    [[ $service_state == inactive ]] || die 'deadline reboot service is already running'
+    jobs=$(systemctl list-jobs --no-legend --plain --no-pager) || die 'cannot inspect queued system jobs'
+    if awk '$3=="start" && ($2 ~ /^(shutdown|reboot|poweroff|halt|kexec|soft-reboot|final)\.target$/ ||
+            $2 ~ /^systemd-(reboot|poweroff|halt|kexec|soft-reboot)\.service$/ ||
+            $2=="y700-installed-trial-deadline.service") {found=1} END{exit !found}' <<< "$jobs"; then
+        die 'a reboot or shutdown job is queued'
+    fi
+}
+promotable_boot() {
+    current_trial
+    valid_confirmation
+    match <(current_boot) "$state/confirmed"
+    [[ $(systemctl show -p ActiveState --value "$timer") == inactive ]] || die 'deadline is not stopped'
+    no_reboot_pending
 }
 main() {
     [[ $EUID == 0 ]] || die 'root required'
@@ -258,10 +289,10 @@ main() {
     verify_board; locate_boot
     exec 9<"$store"; flock -w 10 9 || die 'another trial change is active'
     if [[ $action == confirm ]]; then
-        [[ $baseline == 0 ]] && grep -Fqw "y700.installed_trial=$id" /proc/cmdline || die 'wrong running trial'
+        current_trial; no_reboot_pending
         check_state; [[ ! -e $state/closed ]] || die 'trial already closed'
         systemctl is-active --quiet ssh && systemctl is-active --quiet lightdm || die 'candidate desktop or USB SSH service unavailable'
-        boot=$(cat /proc/sys/kernel/random/boot_id)
+        boot=$(current_boot)
         if [[ -e $state/confirmed ]]; then
             [[ $(cat "$state/confirmed") == "$boot" ]] || die 'another boot already confirmed'
         else
@@ -269,7 +300,7 @@ main() {
             printf '%s\n' "$boot" > "$state/confirmation.new"; mv -T "$state/confirmation.new" "$state/confirmed"
             sync -f "$state"
         fi
-        systemctl stop "$timer"; ! systemctl is-active --quiet "$timer" || die 'deadline remains active'
+        systemctl stop "$timer"; promotable_boot
         printf 'INSTALLED_TRIAL_CONFIRMED boot=%s deadline=stopped\n' "$boot"; return
     fi
     check_efi_variables
@@ -285,6 +316,7 @@ main() {
     else
         esp=/boot
     fi
+    if [[ $action == promote && $baseline == 1 ]]; then die 'promote from the currently confirmed candidate boot'; fi
     [[ $(findmnt -nro UUID -M "$esp") == B6D4-FA81 && $(findmnt -nro FSTYPE -M "$esp") == vfat &&
        $(findmnt -nro SOURCE -M "$esp") == "$(realpath -e /dev/disk/by-partlabel/linux-boot)" ]] || die 'unexpected boot mount'
     exec 8<"$esp"; flock -w 10 8 || die 'another ESP change is active'

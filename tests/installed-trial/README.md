@@ -25,7 +25,7 @@ bash arm-installed-trial.sh confirm "$run" "$entry_sha"
 bash arm-installed-trial.sh promote "$run" "$entry_sha"
 ```
 
-Alternatively, after confirming, reboot into the original system before running `promote`. To restore the pre-trial default and remove the two test entries, run `bash arm-installed-trial.sh restore "$run" "$entry_sha"`. In the candidate the script acquires the outer ESP in a private mount namespace. State under `/var/lib/y700-trial/control-RUN_ID` belongs to the outer UFS. Every transition compares the original loader configuration, entry definitions and referenced firmware payloads to their saved values.
+Run `promote` in the same verified candidate boot as `confirm`. It checks that the deadline is inactive and that systemd and logind have no pending shutdown. If the candidate has already rebooted, restore the original default and use a new run ID for another trial. To restore the pre-trial default and remove the two test entries, run `bash arm-installed-trial.sh restore "$run" "$entry_sha"`. In the candidate the script acquires the outer ESP in a private mount namespace. State under `/var/lib/y700-trial/control-RUN_ID` belongs to the outer UFS. Every transition compares the original loader configuration, entry definitions and referenced firmware payloads to their saved values.
 
 ## PC verification
 
