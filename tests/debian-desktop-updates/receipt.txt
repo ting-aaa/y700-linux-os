@@ -1,0 +1,27 @@
+2026-11-22 ARM64 QEMU, Debian dev12.13 root 6155d87d5d5b9d5557e86362f09fb17328aef200861e94eb292a669c35659c7c
+Kernel image 0c92b63a708441d44b3e93e90f85f3f5462c08d92ffc8e224248ef7e419def60
+Xorg 2:21.1.16-1.3+deb13u4+y7001, libinput DDX 1.5.0-1
+
+out/debian-desktop-updates/final-stock.log
+SHA256 90c89b61d078d03008dfa2e3eded67a932340c31babb7dd2400c83902d62935d
+UPDATER_APT available=1 signed_file_repo=1 only_package=y700-qa-updater
+UPDATER_SEAT active=1 remote=0 seat=seat0 type=x11 uid=1000
+UPDATER_BACKEND s "apt" u 2
+UPDATER_TOUCH logical=120x46 scale=2 finger=type_b
+UPDATER_GUI normal_launcher=1 uid=1000 selected_updates=1 marker=2.0
+UPDATER_AUTH agent=pkttyagent real_pam=1 policy=stock action=system-update
+UPDATER_TRANSACTION method=UpdatePackages success=1
+UPDATER_ROLLBACK one_changed_package=1 version=1.0 inventory_restored=1
+UPDATER_STOCK_PASS
+UPDATER_GUEST_EXIT=0
+
+out/debian-desktop-updates/final-product.log
+SHA256 466f2d0ab6b579b43d9cc1c49537f3d74a62f782087418b7297b1fd51b40b2d9
+y700-software-updates_0.1.0_all.deb 547ea83736f209c8175e30047eed1a57e8afbe481115e0bf3d166017c2d3b2ae
+UPDATER_APT available=1 signed_file_repo=1 only_package=y700-qa-updater
+UPDATER_SEAT active=1 remote=0 seat=seat0 type=x11 uid=1000
+UPDATER_BACKEND s "apt" u 2
+UPDATER_VIEWER forwarded=1 install_button_visible=1 selected=1 no_input=1
+UPDATER_TRANSACTION method=RefreshCache success=1
+UPDATER_PRODUCT refresh=success stock_viewer=opened unattended_updates=0
+UPDATER_GUEST_EXIT=0

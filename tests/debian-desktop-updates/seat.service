@@ -1,0 +1,14 @@
+[Unit]
+Description=Isolated ARM64 Debian graphical updater qualification
+Requires=systemd-logind.service dbus.service polkit.service systemd-udevd.service
+After=systemd-logind.service dbus.service polkit.service systemd-udevd.service
+FailureAction=poweroff-immediate
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/y700-topology
+ExecStart=/bin/bash /opt/y700-topology/guest.sh
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyAMA0
+TimeoutStartSec=400

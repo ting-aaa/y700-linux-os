@@ -1,0 +1,20 @@
+#!/bin/busybox sh
+set -eu
+export PATH=/bin
+/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs devtmpfs /dev
+test "$(cat /sys/block/vda/ro)" = 1
+grep -qw y700.topology_fixture=1 /proc/cmdline
+mount -t ext4 -o ro,noload /dev/vda /lower
+mount -t tmpfs tmpfs /run
+mkdir /run/upper /run/work
+mount -t overlay overlay -o lowerdir=/lower,upperdir=/run/upper,workdir=/run/work /guest
+for name in dev sys proc; do mount --bind "/$name" "/guest/$name"; done
+mount -t tmpfs tmpfs /guest/run
+mkdir -p /guest/opt/y700-topology
+cp -a /test/. /guest/opt/y700-topology/
+cp /bin/busybox /guest/opt/y700-topology/
+cp /test/seat.service /guest/etc/systemd/system/y700-updater-qa.service
+exec switch_root /guest /sbin/init
