@@ -31,14 +31,18 @@ echo 'UPDATER_APT available=1 signed_file_repo=1 only_package=y700-qa-updater'
 ip link set lo up
 ip route add default dev lo
 # Normal admin authentication on disposable accounts. The guest has no NIC or host mounts.
-(umask 077; cat /proc/sys/kernel/random/uuid > /run/updater-qa-password)
+if [[ -e touch-auth-mode ]]; then
+    (umask 077; ./uv run --offline --no-project --python /usr/bin/python3 python -c 'import secrets,string; print("".join(secrets.choice(string.ascii_lowercase) for _ in range(10)))' > /run/updater-qa-password)
+else
+    (umask 077; cat /proc/sys/kernel/random/uuid > /run/updater-qa-password)
+fi
 for account in root y700; do printf '%s:%s\n' "$account" "$(cat /run/updater-qa-password)" | chpasswd; done
 chown y700 /run/updater-qa-password
 stdbuf -oL dbus-monitor --system "type='method_call',interface='org.freedesktop.PackageKit.Transaction'" "type='signal',interface='org.freedesktop.PackageKit.Transaction',member='Finished'" > /run/updater-transactions.log 2>/dev/null &
 monitor=$!
 bash ./xorg.sh
 method=UpdatePackages
-if [[ -e product-mode ]]; then method=RefreshCache; fi
+if [[ -e product-mode && ! -e touch-auth-mode ]]; then method=RefreshCache; fi
 for _ in {1..25}; do
     result=$(./uv run --offline --no-project --python /usr/bin/python3 python -B transactions.py "$method")
     [[ $result == 1 ]] && break
@@ -50,7 +54,12 @@ if [[ $result != 1 ]]; then
 fi
 kill "$monitor"
 echo "UPDATER_TRANSACTION method=$method success=1"
-if [[ -e product-mode ]]; then
+if [[ -e touch-auth-mode ]]; then
+    [[ $(./uv run --offline --no-project --python /usr/bin/python3 python -B transactions.py RefreshCache) == 1 ]]
+    journalctl -b -u polkit.service --no-pager -o cat > /run/updater-auth-result.log
+    grep -Eqi 'successfully authenticated .*org.freedesktop.packagekit.system-update' /run/updater-auth-result.log
+    echo 'UPDATER_GRAPHICAL refresh=success polkit_system_update=authenticated'
+elif [[ -e product-mode ]]; then
     inventory | cmp - /run/before
     [[ $(cat /usr/share/y700-qa-updater/version) == 1.0 ]]
     echo 'UPDATER_PRODUCT refresh=success stock_viewer=opened unattended_updates=0'

@@ -1,5 +1,6 @@
 """Touch the real updater's visible Install control and observe the installed marker."""
 import os
+from contextlib import nullcontext
 from pathlib import Path
 import subprocess
 import sys
@@ -40,13 +41,17 @@ def has_update_selection():
             any("y700-qa-updater-2.0" in name.splitlines() for name in names))
 
 
+def tap_pixel(x, y):
+    width, height = (2560, 1600) if touch_auth else (1600, 2560)
+    assert 0 <= x < width and 0 <= y < height
+    with open("/run/topology/feed", "w") as feed:
+        print("tap", round(16000 * x / width), round(25600 * y / height), file=feed)
+
+
 def tap(button):
     rect = button.get_extents(Atspi.CoordType.SCREEN)
     assert rect.width > 0 and rect.height > 0
-    x, y = 2 * rect.x + rect.width, 2 * rect.y + rect.height
-    assert 0 <= x < 1600 and 0 <= y < 2560, (x, y)
-    with open("/run/topology/feed", "w") as feed:
-        print("tap", 10*x, 10*y, file=feed)
+    tap_pixel(2 * rect.x + rect.width, 2 * rect.y + rect.height)
     print(f"UPDATER_TOUCH logical={rect.width}x{rect.height} scale=2 finger=type_b", flush=True)
 
 
@@ -61,6 +66,7 @@ print("UPDATER_BACKEND", backend, subprocess.check_output(bus + ["NetworkState"]
 assert backend in ('s "apt"', 's "aptcc"'), backend
 desktop = "/usr/share/applications/org.gnome.PackageUpdater.desktop"
 product = Path("product-mode").exists()
+touch_auth = Path("touch-auth-mode").exists()
 if product:
     desktop = "/usr/share/applications/y700-software-updates.desktop"
 subprocess.run(["gio", "launch", desktop], check=True)
@@ -81,13 +87,16 @@ else:
     titles = [(n.get_role_name(), n.get_name()) for n in nodes(Atspi.get_desktop(0))][:45]
     raise RuntimeError(("no eligible update button", last, titles))
 
-if product:
+if product and not touch_auth:
     assert Path("/usr/share/y700-qa-updater/version").read_text().strip() == "1.0"
     print("UPDATER_VIEWER forwarded=1 install_button_visible=1 selected=1 no_input=1", flush=True)
     sys.exit(0)
 
-with admin_agent() as auth:
+with (nullcontext() if touch_auth else admin_agent()) as auth:
     tap(button)
+    if touch_auth:
+        from touch_auth import authenticate
+        authenticate(nodes, tap, tap_pixel)
     marker = Path("/usr/share/y700-qa-updater/version")
     deadline = time.monotonic() + 55
     while time.monotonic() < deadline:
@@ -96,7 +105,7 @@ with admin_agent() as auth:
             break
         time.sleep(.3)
     else:
-        titles = [(n.get_role_name(), n.get_name()) for n in nodes(Atspi.get_desktop(0))][:55]
-        raise RuntimeError(("update did not install", titles))
-    assert auth["prompts"] == 1 and auth["action"] and auth["authenticated"], auth
-    print("UPDATER_AUTH agent=pkttyagent real_pam=1 policy=stock action=system-update", flush=True)
+        raise RuntimeError("update did not install")
+    if auth:
+        assert auth["prompts"] == 1 and auth["action"] and auth["authenticated"], auth
+        print("UPDATER_AUTH agent=pkttyagent real_pam=1 policy=stock action=system-update", flush=True)

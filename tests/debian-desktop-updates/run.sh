@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+touch_auth=false
+if [[ ${1:-} == --touch-auth ]]; then touch_auth=true; shift; fi
 [[ $# == 6 || $# == 7 ]] || { echo 'run.sh DEV1213_ROOT KERNEL ARM64_BUSYBOX DUMMY.deb ARM64_UV FOUR_ARCHIVES_DIR [PRODUCT_ARCHIVES]'; exit 2; }
+if $touch_auth && [[ $# != 7 ]]; then echo 'The touch-auth run requires the product desktop entry.' >&2; exit 2; fi
 here=$(cd "$(dirname "$0")" && pwd)
 common=$here/../display-touch-topology
 root=$(realpath -e "$1"); kernel=$(realpath -e "$2"); archives=$(realpath -e "$6")
@@ -19,6 +22,10 @@ mkdir -p "$work/payload/debs"
 sed -e '/^dbus-daemon --system --fork$/d' -e '/^\/usr\/lib\/systemd\/systemd-udevd --daemon$/d' \
     -e 's@^runuser -u y700 .*@bash ./seat.sh@' "$common/guest.sh" > "$work/payload/xorg.sh"
 cp "$here"/{guest.sh,session.sh,probe.py,auth.py,seat.sh,transactions.py} "$work/payload/"
+if $touch_auth; then
+    touch "$work/payload/touch-auth-mode"
+    cp "$here/touch_auth.py" "$work/payload/"
+fi
 for file in gnome-package-updater_43.0-4_arm64.deb gnome-packagekit-common_43.0-4_all.deb \
             libpackagekit-glib2-18_1.3.1-1+deb13u1_arm64.deb packagekit_1.3.1-1+deb13u1_arm64.deb; do
     cp "$archives/$file" "$work/payload/debs/"

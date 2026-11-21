@@ -25,3 +25,20 @@ UPDATER_VIEWER forwarded=1 install_button_visible=1 selected=1 no_input=1
 UPDATER_TRANSACTION method=RefreshCache success=1
 UPDATER_PRODUCT refresh=success stock_viewer=opened unattended_updates=0
 UPDATER_GUEST_EXIT=0
+
+out/debian-desktop-updates/graphical-2.log
+SHA256 d7cc5db405920b9474f0dcca270de3f1a35cc7d0d461b7230b02c290caa3331a
+UPDATER_APT available=1 signed_file_repo=1 only_package=y700-qa-updater
+UPDATER_SEAT active=1 remote=0 seat=seat0 type=x11 uid=1000
+UPDATER_BACKEND s "apt" u 2
+UPDATER_TOUCH logical=120x46 scale=2 finger=type_b
+UPDATER_AUTH_DIALOG agent=mate-polkit password_field=masked
+UPDATER_AUTH_FOCUS focused=1 dock=2560x840
+UPDATER_TOUCH logical=122x34 scale=2 finger=type_b
+UPDATER_AUTH_INPUT onscreen=Onboard type_b_keys=10 submit=touch
+UPDATER_GUI normal_launcher=1 uid=1000 selected_updates=1 marker=2.0
+UPDATER_TRANSACTION method=UpdatePackages success=1
+UPDATER_GRAPHICAL refresh=success polkit_system_update=authenticated
+UPDATER_ROLLBACK one_changed_package=1 version=1.0 inventory_restored=1
+UPDATER_STOCK_PASS
+UPDATER_GUEST_EXIT=0
