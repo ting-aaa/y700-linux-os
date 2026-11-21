@@ -1,0 +1,14 @@
+PM8350C bobc1, 2026-11-22
+Module SHA256 3ad4f89a4c1b58bfc676136fb15e63b29c9ddae4a2fe9a471f87075c47147dbb (2/2 builds match)
+Scope host builds; two QEMU negative boards; one physical dev12.11 reading by parent operator.
+QEMU 120Hz  notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ENODEV=1 remaining_modules=0
+QEMU dualHz notes=c53a42974b4921ac99bd0defadc5ade9a25d4cfd9a2a731dc2ba43d81ddaf063 ENODEV=1 remaining_modules=0
+Physical notes=35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6
+Physical address=0x40300 apps_resource_mv=3032 sysfs_before_uv=3032000 sysfs_after_uv=3032000
+Physical refs_before_unload=0 module_residue=0 taint_before=516 taint_after=4612 soundwire_endpoints=0
+Physical same_boot_seat_services_playback=1 rc=0
+Factory CN350 vadc@3100 named_channels=41 named_bob=0 named_vph=2.
+Receipt SHA256 (out/microphone/bob-apps):
+438e34920dd3eee59070fec1b3c55aa1e255eeb7007705c64d8d83a0c17cf688  physical-nov22.log
+e973c1605ffdfc4be875c696f202adc4ab283af6ba9f954847b9e8fae22411cd  guest-dev11-r2.log
+41228801342cc1ac46a1af38008f4de8203385b2974edbe8b370e27b77f7b795  guest-dual-r2.log
