@@ -43,6 +43,10 @@ The expected 1,240-package inventory for the sealed dev12.12 root changes from `
 
 ## Installed tablet software check
 
+On 2026-11-21 the daily dev12.11 installation received `ibus 1.5.32-2+0y7001`. Of 1,240 installed packages only IBus changed. APT passed, the original desktop seat, input-method processes and four monitored services remained running, and the updated executable was available to new sessions. The local rollback command is `sudo /var/lib/y700/updates/ibus-tray-y7001/rollback.sh`.
+
+On the tablet's ARM64 CPU, an ordinary user's separate 200% Xfce session with a fresh home opened one language menu per tap. X11 pointer input drove Onboard and touched the numbered candidate once. The panel emitted exactly one `CandidateClicked(0,1,0)`, the GTK entry committed `你好`, and the English switch and remaining Onboard keys produced `你好 hello`. The original boot, seat, services and account language matched after cleanup. The private display hid physical input devices. Installation and GUI receipts are in `out/chinese-input-touch/daily-installed.log` and `out/chinese-input-touch/daily-private-xfce.log`.
+
 On 2026-11-20 the TB320FC_PRC passed the same Chinese and English entry test with its installed dev3 packages. A private 200% Xfce display ran on the tablet with a fresh home, isolated desktop bus and physical input devices hidden. Onboard entered `nihao`. The second numbered popup tap committed `你好`, and switching back to English and using Onboard left the GTK entry with `你好 hello`. The original boot, graphical seat, service invocations and account language matched before and after.
 
 ## Chromium
