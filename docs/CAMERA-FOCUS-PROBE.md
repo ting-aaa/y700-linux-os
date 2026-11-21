@@ -148,6 +148,10 @@ After recovery, the physical tablet ran the exposure-gated measurement ELF and t
 
 For a diskless follow-up the [DTB builder](../scripts/build-diskless-dtb.sh) changes only the UFS and microSD host status properties in the sealed dev12.12 PRC tree. Two builds yielded SHA-256 `8ad76f844d20ebb57f7ebcaad91c61e0484f139a1e9fdfccec02ba198c02cf82`. Restoring those properties in a private copy reproduces the original canonical tree. A physical boot with these controllers disabled still needs verification.
 
+At 3,321 seconds into the recovered dev12.11 boot, the kernel had recorded zero suspend entries. The two ext4 error counters were still zero, the root was writable, and LightDM, NetworkManager and Bluetooth were active. The battery and AC idle timeouts both read back as zero from the owner's desktop session. The receipt is `out/camera-optical-qa/physical-recovered-idle-followup.log`.
+
+The ordinary system's existing USB ACM transferred the entire sealed SquashFS into tmpfs on this board. The Windows sender completed in 93.578 seconds and checked the tablet's hash confirmation. A read-only mount of the outer boot FAT also confirmed that `EFI/y700-display-12-11.efi` is the exact 39,410,176-byte candidate kernel. U-Boot can check the partition identity, file length and memory CRC before using that copy. The early initrd and the storage-disabled DT still come from the PC. [Split RAM receiver build and verification](../tests/ram-trial/README.md#receiving-the-sealed-root-over-usb) · [U-Boot entry](../tests/uboot-ram-stage/README.md)
+
 Compare an idle run and the same AF workload on the diskless system. A separate DT with PCIe0 disabled can test whether the WCN6855 host path is needed to reproduce the stall. The AF service's private network namespace leaves that host path active. Keep the kernel and display mode fixed across runs. The dev12.12 diskless bundle uses the dual-refresh kernel `0c92b63a…`, while the original failure used dev12.11 kernel `b103d0fc…`. [Kernel identities](PANEL-REFRESH.md)
 
 ## Reproducing the bounded read

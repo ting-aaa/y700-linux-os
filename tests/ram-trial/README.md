@@ -56,6 +56,8 @@ bash tests/ram-trial/check-receiver.sh "$new_receiver_dir" "$receiver_manifest_s
 
 The VM exercises both stages with the real release kernel and sealed root. Its sensor input is synthetic. On the running PRC tablet, the existing maintenance ACM carried this same SquashFS into tmpfs in **93.578 seconds** on the Windows host. The tablet checked SHA-256 `ce527192a32b47eff9a5f41682e058db88f8ef4bb9421afc737655783fb0229a` before cleanup. Physical enumeration by the early initrd and actual lens movement are separate checks.
 
+The November 21 return-enabled diagnostic bundle has a 13,802,084-byte initrd and manifest SHA-256 `0e52f171ce43862488272c8bc8bc2f610792ad46a678c153c03e32d3dcfd4f61`. Its attachment SHA-256 is `f5b6dde26b72677d9f45a0dfa391368c91e88d61bc78a26b2c103a0440159840`. In one cold VM boot the receiver accepted the full payload, Debian mounted the two read-only loops, and the host retrieved the synthetic autofocus result after disconnecting. Separate runs verified the guest-initiated reboot after receipt acknowledgement and the fallback reboot without a connected host. Run these large ARM64 guests one at a time on a 16 GiB WSL instance. During one concurrent run the guest logged CPU soft lockups and refused to start the measurement after its self-test failed. The same bundle passed on an exclusive rerun.
+
 After the bootloader has handed control to Linux, run the sender from the PC. It selects the receiver by VID, PID and USB serial, verifies the local file and waits for the tablet to confirm the digest. The camera endpoint becomes available after the RAM desktop starts. [U-Boot staging](../uboot-ram-stage/README.md) · [Camera diagnostic and host commands](../ram-af-acm/README.md)
 
 ```powershell
