@@ -6,7 +6,16 @@ access=$(realpath -e "$1")
 deb=$(realpath -e "$2")
 clips=$(realpath -e "$3")
 mode=$4
-case $mode in h264|hevc|vp9|h264-mp4|hevc-mp4|vp9-auto|h264-playbin|hevc-playbin|vp9-playbin) ;; *) exit 2 ;; esac
+case $mode in h264|hevc|vp9|h264-mp4|hevc-mp4|vp9-auto|h264-playbin|hevc-playbin|vp9-playbin|h264-after-wake) ;; *) exit 2 ;; esac
+if [[ $mode == h264-after-wake ]]; then
+    [[ $# == 4 && -z ${IRIS_V4L2_PLUGIN:-} ]]
+    (cd "$clips/h264"; sha256sum --strict --status -c <<'REFERENCE'
+428cc65b9277f1a1ce9b2ee30c86f7a6ffcd17f4e3985ef222dc4bfa72564ec5  clip.mp4
+13865351d96f4dccd981f5a15c275a159329809e7fba8bb6f4a1134ef74e5bce  reference.sha256
+016a6ed2026be251824a71c9314e61f219c1c9a2fcb9f3ec8089ede0813e2c9b  geometry
+REFERENCE
+    )
+fi
 codec=${mode%%-*}
 parser=
 v4l2_plugin=
@@ -40,7 +49,7 @@ cp "$clips/$codec/reference.sha256" "$codec/"
 if [[ -f $clips/$codec/geometry ]]; then cp "$clips/$codec/geometry" "$codec/"; else echo '384 256' >"$codec/geometry"; fi
 if [[ $codec == vp9 ]]; then
     cp "$clips/$codec/clip.webm" "$codec/"
-elif [[ $mode == *-mp4 || $mode == *-playbin ]]; then
+elif [[ $mode == *-mp4 || $mode == *-playbin || $mode == h264-after-wake ]]; then
     cp "$clips/$codec/clip.mp4" "$codec/"
 else
     cp "$clips/$codec/"[0-9][0-9][0-9].au "$codec/"

@@ -10,7 +10,24 @@ codec=${mode%%-*}
 [[ $(readlink /proc/self/ns/mnt) != "$(readlink /proc/1/ns/mnt)" ]]
 [[ $(readlink /proc/self/ns/net) != "$(readlink /proc/1/ns/net)" ]]
 grep -zFxq lenovo,asphalt /sys/firmware/devicetree/base/compatible
-[[ $(sha256sum /sys/kernel/notes | cut -d' ' -f1) == 2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066 ]]
+notes=$(sha256sum /sys/kernel/notes | cut -d' ' -f1)
+installed_plugin=
+if [[ $mode == h264-after-wake ]]; then
+    [[ $notes == 35442a692d818843fc1a1b2b1d9208f18942211021595a1abb26d8655e8a39f6 ]]
+    grep -Fxq IMAGE_VERSION=dev12.11 /etc/os-release
+    grep -Fwq y700.release=dev12.11 /proc/cmdline
+    [[ $(findmnt -nro UUID -M /) == c0e447e4-82db-59ee-91d6-0e1ec9d5f45e ]]
+    success=$(cat /sys/power/suspend_stats/success)
+    [[ $success =~ ^[1-9][0-9]*$ ]]
+    journalctl -k -b -q -o cat --no-pager --grep='^PM: suspend (entry|exit)' |
+        awk '/^PM: suspend entry / {saw=($3=="entry" && $4=="(s2idle)")} /^PM: suspend exit$/ {done=saw; saw=0} END {exit !(done && !saw)}'
+    installed_plugin=/usr/local/lib/y700-parole/gstreamer-1.0/libgstvideo4linux2.so
+    printf '%s  %s\n' a64bdb5bf9e4454f371638cf17c2564c3cbe3a3bc379ba5151de3c689f4a69f0 "$installed_plugin" | sha256sum --strict --status -c -
+    printf 'IRIS_WAKE_PRECHECK release=dev12.11 sleep_success=%s kernel_notes=%s\n' "$success" "$notes"
+    mode=h264-playbin
+else
+    [[ $notes == 2e6b047aba528bfdea5549b9aae9af362a9af055bb630a650bcdd7c654ec9066 ]]
+fi
 case $codec in
     h264) factory=v4l2h264dec; caps='video/x-h264,stream-format=byte-stream,alignment=au' ;;
     hevc) factory=v4l2h265dec; caps='video/x-h265,stream-format=byte-stream,alignment=au' ;;
@@ -24,6 +41,12 @@ dev=$(basename "$(dirname "${nodes[0]}")")
 chip=/sys/bus/platform/devices/aa00000.video-codec
 [[ $(readlink -f "/sys/class/video4linux/$dev/device") == "$(realpath "$chip")" ]]
 [[ $(cat "$chip/power/runtime_status") == suspended ]]
+if [[ -n $installed_plugin ]]; then
+    # Abort if another application still has the decoder open, even while idle.
+    for fd in /proc/[0-9]*/fd/*; do
+        if [[ $fd -ef /dev/$dev ]]; then echo IRIS_DECODER_IN_USE; exit 1; fi
+    done
+fi
 runuser -u y700 -- test -r "/dev/$dev"
 runuser -u y700 -- test -w "/dev/$dev"
 cursor=$(journalctl -k -b -n 0 --show-cursor --no-pager | sed -n 's/^-- cursor: //p')
@@ -50,6 +73,11 @@ stage_result() {
     fi
     local recent
     recent=$(journalctl -k -b --after-cursor="$cursor" -o cat --no-pager -q)
+    if [[ -n $installed_plugin ]]; then
+        printf 'IRIS_WAKE_PM failed_suspend=%s failed_resume=%s\n' \
+            "$(grep -Fc 'qcom-iris aa00000.video-codec: failed to suspend' <<< "$recent" || :)" \
+            "$(grep -Fc 'qcom-iris aa00000.video-codec: failed to resume' <<< "$recent" || :)"
+    fi
     if grep -Ei '(iris|vpu|video-codec|iommu|arm-smmu).*(fatal|retained|fault|watchdog|timeout|timed out|failed.*ownership)|Unhandled context fault' <<< "$recent"; then
         echo IRIS_KERNEL_FAILURE
         exit 1
@@ -70,11 +98,13 @@ done
 mount --move view /dev
 install -d -m700 -o y700 -g "$(id -gn y700)" results
 gst=(runuser -u y700 -- env -i HOME="$stage/results" PATH=/usr/bin:/bin LC_ALL=C GST_REGISTRY="$stage/results/registry.bin")
+if [[ -n $installed_plugin ]]; then gst+=(GST_PLUGIN_PATH_1_0="${installed_plugin%/*}"); fi
 if [[ -d plugin ]]; then gst+=(GST_PLUGIN_PATH_1_0="$stage/plugin"); fi
 if [[ -d parser ]]; then gst+=(LD_LIBRARY_PATH="$stage/parser"); fi
 timeout -k 2 18 "${gst[@]}" ./gst-inspect-1.0 "$factory" >results/factory
 grep -F 'GstV4l2VideoDec' results/factory >/dev/null
 grep -F "/dev/$dev" results/factory >/dev/null
+if [[ -n $installed_plugin ]]; then grep -F "$installed_plugin" results/factory >/dev/null; fi
 if [[ -f plugin/libgstvideo4linux2.so ]]; then
     grep -F "$stage/plugin/libgstvideo4linux2.so" results/factory >/dev/null
     printf 'IRIS_PRIVATE_V4L2 sha256=%s\n' "$(sha256sum plugin/libgstvideo4linux2.so | cut -d' ' -f1)"

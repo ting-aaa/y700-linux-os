@@ -87,3 +87,15 @@ IRIS_V4L2_PLUGIN="$vp9_plugin" IRIS_V4L2_SHA256="$vp9_sha256" \
 ```
 
 `gst_tools_arm64_deb` 是 Debian 的 `gstreamer1.0-tools_1.26.2-2_arm64.deb`，脚本校验归档后只在 RAM 使用其中的工具。解析器目录保留 Debian 的 `usr/lib/aarch64-linux-gnu/` 布局。两个库来自 `gstreamer1.0-plugins-bad` 和 `libgstreamer-plugins-bad1.0-0` 的 ARM64 版本 `1.26.2-3+deb13u3`，脚本会核对两个 ELF。已验证插件的重建命令及 SHA-256 见首帧说明。缩减的实机记录位于本工作树的 `out/iris-physical/`。[Debian 验证工具](https://packages.debian.org/trixie/arm64/gstreamer1.0-tools/download) · [插件构建与哈希](VIDEO-VP9.md)
+
+### dev12.11 实机唤醒后的硬解
+
+在默认启动的 dev12.11 上，Iris 于开机 9.131091 秒尝试关闭空闲视频处理器。当时固件的等待中断位 WFI 为 0，空闲位为 1，电源折叠就绪位为 0。对应内核的 `iris_vpu_prepare_pc()` 在发送 HFI 电源折叠命令前退出。随后 `iris_hfi_pm_suspend()` 标记设备刚刚活动并返回 `-EAGAIN`，在 9.133142 秒打印 `failed to suspend`。这一分支允许 Linux 在 1.5 秒的自动挂起延时后重试。系统到 86.702834 秒才开始第一次 s2idle。该次 RTC 唤醒成功，同一启动中测得实际睡眠 19.011 秒，醒后 FD730 的三个 GPU 上下文完成 12 帧、24,576 像素读回。记录在 `out/dev12.11-verified/s2idle-a-{result,gpu-after}.log`。[Iris 电源折叠](https://github.com/torvalds/linux/blob/master/drivers/media/platform/qcom/iris/iris_vpu_common.c) · [Linux 设备运行时电源管理](https://docs.kernel.org/power/runtime_pm.html)
+
+两次 s2idle 唤醒后，平板以普通账户运行已安装的 GStreamer 播放链。`playbin` 自动选择 `v4l2h264dec`，1920 × 1080 的 H.264 共 24 帧，全部 Y、U、V 像素的逐帧 SHA-256 与独立软件解码一致，解码器收到流结束。测试窗口内电源折叠重试、挂起错误、恢复错误均为零。退出后 Iris 回到 `suspended`，启动身份、座席、服务和背光均保持原值。记录 `iris-wake.log` 的 SHA-256 为 `ed254cf04524b53e05ab1c7f26aae601425751929453c3622c6096301f21a063`。
+
+以下命令复用这段无声 FFmpeg 测试图案。主机先检查已知 MP4 和每帧软件参考的 SHA-256。平板端要求同一次启动已经完成 s2idle、解码器处于空闲且没有使用者。测试仅向验证进程提供 Iris 解码节点，使用播放器自带的插件路径，输出到内存文件。整个过程无需窗口或拍摄，也无需安装软件包。[板端核验](../tests/video-codec/board.sh) · [样片和软件参考生成器](../tests/video-codec/make-clips.py)
+
+```bash
+bash tests/video-codec/run-tablet.sh "$usb_ssh" "$gst_tools_arm64_deb" out/iris-clips-1080 h264-after-wake
+```
