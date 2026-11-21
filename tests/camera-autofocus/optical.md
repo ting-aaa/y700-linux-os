@@ -1,5 +1,7 @@
 # Rear autofocus measurement
 
+On the PRC tablet the [board runner](../camera-lens-graph/measure-board.sh) uses a transient ordinary-user service with a private network and a 70-second limit. Pass `--self-test` to run synthetic cases with camera devices hidden. The separately selected `--rear-af` mode measures a real scene; use it for a consented, attended trial with a suitable target. In both modes the runner checks that the rear sensor has returned to runtime suspend before exiting.
+
 Use a stationary, well-lit, textured target with visible fine edges near the centre of the preview. Keep the tablet and target still throughout the measurement. Each invocation of `--rear-af` opens the rear HI1339 for one 640×480 ABGR8888 viewfinder stream using the packaged CPU ISP. The sole actuator command is the normal libcamera `AfModeAuto` and `AfTriggerStart` pair in one request. The program neither creates a window nor encodes or saves images. The ordinary account running the measurement needs the same camera and dma-buf access as qcam.
 
 ```sh

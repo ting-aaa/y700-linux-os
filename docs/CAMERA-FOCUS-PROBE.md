@@ -92,11 +92,11 @@ git apply "$product/config/kernel/asphalt-cci0-clock.patch"
 make ARCH=arm64 LLVM=1 qcom/sm8475-lenovo-asphalt.dtb
 ```
 
-### Lens integration still to qualify
+### Installed lens and application controls
 
-1. Describe the lens and its power dependencies in the media graph, preserving the observed HI1339 runtime-PM sequencing. Check that discovering/listing cameras keeps the actuator stationary.
-2. Qualify explicit V4L2 focus moves, settling and power-down within the bounds of the current unit’s calibration. The native supply sequence enables LDO5 with reset asserted before MCLK, and releases it after stopping MCLK on power-down. [Sensor power patch](../tests/camera-focus-ldo5.patch)
-3. Integrate a focus control with libcamera and the touch camera application, then measure its optical effect on the physical rear camera.
+The installed dev12.11 kernel links HI1339 to GT9768 through the V4L2 media graph. A regular user on the PRC tablet queried the installed libcamera runtime through `cam --list-controls` for each camera. The rear camera offered Auto/Manual, Start/Cancel and all four autofocus result states. The front and macro cameras exposed fixed focus. All three sensors remained suspended and their cumulative active-time counters stayed unchanged. Run the check as the ordinary desktop user. [Native runtime check](../tests/camera-lens-graph/runtime-controls.sh) · [Physical lens and calibration check](DEV12.11-VERIFICATION.md) · [Touch camera](QCAM.md)
+
+Physical qualification covers whether the visible scene gets sharper after an explicit autofocus request and whether the sensor suspends again after the client releases it. The native supply sequence enables LDO5 with reset asserted before MCLK and releases it after stopping MCLK on power-down. [Sensor power patch](../tests/camera-focus-ldo5.patch) · [Single-shot algorithm and synthetic results](../packaging/camera-autofocus/README.md)
 
 ## Reproducing the bounded read
 
