@@ -12,6 +12,8 @@ The installed platform package is `0.1.0~dev12.8+gpu1.2`. Against private light 
 
 In the guest, both slider versions reached the same endpoints when the simulated backlight published each sysfs reading atomically. With five contact sequences, the first slider sent intermediate brightness requests during a drag. The installed revision sent one request on each release, five in total. The initial fixture could briefly expose an empty file while updating its value and produced a misleading short drag on the older version.
 
+On November 21, the owner dragged the installed slider with a finger on the tablet, saw the brightness change, and used **Restore opening level** to return to the original brightness. This verifies a visible change and recovery in the ordinary desktop. The absolute light output in nits remains unmeasured.
+
 The original dev12.11 archive can first receive the Chromium platform update. The slider helper accepts that version or the first slider package as the previous package. The `.1` → `.2` pair, helper and checksums are in `out/dev12.11-brightness-touch/`. [Chromium update](CHROMIUM-GRAPHICS.md)
 
 ```sh
@@ -47,7 +49,7 @@ On the tablet's ARM64 CPU, an authenticated private Xvfb display ran the package
 
 In a separate guarded trial using the same GTK executable, the ordinary signed-in X11 user's process resolved to the active, local LightDM seat. With the backlight already powered down, one synthesized pointer tap on **+** requested 102 → 122 of 2047 through real logind. A second tap on **Restore opening level** returned it to 102. `bl_power` remained 4 throughout. An independent 75-second restore timer was armed before the first tap and removed after the expected value returned. The boot, active session, LightDM and USB SSH service invocations were preserved.
 
-On the installed dev12.11 tablet, a separate measurement lit the internal DSI panel at the greeter. Its ordinary foreground UID requested 102 → 122 → 102 through logind. Each time, two reads of the KTZ8866's brightness and LED-enable registers agreed with the requested level. After blanking, the chip reported zero with the LEDs disabled while Linux retained the requested 102 for the next wake. The measurements establish the programmed current level. Optical luminance and a finger drag on the physical glass require separate observations. [On-device steps and register readback](../tests/brightness/lit-board-step.sh) · [KTZ8866 datasheet](https://www.kinet-ic.com/uploads/web/KTZ8866/KTZ8866-04b.pdf)
+On the installed dev12.11 tablet, a separate measurement lit the internal DSI panel at the greeter. Its ordinary foreground UID requested 102 → 122 → 102 through logind. Each time, two reads of the KTZ8866's brightness and LED-enable registers agreed with the requested level. After blanking, the chip reported zero with the LEDs disabled while Linux retained the requested 102 for the next wake. [On-device steps and register readback](../tests/brightness/lit-board-step.sh) · [KTZ8866 datasheet](https://www.kinet-ic.com/uploads/web/KTZ8866/KTZ8866-04b.pdf)
 
 ## Private UI probe
 
