@@ -112,11 +112,10 @@ static void frame(int fd)
     event(fd, EV_SYN, SYN_REPORT, 0);
 }
 
-static void tap(int fd)
+static void tap(int fd, struct point point)
 {
-    /* One fixed, asymmetric raw contact in every display orientation. */
     event(fd, EV_KEY, BTN_TOUCH, 1);
-    contact(fd, 0, tracking_id++, (struct point){3920, 16896});
+    contact(fd, 0, tracking_id++, point);
     frame(fd);
     usleep(90000);
     contact(fd, 0, -1, (struct point){0});
@@ -170,6 +169,15 @@ int main(void)
     fflush(stdout);
     while (fgets(line, sizeof(line), stdin)) {
         char rotation[16], action[16], extra;
+        struct point point;
+        if (sscanf(line, "tap %d %d %c", &point.x, &point.y, &extra) == 2) {
+            if (point.x < 0 || point.x > X_MAX || point.y < 0 || point.y > Y_MAX)
+                return EXIT_FAILURE;
+            tap(fd, point);
+            puts("DONE");
+            fflush(stdout);
+            continue;
+        }
         if (sscanf(line, "%15s %15s %c", rotation, action, &extra) != 2)
             return EXIT_FAILURE;
         const struct trace *trace = NULL;
@@ -182,7 +190,7 @@ int main(void)
         if (!trace)
             return EXIT_FAILURE;
         if (!strcmp(action, "tap"))
-            tap(fd);
+            tap(fd, (struct point){3920, 16896});
         else if (!strcmp(action, "scroll"))
             gesture(fd, &trace->scroll);
         else if (!strcmp(action, "pinch"))

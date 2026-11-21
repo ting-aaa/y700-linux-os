@@ -27,7 +27,8 @@ def main():
     )
     if mode != 'open':
         for key in ('correct', 'wrong'):
-            if 'y700.wifi_attempt=onboard' in Path('/proc/cmdline').read_text().split():
+            if any(f'y700.wifi_attempt={attempt}' in Path('/proc/cmdline').read_text().split()
+                   for attempt in ('onboard', 'chooser', 'blocked', 'cancel')):
                 network[key] = ''.join(secrets.choice(string.ascii_lowercase) for _ in range(16))
             else:
                 network[key] = secrets.token_urlsafe(24)

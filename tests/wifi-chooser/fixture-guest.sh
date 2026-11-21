@@ -16,13 +16,30 @@ case $actor in
     seat) test -e /run/systemd/system || fail system-manager-missing ;;
     *) fail bad-actor-mode ;;
 esac
-printf 'WIFI_STACK kernel=%s nm=%s applet=%s editor=%s\n' "$(uname -r)" \
+if [[ -d candidates ]]; then
+    [[ $actor == seat ]] || fail unexpected-install-environment
+    if [[ -e /usr/sbin/policy-rc.d || -L /usr/sbin/policy-rc.d ]]; then mv /usr/sbin/policy-rc.d policy-rc.before; fi
+    printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+    chmod 755 /usr/sbin/policy-rc.d
+    dpkg -i candidates/*.deb >/dev/null 2>&1 || fail candidate-install
+    rm /usr/sbin/policy-rc.d
+    if [[ -e policy-rc.before || -L policy-rc.before ]]; then mv policy-rc.before /usr/sbin/policy-rc.d; fi
+    test -z "$(dpkg --audit)" || fail candidate-incomplete
+fi
+printf 'WIFI_STACK kernel=%s nm=%s applet=%s editor=%s supplicant=%s\n' "$(uname -r)" \
     "$(dpkg-query -W -f='${Version}' network-manager)" \
     "$(dpkg-query -W -f='${Version}' network-manager-applet)" \
-    "$(dpkg-query -W -f='${Version}' nm-connection-editor)"
+    "$(dpkg-query -W -f='${Version}' nm-connection-editor)" \
+    "$(dpkg-query -W -f='${Version}' wpasupplicant)"
 
 pids=()
 cleanup() {
+    if [[ -d candidates ]]; then
+        journalctl -q -b -t NetworkManager --no-pager | awk '
+            /SAE password mismatch reported by supplicant/{automatic++}
+            /selected the failed SAE access point again/{explicit++}
+            END{printf "WIFI_NM_PROMPTS automatic=%d explicit=%d\n", automatic, explicit}'
+    fi
     for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
     wait || true
     if [[ -e /run/netns/wifi-ap ]]; then ip netns delete wifi-ap; fi
@@ -80,13 +97,25 @@ if (( rejoin == 3 )); then
     . ./rejoin/crossband.sh
     sed -i 's/^channel=1$/channel=36/;s/^hw_mode=g$/hw_mode=a/' /run/wifi-fixture/hostapd.conf.alt
 fi
-"${ap_net[@]}" hostapd /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & ap_process=$!; pids+=("$ap_process")
+ap_command=(hostapd)
+if [[ -d ap-2.11 ]]; then ap_command=(env LD_LIBRARY_PATH="$PWD/ap-2.11/lib" "$PWD/ap-2.11/hostapd"); fi
+"${ap_net[@]}" "${ap_command[@]}" /run/wifi-fixture/hostapd.conf >/dev/null 2>&1 & ap_process=$!
+pids+=("$ap_process")
 ap_ready() { hostapd_cli -p /run/wifi-fixture/hostapd -i "$ap" status 2>/dev/null | grep -Fxq 'state=ENABLED'; }
 for _ in {1..40}; do
     if ap_ready; then break; fi
     sleep 0.1
 done
 ap_ready || { echo 'WIFI_FIXTURE_ERROR ap-did-not-enable' >&2; exit 1; }
+if [[ -d ap-2.11 ]]; then
+    [[ $(readlink "/proc/$ap_process/exe") == "$PWD/ap-2.11/hostapd" ]] || fail modern-ap-process
+    grep -Fq "$PWD/ap-2.11/lib/libnl" "/proc/$ap_process/maps" || fail modern-ap-libraries
+    echo 'WIFI_AP version=2.11 private_libnl=1'
+elif [[ $security == sae ]]; then
+    version=$(hostapd -v 2>&1 || true)
+    [[ $version =~ hostapd\ v([0-9]+\.[0-9]+) ]] || fail ap-version
+    printf 'WIFI_AP version=%s\n' "${BASH_REMATCH[1]}"
+fi
 LD_LIBRARY_PATH=/opt/wifi-test/lib "${ap_net[@]}" dnsmasq --no-daemon --port=0 --interface="$ap_l3" --bind-interfaces \
     --dhcp-range=192.0.2.11,192.0.2.19,255.255.255.0,1h --dhcp-option=3 --dhcp-authoritative \
     >/dev/null 2>&1 & pids+=("$!")
@@ -107,7 +136,8 @@ fi
 for _ in {1..40}; do [[ ! -S /run/dbus/system_bus_socket ]] || break; sleep 0.1; done
 test -S /run/dbus/system_bus_socket || fail system-bus-start
 if ! pgrep -x wpa_supplicant >/dev/null; then
-    wpa_supplicant -u >/dev/null 2>&1 & pids+=("$!")
+    wpa_supplicant -u >/dev/null 2>&1 &
+    pids+=("$!")
 fi
 if pgrep -x NetworkManager >/dev/null; then fail unexpected-networkmanager; fi
 NetworkManager --no-daemon --config=/run/wifi-fixture/NetworkManager.conf >/dev/null 2>&1 & pids+=("$!")
@@ -136,6 +166,10 @@ nmcli -w 5 connection add type wifi ifname "$station" con-name 'Y700 Fixture Sav
 kill -0 "$dhcp" 2>/dev/null || fail dhcp-server-start
 nmcli -w 15 device wifi rescan ifname "$station"
 if [[ $actor == seat ]]; then
+    if grep -qw y700.wifi_touch=1 /proc/cmdline; then
+        source ./touch-display.sh
+        start_touch_display || fail touch-display
+    fi
     chown y700 /run/wifi-fixture/network.json
     [[ -c /dev/tty1 ]] || fail local-vt-missing
     if [[ $(cat /sys/class/tty/tty0/active) != tty1 ]]; then
@@ -162,6 +196,12 @@ PY
     (( status == 0 )) || fail pam-seat-session
 else
     bash ./session.sh fixture "$security"
+fi
+if grep -qw y700.wifi_attempt=blocked /proc/cmdline; then
+    [[ $(station_state) == 30 ]] || fail negative-state
+    iw dev "$station" link | grep -Fxq 'Not connected.' || fail negative-link
+    echo 'WIFI_BASELINE_PASS station_disconnected=1'
+    exit
 fi
 test "$(station_state)" = 100
 iw dev "$station" link | grep -Eq '^Connected to[[:space:]]'

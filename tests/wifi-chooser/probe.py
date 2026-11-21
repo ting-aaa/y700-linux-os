@@ -15,6 +15,7 @@ gi.require_version('NM', '1.0')
 from gi.repository import Atspi, GLib, Gio, NM
 
 ONBOARD = os.environ.get('Y700_WIFI_ONBOARD') == '1'
+TOUCH = os.environ.get('Y700_WIFI_TOUCH') == '1'
 SCALE = 2 if ONBOARD else 1
 
 
@@ -38,13 +39,23 @@ def await_value(predicate, failure, seconds=12):
 
 
 def xdotool(*args):
-    return subprocess.run(['xdotool', *args], check=False, text=True, capture_output=True, timeout=3)
+    try:
+        return subprocess.run(['xdotool', *args], check=False, text=True, capture_output=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        raise ProbeError('x11-command-timeout-' + args[0]) from None
 
 
 def tap(x, y):
     width, height = (2560, 1600) if ONBOARD else (1024, 768)
     if not 0 <= x < width or not 0 <= y < height:
         raise ProbeError('invalid-tap-target')
+    if TOUCH:
+        with open('/run/wifi-fixture/touch-command', 'w') as command:
+            print('tap', round(x * 16000 / (width - 1)), round(y * 25600 / (height - 1)), file=command)
+        with open('/run/wifi-fixture/touch-response') as response:
+            if response.readline().strip() != 'DONE':
+                raise ProbeError('type-b-tap-not-acknowledged')
+        return
     # Consecutive equal passphrase characters tap the same pixel again.
     if xdotool('mousemove', str(x), str(y), 'click', '1').returncode:
         raise ProbeError('xtest-click-failed')
@@ -109,6 +120,24 @@ def ssid(value):
 
 def profiles(client):
     return [profile for profile in client.get_connections() if profile.get_setting_wireless()]
+
+
+def saved_settings(client, exclude=None):
+    return {pr.get_uuid(): pr.to_dbus(NM.ConnectionSerializationFlags.NO_SECRETS).unpack()
+            for pr in profiles(client) if pr.get_uuid() != exclude}
+
+
+def observe_sae_status(bus):
+    def changed(_bus, _sender, _path, _interface, _signal, parameters):
+        _, properties, _ = parameters.unpack()
+        value = properties.get('AuthStatusCode')
+        if value in (1, 15):
+            print(f'WIFI_SAE_PROPERTY AuthStatusCode={value}', flush=True)
+    bus.signal_subscribe('fi.w1.wpa_supplicant1', 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
+                         None, 'fi.w1.wpa_supplicant1.Interface', Gio.DBusSignalFlags.NONE, changed)
+    bus.signal_subscribe('fi.w1.wpa_supplicant1', 'fi.w1.wpa_supplicant1.Interface', 'SaePasswordMismatch',
+                         None, None, Gio.DBusSignalFlags.NONE,
+                         lambda *_: print('WIFI_SAE_SIGNAL SaePasswordMismatch=1', flush=True))
 
 
 def network_rows(root, visible_ssids):
@@ -184,6 +213,8 @@ def type_onboard(entry, secret):
         raise ProbeError('expected-random-lowercase-fixture-secret')
     tap_node(entry)
     x, y, width, height = await_value(onboard_geometry, 'stock-onboard-did-not-auto-show', 15)
+    # A mapped dock can still be moving during its initial slide transition.
+    time.sleep(.4)
     def key(rx, ry):
         tap(x + round(width * rx), y + round(height * ry))
     length = entry.get_text_iface().get_character_count
@@ -199,10 +230,17 @@ def type_onboard(entry, secret):
                for index, letter in enumerate(row)}
     for i, letter in enumerate(secret, 1):
         key(*centers[letter])
-        await_value(lambda: length() == i, 'masked-field-did-not-receive-onboard-key', 3)
+        try:
+            await_value(lambda: length() == i, 'masked-field-did-not-receive-onboard-key', 5)
+        except ProbeError:
+            # Do not record coordinates, characters or window contents.
+            print(f'WIFI_MASKED_COUNT expected={i} actual={length()} '
+                  f'focused={int(entry.get_state_set().contains(Atspi.StateType.FOCUSED))} '
+                  f'dock_visible={int(bool(onboard_geometry()))}', flush=True)
+            raise
     key(.955, .10)  # Hide the dock to expose the dialog buttons
     await_value(lambda: not onboard_geometry(), 'onboard-dock-did-not-close')
-    print('WIFI_ONBOARD masked_entry=1 pointer_keys=16', flush=True)
+    print(f'WIFI_ONBOARD masked_entry=1 {"touch" if TOUCH else "pointer"}_keys=16', flush=True)
 
 
 def enter_password(entry, connect, secret):
@@ -273,8 +311,8 @@ def edit_failed_profile(client, network, initial_uuids):
     return owned.get_uuid()
 
 
-def verify_password_retry(app, device, transitions, network, choose, edit=None):
-    entry, connect = await_value(lambda: password_dialog(app), 'secured-password-dialog-missing')
+def verify_password_retry(app, device, transitions, network, choose, edit=None, recovery=None):
+    entry, connect = await_value(lambda: password_dialog(app), 'secured-password-dialog-missing', 45)
     before = len(transitions)
     enter_password(entry, connect, network['wrong'])
 
@@ -295,6 +333,8 @@ def verify_password_retry(app, device, transitions, network, choose, edit=None):
 
     state, reason = await_value(wrong_failed, 'wrong-password-failure-not-observed', 55)
     print(f'WIFI_WRONG_REJECTED nm_state={state} nm_reason={reason}', flush=True)
+    if recovery:
+        return recovery(reject_premature_activation)
     if edit:
         await_value(lambda: device.get_state() == NM.DeviceState.DISCONNECTED,
                     'failed-sae-did-not-disconnect')
@@ -320,6 +360,60 @@ def verify_password_retry(app, device, transitions, network, choose, edit=None):
     enter_password(*retry, network['correct'])
 
 
+def recover_chooser(app, client, device, network, choose, attempt, initial_settings, reject_premature):
+    def owned():
+        matches = [pr for pr in profiles(client) if pr.get_uuid() not in initial_settings
+                   and ssid(pr.get_setting_wireless().get_ssid()) == network['ssid']]
+        return matches[0] if len(matches) == 1 else None
+
+    identifier = await_value(owned, 'failed-profile-not-found').get_uuid()
+
+    def same_profiles():
+        profile = owned()
+        return profile and profile.get_uuid() == identifier and saved_settings(client, identifier) == initial_settings
+
+    retry = await_value(lambda: password_dialog(app) or (
+        'reselect' if device.get_state() == NM.DeviceState.DISCONNECTED else None),
+        'failed-sae-neither-dialog-nor-disconnect', 30)
+    prompt = 'automatic'
+    if retry == 'reselect':
+        prompt = 'reselected'
+        choose()
+        if attempt == 'blocked':
+            try:
+                await_value(lambda: password_dialog(app), 'no-second-dialog', 50)
+            except ProbeError:
+                reject_premature()
+                if not same_profiles():
+                    raise ProbeError('failed-retry-modified-profiles')
+                print('WIFI_STOCK_RETRY reselected=1 second_password=0 seconds=50 same_uuid=1 '
+                      'other_profiles_preserved=1', flush=True)
+                return None
+            raise ProbeError('stock-unexpectedly-reprompted')
+        retry = await_value(lambda: password_dialog(app), 'password-dialog-did-not-open-on-retry', 50)
+    if attempt == 'blocked':
+        raise ProbeError('stock-unexpectedly-reprompted')
+    reject_premature()
+    if attempt == 'cancel':
+        dialog = retry[0]
+        while dialog.get_role() != Atspi.Role.DIALOG:
+            dialog = dialog.get_parent()
+        cancel = next((n for n in nodes(dialog) if n.get_role() == Atspi.Role.PUSH_BUTTON
+                       and n.get_name() == 'Cancel' and showing(n)), None)
+        if not cancel:
+            raise ProbeError('retry-has-no-cancel-button')
+        tap_node(cancel)
+        await_value(lambda: not password_dialog(app) and device.get_state() == NM.DeviceState.DISCONNECTED,
+                    'cancel-did-not-release-activation', 35)
+        if not same_profiles():
+            raise ProbeError('cancel-modified-profiles')
+        print('WIFI_CANCEL disconnected=1 same_uuid=1 other_profiles_preserved=1', flush=True)
+        choose()
+        retry = await_value(lambda: password_dialog(app), 'retry-after-cancel-missing', 55)
+    enter_password(*retry, network['correct'])
+    return identifier, prompt
+
+
 def main(mode, applet_pid):
     if mode not in ('physical', 'fixture'):
         raise ProbeError('bad-mode')
@@ -343,6 +437,7 @@ def main(mode, applet_pid):
         raise ProbeError('expected-one-managed-wifi-device')
     device = devices[0]
     before_profiles = {profile.get_uuid() for profile in profiles(client)}
+    initial_settings = saved_settings(client) if mode == 'fixture' else {}
     profile_names = {profile.get_id() for profile in profiles(client)}
     saved_ssids = {ssid(profile.get_setting_wireless().get_ssid()) for profile in profiles(client)} - {None}
     before = device.get_active_connection()
@@ -357,6 +452,9 @@ def main(mode, applet_pid):
                       'device/driver').resolve().name != 'mac80211_hwsim':
             raise ProbeError('fixture-hwsim-idle-station-required')
         network = json.loads(Path('/run/wifi-fixture/network.json').read_text())
+        if network['mode'] == 'sae':
+            supplicant_bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+            observe_sae_status(supplicant_bus)
 
     def access_points():
         aps = device.get_access_points()
@@ -366,6 +464,8 @@ def main(mode, applet_pid):
     app = await_value(lambda: application(applet_pid), 'applet-not-accessible')
     position = await_value(tray_position, 'no-embedded-applet-x11-icon', 35)
     tap(*position)
+    if mode == 'fixture':
+        print('WIFI_UI tray_tapped=1', flush=True)
 
     def submenu():
         return next((node for node in nodes(app)
@@ -386,14 +486,16 @@ def main(mode, applet_pid):
     if network:
         parameters = dict(item.split('=', 1) for item in Path('/proc/cmdline').read_text().split() if '=' in item)
         attempt = parameters.get('y700.wifi_attempt', 'retry')
-        if attempt not in ('fresh', 'retry', 'editor', 'onboard'):
+        chooser_case = attempt in ('chooser', 'blocked', 'cancel')
+        if attempt not in ('fresh', 'retry', 'editor', 'onboard') and not chooser_case:
             raise ProbeError('bad-fixture-attempt')
         target = next((row for row, label in rows if label == network['ssid']), None)
         if not target:
             raise ProbeError('owned-ap-missing-from-menu')
         tap_node(target)
+        print('WIFI_UI access_point_selected=1', flush=True)
         edited_uuid = None
-        if network['mode'] != 'open' and attempt in ('retry', 'editor', 'onboard'):
+        if network['mode'] != 'open' and (attempt in ('retry', 'editor', 'onboard') or chooser_case):
             def choose_again(edited=None):
                 def activating():
                     active = device.get_active_connection()
@@ -455,7 +557,17 @@ def main(mode, applet_pid):
                 if network['mode'] != 'sae' or os.geteuid() == 0:
                     raise ProbeError('sae-editor-requires-ordinary-seat')
                 edit = lambda: edit_failed_profile(client, network, before_profiles)
-            edited_uuid = verify_password_retry(app, device, transitions, network, choose_again, edit)
+            recovery = None
+            if chooser_case:
+                recovery = lambda reject: recover_chooser(app, client, device, network, choose_again,
+                                                          attempt, initial_settings, reject)
+            result = verify_password_retry(app, device, transitions, network, choose_again, edit, recovery)
+            if attempt == 'blocked':
+                return
+            if chooser_case:
+                edited_uuid, prompt = result
+            else:
+                edited_uuid = result
         elif network['mode'] != 'open':
             dialog = await_value(lambda: password_dialog(app), 'secured-password-dialog-missing')
             enter_password(*dialog, network['correct'])
@@ -468,6 +580,10 @@ def main(mode, applet_pid):
         ip = await_value(connected, 'owned-ap-did-not-activate', 30)
         if edited_uuid and device.get_active_connection().get_uuid() != edited_uuid:
             raise ProbeError('active-profile-not-edited-profile')
+        if chooser_case:
+            if saved_settings(client, edited_uuid) != initial_settings:
+                raise ProbeError('chooser-modified-unrelated-profile')
+            print(f'WIFI_CHOOSER_RECOVERY prompt={prompt} same_uuid=1 other_profiles_preserved=1', flush=True)
         if not any(address.get_address().startswith('192.0.2.') for address in ip.get_addresses()):
             raise ProbeError('fixture-dhcp-address-missing')
         if network['mode'] != 'open':

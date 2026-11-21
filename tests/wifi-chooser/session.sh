@@ -75,13 +75,18 @@ cleanup_session() {
 trap cleanup_session EXIT
 screen=1024x768x24
 unset Y700_WIFI_ONBOARD
-if [[ $mode == fixture ]] && grep -qw y700.wifi_attempt=onboard /proc/cmdline; then
+if [[ $mode == fixture ]] && grep -Eq 'y700.wifi_attempt=(onboard|chooser|blocked|cancel)( |$)' /proc/cmdline \
+        && ! grep -qw y700.wifi_no_onboard=1 /proc/cmdline; then
     screen=2560x1600x24
     export Y700_WIFI_ONBOARD=1 XDG_CONFIG_DIRS=/usr/share/y700/tablet-xdg:/etc/xdg
 fi
-Xvfb "$DISPLAY" -auth "$XAUTHORITY" -screen 0 "$screen" -nolisten tcp >/dev/null 2>&1 & xp=$!
+if [[ $mode == fixture ]] && grep -qw y700.wifi_touch=1 /proc/cmdline; then
+    export DISPLAY=:222 XAUTHORITY=/run/wifi-fixture/Xauthority Y700_WIFI_TOUCH=1
+else
+    Xvfb "$DISPLAY" -auth "$XAUTHORITY" -screen 0 "$screen" -nolisten tcp >/dev/null 2>&1 & xp=$!
+fi
 for _ in {1..40}; do
-    kill -0 "$xp" || { echo 'WIFI_SESSION_ERROR xvfb-exited' >&2; exit 1; }
+    if [[ -n $xp ]]; then kill -0 "$xp" || { echo 'WIFI_SESSION_ERROR xvfb-exited' >&2; exit 1; }; fi
     if xdpyinfo >/dev/null 2>&1; then break; fi
     sleep 0.1
 done
@@ -95,13 +100,13 @@ gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
 if [[ $security != open ]]; then xfwm4 --compositor=off >/dev/null 2>&1 & wm=$!; fi
 if [[ -n ${Y700_WIFI_ONBOARD:-} ]]; then
     xfsettingsd --no-daemon >/dev/null 2>&1 & settings=$!
-    timeout 20 gdbus wait --session org.xfce.SettingsDaemon
+    timeout 60 gdbus wait --session org.xfce.SettingsDaemon || { echo 'WIFI_SESSION_ERROR settings-daemon' >&2; exit 1; }
     onboard --startup-delay=2.0 >/dev/null 2>&1 & keyboard=$!
-    timeout 30 gdbus wait --session org.onboard.Onboard
+    timeout 90 gdbus wait --session org.onboard.Onboard || { echo 'WIFI_SESSION_ERROR onboard-start' >&2; exit 1; }
 fi
 xfce4-panel --disable-wm-check >/dev/null 2>&1 & panel=$!
 if [[ -n ${Y700_WIFI_ONBOARD:-} ]]; then
-    timeout 25 gdbus wait --session org.xfce.Panel
+    timeout 60 gdbus wait --session org.xfce.Panel || { echo 'WIFI_SESSION_ERROR panel-start' >&2; exit 1; }
 fi
 agent_args=()
 if [[ $security == open ]]; then agent_args+=(--no-agent); fi
