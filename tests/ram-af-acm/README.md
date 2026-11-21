@@ -2,6 +2,29 @@
 
 This private RAM diagnostic attachment exposes one serial interface. It sends aggregate measurements from the pinned optical client. An ordinary user runs the client through the existing board runner with a private network, read-only system and hidden home directories. The attachment contains no login credentials.
 
+## Compare the two focus scores on the same frames
+
+The second physical RAM trial reached 419 preview frames. Its terminal diagnostic counted 18 accepted samples over nine coarse controls and reported `flat-contrast`. That attachment recorded only the terminal counters. The third attachment adds paired measurements of the production sampling grid and a dense reference over the center of the same 640 × 480 frame. The production score continues to control the scan. The reference processes only accepted pairs inside the private diagnostic process. [Second physical trial](../../docs/CAMERA-FOCUS-PROBE.md#diskless-rear-autofocus-on-22-november)
+
+```sh
+bash tests/ram-af-acm/build-allocator.sh --score-pairs out/dev12.12-ram-receiver-allocator \
+    out/camera-af-score-pairs/libcamera.so.0.7 out/dev12.12-ram-receiver-scores
+uv run --offline --no-project python -B tests/ram-af-acm/test-score-trace.py \
+    --library-log out/camera-af-score-pairs/pairs-after.log
+```
+
+The v3 receiver manifest SHA-256 is `4b7aeab70eb27cf3a8ba943fa2f2a9ae8546aae36fe7ff5960a99e7732fe1065`. The 13,810,788-byte initrd is `2c83d73077dd1ab12aa3ccd4f1cbbead3f0845720b45ef0230cb2075ac48b02f`. The builder requires the sealed v2 receiver, pins the new library, and reuses its original kernel, board tree, command line and 1,351,581,696-byte carrier. The status, configuration, one-shot start, result retrieval and reboot protocol are shared.
+
+After a separately initiated trial, run the following command on the host with the saved `start` or `result` output. The parser checks point order, sample counts, the terminal diagnostic, cleanup and the end receipt. A missing or duplicate point fails the comparison. Values use one million units per normalized score. Each point gives the mean and absolute within-pair difference for each method. Images and lens codes stay off the serial channel.
+
+```sh
+uv run --offline --no-project python -B tests/ram-af-acm/score_trace.py "$receipt"
+```
+
+The coarse summary gives the rounded maximum minus 25,000 ppm and the rounded maximum minus 1.12 times the rounded minimum. Up to 1.06 ppm of rounding uncertainty applies to the relative margin. The scan's original terminal reason uses internal, unrounded production scores. Compare the span with within-pair variability and with the reference span before interpreting the response. The scores alone do not measure mechanical lens travel.
+
+A deterministic synthetic image gave nine identical production means of 33,900 ppm while the reference spanned 33,966–137,323 ppm on the same pairs. The unchanged production scan ended with `flat-contrast`. This fixture exercises the trace and its interpretation. A physical v3 measurement requires its own receipt.
+
 ## Diskless dev12.12 with a private software-ISP allocator
 
 The original diskless tablet boot reached the ACM self-test. Its rear-camera check returned `no_cpu_rgb_mode` before streaming. A separate comparison on the daily tablet reproduced the raw-only selection for the unprivileged account. Giving only the transient measurement process read/write access to the real `/dev/udmabuf` yielded 640 × 480 ABGR8888 with a 2,560-byte stride. The configure-only client allocated zero buffers, read zero pixels and left the rear sensor suspended with zero additional active time. The local comparison is in `out/camera-optical-qa/physical-private-config-v2.log`.
@@ -29,7 +52,7 @@ uv run --no-project --with pyserial==3.5 python tests/ram-af-acm/host.py check-c
 
 The service rechecks both disabled controllers, the absence of physical block devices and swap, and the read-only carrier with tmpfs changes before granting allocator access. It checks the live device number against sysfs, creates a private `0600` node beneath a root-owned `0700` directory on devtmpfs, and bind-mounts only that node into the ordinary user's transient unit. Cleanup removes the alias and checks the original node's inode, owner, group, permissions and device number. CONFIG closes after 500 seconds from handover. The existing independent reboot timer and START window still apply.
 
-To exercise the split boot, allocator and serial protocol on a PC, use an ARM64 QEMU installation and an available 8 GiB guest allocation. The VM has the release kernel's real udmabuf device. It tests access denial, private access, refusal of a substituted device, cleanup and receipt replay. Optical data in this VM come from the synthetic self-test. Physical RAM autofocus and optical gain require their own measurement.
+To exercise the split boot, allocator and serial protocol on a PC, use an ARM64 QEMU installation and an available 8 GiB guest allocation. The VM has the release kernel's real udmabuf device. It tests access denial, private access, refusal of a substituted device, cleanup and receipt replay. Optical data in this VM come from the synthetic self-test. Use the v3 output directory and its manifest hash above to repeat the same boot check for that attachment.
 
 ```sh
 AF_QA_ALLOCATOR=1 bash tests/ram-trial/check-receiver.sh \
