@@ -1,0 +1,81 @@
+--- a/sound/soc/codecs/wcd938x.c
++++ b/sound/soc/codecs/wcd938x.c
+@@ -1086,6 +1086,36 @@
+ 	return 0;
+ }
+ 
++static void wcd938x_update_tx_swr_clk_rate(struct snd_soc_component *component,
++					   struct wcd938x_priv *wcd938x)
++{
++	int bank, rate, i = 0, mode = 0;
++
++	bank = sdw_slave_get_current_bank(wcd938x->sdw_priv[AIF1_CAP]->sdev);
++
++	if (test_bit(WCD_ADC1, &wcd938x->status_mask))
++		mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC1]];
++	if (test_bit(WCD_ADC2, &wcd938x->status_mask))
++		mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC2]];
++	if (test_bit(WCD_ADC3, &wcd938x->status_mask))
++		mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC3]];
++	if (test_bit(WCD_ADC4, &wcd938x->status_mask))
++		mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC4]];
++
++	if (mode != 0) {
++		for (i = 0; i < ADC_MODE_ULP2; i++) {
++			if (mode & (1 << i)) {
++				i++;
++				break;
++			}
++		}
++	}
++	rate = wcd938x_get_clk_rate(i);
++	wcd938x_set_swr_clk_rate(component, rate, bank);
++	/* Copy clk settings to active bank */
++	wcd938x_set_swr_clk_rate(component, rate, !bank);
++}
++
+ static int wcd938x_tx_swr_ctrl(struct snd_soc_dapm_widget *w,
+ 			       struct snd_kcontrol *kcontrol, int event)
+ {
+@@ -1098,31 +1128,8 @@
+ 
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
+-		if (strnstr(w->name, "ADC", sizeof("ADC"))) {
+-			int i = 0, mode = 0;
+-
+-			if (test_bit(WCD_ADC1, &wcd938x->status_mask))
+-				mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC1]];
+-			if (test_bit(WCD_ADC2, &wcd938x->status_mask))
+-				mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC2]];
+-			if (test_bit(WCD_ADC3, &wcd938x->status_mask))
+-				mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC3]];
+-			if (test_bit(WCD_ADC4, &wcd938x->status_mask))
+-				mode |= tx_mode_bit[wcd938x->tx_mode[WCD_ADC4]];
+-
+-			if (mode != 0) {
+-				for (i = 0; i < ADC_MODE_ULP2; i++) {
+-					if (mode & (1 << i)) {
+-						i++;
+-						break;
+-					}
+-				}
+-			}
+-			rate = wcd938x_get_clk_rate(i);
+-			wcd938x_set_swr_clk_rate(component, rate, bank);
+-			/* Copy clk settings to active bank */
+-			wcd938x_set_swr_clk_rate(component, rate, !bank);
+-		}
++		if (strnstr(w->name, "ADC", sizeof("ADC")))
++			wcd938x_update_tx_swr_clk_rate(component, wcd938x);
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
+ 		if (strnstr(w->name, "ADC", sizeof("ADC"))) {
+@@ -1184,6 +1191,7 @@
+ 					      WCD938X_DIGITAL_CDC_ANA_CLK_CTL,
+ 					      WCD938X_ANA_TX_DIV2_CLK_EN_MASK, 1);
+ 		set_bit(w->shift, &wcd938x->status_mask);
++		wcd938x_update_tx_swr_clk_rate(component, wcd938x);
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
+ 		snd_soc_component_write_field(component, WCD938X_DIGITAL_CDC_ANA_CLK_CTL,

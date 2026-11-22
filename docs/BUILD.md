@@ -1,5 +1,18 @@
 # Build migration status
 
+## Unified Full-Hardware Kernel (`hw-bringup-02`) & Standalone `dev13.0` Image
+
+To reproduce the unified `7.3.4-asphalt-prc` kernel (GMU HFI queued-vote fix, 60/120 Hz dual refresh, `GT9768` rear AF, `PMK8350` RTC, dual `AW86927` 170 Hz LRA haptics, `PM8350C` rear flash LED, and `WCD9385` internal dual microphones) and package the standalone `dev13.0` board archive from the sealed `dev12.13` + `dev12.15` desktop base on a Linux/WSL build host:
+
+```bash
+sudo bash scripts/build-hw-bringup-kernel.sh "$PREPARED_LINUX_7_3_4" out/hw-bringup-02
+sudo bash scripts/build-dev13-image.sh \
+    "$DEV1213_TAR" "$DEV1215_TAR" out/hw-bringup-02 "$TX3_TPLG" out/dev13.0-board
+sudo bash tests/hw-bringup/qemu-verify-dev13.sh out/dev13.0-board
+```
+
+Details, exact SHA-256 checksums, and all 9-subsystem physical verification receipts are recorded in [HARDWARE-VERIFICATION.md](HARDWARE-VERIFICATION.md) and [DEV13.0-IMAGE.md](DEV13.0-IMAGE.md).
+
 ## Optional Thunar update for the tablet desktop
 
 The sealed dev12.15 root ships Debian's Thunar. The standalone touch update for that desktop consists of an arm64 build of the same Debian source with the Y700 input patch and its original rollback package. Build both inputs as described in the [ARM64 instructions](../tests/thunar-touch/README.md). From the product checkout, run `bash scripts/package-thunar-touch-update.sh out/thunar-touch out/thunar-touch/thunar-touch-y7001.tar`. Use the resulting bundle in the target root after its base packages are configured. [Installation and board verification](THUNAR-TOUCH.md)

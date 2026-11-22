@@ -1,0 +1,152 @@
+#!/bin/busybox sh
+# Volatile RAM-overlay boot for unified TB320FC hardware verification.
+# Mounts backing UFS and daily root.ext4 strictly read-only (blockdev --setro + ro,noload),
+# overlays new kernel modules, AudioReach topology, and ALSA UCM in tmpfs, and auto-reboots
+# back to the untouched daily system if not disarmed over USB SSH within 300 seconds.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+/bin/busybox --install -s /bin || exit 1
+mount -t devtmpfs devtmpfs /dev || exit 1
+exec </dev/console >/dev/console 2>&1
+
+fail() {
+    echo "y700-hw-trial: $*; rebooting to daily system" >/dev/console
+    sleep 2
+    reboot -f
+    exit 1
+}
+
+mount -t proc proc /proc && mount -t sysfs sysfs /sys || fail 'cannot mount kernel interfaces'
+mount -t tmpfs -o mode=0755,nodev,nosuid,strictatime tmpfs /run || fail 'cannot mount /run'
+
+cmdline=" $(cat /proc/cmdline) "
+case "$cmdline" in *' y700.hw_trial=1 '*) ;; *) fail 'missing y700.hw_trial=1' ;; esac
+
+compat=$(tr '\000' '\n' </proc/device-tree/compatible)
+if printf '%s\n' "$compat" | grep -Fxq lenovo,asphalt; then
+    [ "$(tr -d '\000' </proc/device-tree/region_country)" = PRC ] || fail 'unexpected board region'
+    prefix=sd
+    board_mode=tablet
+elif [ "$compat" = linux,dummy-virt ]; then
+    prefix=vd
+    board_mode=qemu
+else
+    fail 'unexpected board'
+fi
+
+hex() { dd if="$1" bs=1 skip="$2" count="$3" 2>/dev/null | hexdump -ve '1/1 "%02x"'; }
+
+backing_uuid=
+for tok in $cmdline; do
+    case "$tok" in
+        y700.backing_uuid=*) backing_uuid=${tok#y700.backing_uuid=} ;;
+    esac
+done
+
+outer=
+for tick in $(seq 1 60); do
+    for block in /sys/class/block/"$prefix"*; do
+        [ -e "$block" ] || continue
+        if [ "$board_mode" = tablet ]; then
+            [ -f "$block/partition" ] && grep -qx PARTNAME=linux "$block/uevent" || continue
+            case "$(readlink -f "$block")" in */1d84000.ufshc/*) ;; *) continue ;; esac
+            dev=/dev/${block##*/}
+            [ -b "$dev" ] && [ "$(hex "$dev" 1080 2)" = 53ef ] || continue
+            if [ -n "$backing_uuid" ]; then
+                [ "$(hex "$dev" 1128 16)" = "$backing_uuid" ] || continue
+            fi
+        else
+            [ ! -f "$block/partition" ] || continue
+            dev=/dev/${block##*/}
+            [ -b "$dev" ] || continue
+        fi
+        outer=$dev
+        break
+    done
+    [ -n "$outer" ] && break
+    sleep 1
+done
+[ -n "$outer" ] || fail 'backing partition unavailable'
+
+if [ "$board_mode" = tablet ]; then
+    freq=/sys/class/devfreq/1d84000.ufshc/max_freq
+    [ -w "$freq" ] && echo 75000000 > "$freq" || true
+fi
+
+# Enforce strict read-only protection on ALL block devices before mounting anything
+for block in /sys/class/block/*; do
+    name=${block##*/}
+    case "$name" in sd*|mmcblk*|nvme*n*|vd*) ;; *) continue ;; esac
+    [ -b "/dev/$name" ] || continue
+    blockdev --setro "/dev/$name" || fail "cannot set read-only on $name"
+done
+
+ram=/run/y700-hw-trial
+mkdir -p "$ram/backing" "$ram/lower" "$ram/changes" /newroot || fail 'cannot create mountpoints'
+mount -t ext4 -o ro,noload,noexec,nodev,nosuid "$outer" "$ram/backing" || fail 'cannot mount backing ro'
+
+if [ "$board_mode" = tablet ]; then
+    img="$ram/backing/var/lib/y700-trial/dev12.11/root.ext4"
+else
+    img="$ram/backing/root.ext4"
+fi
+[ -f "$img" ] && [ ! -L "$img" ] || fail "root image missing at $img"
+
+rootloop=$(losetup -f) || fail 'no free loop device'
+losetup -r "$rootloop" "$img" || fail 'cannot attach read-only loop'
+mount -t ext4 -o ro,noload "$rootloop" "$ram/lower" || fail 'cannot mount root.ext4 ro'
+
+mount -t tmpfs -o mode=0755,size=25% tmpfs "$ram/changes" || fail 'cannot create tmpfs upper'
+mkdir -p "$ram/changes/upper" "$ram/changes/work" || fail 'cannot create overlay dirs'
+mount -t overlay -o "lowerdir=$ram/lower,upperdir=$ram/changes/upper,workdir=$ram/changes/work" overlay /newroot || fail 'cannot mount overlay'
+
+# Inject updated kernel modules, AudioReach capture topology, and ALSA UCM purely in RAM upperdir
+modroot=/newroot/usr/lib/modules/7.3.4-asphalt-prc
+if [ -d /hw-overlay/modules ] && [ -d "$modroot" ]; then
+    cp -a /hw-overlay/modules/. "$modroot/kernel/" || fail 'cannot copy overlay modules'
+    if [ -x /newroot/usr/sbin/depmod ] || [ -x /newroot/sbin/depmod ]; then
+        chroot /newroot depmod -a 7.3.4-asphalt-prc || fail 'depmod failed in RAM overlay'
+    fi
+fi
+
+if [ -f /hw-overlay/firmware/Lenovo-Y700-tplg.bin ]; then
+    mkdir -p /newroot/usr/lib/firmware/qcom/sm8475
+    cp -f /hw-overlay/firmware/Lenovo-Y700-tplg.bin /newroot/usr/lib/firmware/qcom/sm8475/Lenovo-Y700-tplg.bin || fail 'cannot overlay topology'
+fi
+
+if [ -d /hw-overlay/ucm2 ]; then
+    mkdir -p /newroot/usr/share/alsa/ucm2/Lenovo-Y700
+    cp -f /hw-overlay/ucm2/* /newroot/usr/share/alsa/ucm2/Lenovo-Y700/ || fail 'cannot overlay UCM'
+fi
+
+# Override fstab and block-device udev rules so systemd never writes to UFS
+printf '# Volatile Y700 hardware verification overlay (all UFS strictly read-only)\n' > /newroot/etc/fstab
+chmod 0644 /newroot/etc/fstab
+
+mkdir -p /newroot/etc/udev/rules.d
+cat > /newroot/etc/udev/rules.d/99-y700-ram-media.rules <<'RULES'
+SUBSYSTEM=="block", ENV{UDISKS_IGNORE}="1"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*|mmcblk*|nvme*n*|vd*", ATTR{ro}=="0", RUN+="/usr/sbin/blockdev --setro $devnode"
+RULES
+chmod 0644 /newroot/etc/udev/rules.d/99-y700-ram-media.rules
+
+# Install 300-second automatic safety return watchdog (disarmed via /run/y700-hw-trial-disarm)
+if [ -f /hw-overlay/y700-hw-trial-watchdog.service ]; then
+    mkdir -p /newroot/etc/systemd/system/multi-user.target.wants
+    cp -f /hw-overlay/y700-hw-trial-watchdog.service /newroot/etc/systemd/system/y700-hw-trial-watchdog.service
+    ln -sf /etc/systemd/system/y700-hw-trial-watchdog.service /newroot/etc/systemd/system/multi-user.target.wants/y700-hw-trial-watchdog.service
+fi
+
+printf 'hw-trial-overlay=1\nboard_mode=%s\nouter=%s\nrootloop=%s\n' "$board_mode" "$outer" "$rootloop" > /newroot/run/y700-hw-trial.info 2>/dev/null || true
+printf 'hw-trial-overlay=1\n' > /newroot/etc/y700-hw-trial-active
+
+if [ "$board_mode" = qemu ] && [ -x /newroot/y700-qemu-test ]; then
+    echo "y700-hw-trial: QEMU overlay verified; executing guest self-test"
+    for fs in dev proc sys run; do mount --move "/$fs" "/newroot/$fs"; done
+    exec switch_root /newroot /y700-qemu-test
+fi
+
+echo "y700-hw-trial: RAM overlay ready (outer=$outer ro, root=$rootloop ro); starting systemd"
+for fs in dev proc sys run; do
+    mount --move "/$fs" "/newroot/$fs" || fail "cannot move $fs"
+done
+exec switch_root /newroot /sbin/init

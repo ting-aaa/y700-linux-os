@@ -1,0 +1,174 @@
+--- a/drivers/input/misc/aw86927.c
++++ b/drivers/input/misc/aw86927.c
+@@ -14,6 +14,7 @@
+ #include <linux/i2c.h>
+ #include <linux/input.h>
+ #include <linux/module.h>
++#include <linux/property.h>
+ #include <linux/regmap.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/types.h>
+@@ -193,6 +194,8 @@
+ 	struct i2c_client *client;
+ 	struct regmap *regmap;
+ 	struct gpio_desc *reset_gpio;
++	u32 boost_mv;
++	u32 f0_hz;
+ 	u16 level;
+ };
+ 
+@@ -220,21 +223,31 @@
+ 	0xe1, 0xe6, 0xeb, 0xf0, 0xf5, 0xfb
+ };
+ 
++/*
++ * 170.2 Hz sine wave at 24 kHz SRAM playback rate (141 samples/cycle, peak +/-96)
++ * matching TB320FC dual X-axis LRA resonant frequency (f0_pre = 170.0 Hz).
++ */
++static const u8 aw86927_waveform_170hz[] = {
++	0x00, 0x04, 0x09, 0x0d, 0x11, 0x15, 0x19, 0x1d, 0x22, 0x25, 0x29, 0x2d,
++	0x31, 0x35, 0x38, 0x3b, 0x3f, 0x42, 0x45, 0x48, 0x4b, 0x4d, 0x50, 0x52,
++	0x54, 0x56, 0x58, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x60, 0x60,
++	0x60, 0x60, 0x5f, 0x5f, 0x5e, 0x5d, 0x5c, 0x5a, 0x59, 0x57, 0x55, 0x53,
++	0x51, 0x4f, 0x4c, 0x49, 0x46, 0x44, 0x40, 0x3d, 0x3a, 0x36, 0x33, 0x2f,
++	0x2b, 0x27, 0x23, 0x1f, 0x1b, 0x17, 0x13, 0x0f, 0x0b, 0x06, 0x02, 0xfe,
++	0xfa, 0xf5, 0xf1, 0xed, 0xe9, 0xe5, 0xe1, 0xdd, 0xd9, 0xd5, 0xd1, 0xcd,
++	0xca, 0xc6, 0xc3, 0xc0, 0xbc, 0xba, 0xb7, 0xb4, 0xb1, 0xaf, 0xad, 0xab,
++	0xa9, 0xa7, 0xa6, 0xa4, 0xa3, 0xa2, 0xa1, 0xa1, 0xa0, 0xa0, 0xa0, 0xa0,
++	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa8, 0xaa, 0xac, 0xae, 0xb0,
++	0xb3, 0xb5, 0xb8, 0xbb, 0xbe, 0xc1, 0xc5, 0xc8, 0xcb, 0xcf, 0xd3, 0xd7,
++	0xdb, 0xde, 0xe3, 0xe7, 0xeb, 0xef, 0xf3, 0xf7, 0xfc
++};
++
+ struct aw86927_sram_waveform_header {
+ 	u8 version;
+ 	__be16 start_address;
+ 	__be16 end_address;
+ } __packed;
+ 
+-static const struct aw86927_sram_waveform_header sram_waveform_header = {
+-	.version = 0x01,
+-	.start_address = cpu_to_be16(AW86927_RAM_BASE_ADDR +
+-			sizeof(struct aw86927_sram_waveform_header)),
+-	.end_address = cpu_to_be16(AW86927_RAM_BASE_ADDR +
+-			sizeof(struct aw86927_sram_waveform_header) +
+-			ARRAY_SIZE(aw86927_waveform) - 1),
+-};
+-
+ static int aw86927_wait_enter_standby(struct aw86927_data *haptics)
+ {
+ 	unsigned int reg_val;
+@@ -579,15 +592,21 @@
+ 		return err;
+ 
+ 	switch (haptics->model) {
+-	case AW86927:
++	case AW86927: {
++		u32 mv = haptics->boost_mv ? clamp_t(u32, haptics->boost_mv, 6000, 8500) : 8500;
++		u8 vref = (mv * 10 - 35000) / 625;
++
+ 		err = regmap_update_bits(haptics->regmap,
+ 					 AW86927_PLAYCFG1_REG,
+ 					 AW86927_PLAYCFG1_BST_VOUT_VREFSET_MASK,
+ 					 FIELD_PREP(AW86927_PLAYCFG1_BST_VOUT_VREFSET_MASK,
+-						    AW86927_PLAYCFG1_BST_8500MV));
++						    vref));
+ 		if (err)
+ 			return err;
++		dev_info(haptics->dev, "Configured AW86927 boost target %u mV (vref=0x%02x)\n",
++			 mv, vref);
+ 		break;
++	}
+ 	case AW86938:
+ 		err = regmap_update_bits(haptics->regmap,
+ 					 AW86938_PLAYCFG1_REG,
+@@ -613,6 +632,9 @@
+ static int aw86927_ram_init(struct aw86927_data *haptics)
+ {
+ 	int err;
++	const u8 *wave = aw86927_waveform;
++	size_t wave_len = ARRAY_SIZE(aw86927_waveform);
++	struct aw86927_sram_waveform_header hdr;
+ 
+ 	err = aw86927_wait_enter_standby(haptics);
+ 	if (err)
+@@ -650,15 +672,27 @@
+ 	if (err)
+ 		return err;
+ 
++	if (haptics->f0_hz >= 150 && haptics->f0_hz <= 190) {
++		wave = aw86927_waveform_170hz;
++		wave_len = ARRAY_SIZE(aw86927_waveform_170hz);
++		dev_info(haptics->dev, "Loaded 170 Hz LRA SRAM waveform (%zu samples)\n",
++			 wave_len);
++	}
++
++	hdr.version = 0x01;
++	hdr.start_address = cpu_to_be16(AW86927_RAM_BASE_ADDR + sizeof(hdr));
++	hdr.end_address = cpu_to_be16(AW86927_RAM_BASE_ADDR + sizeof(hdr) +
++				      wave_len - 1);
++
+ 	/* Write waveform header to SRAM */
+ 	err = regmap_noinc_write(haptics->regmap, AW86927_RAMDATA_REG,
+-				 &sram_waveform_header, sizeof(sram_waveform_header));
++				 &hdr, sizeof(hdr));
+ 	if (err)
+ 		return err;
+ 
+ 	/* Write waveform to SRAM */
+ 	err = regmap_noinc_write(haptics->regmap, AW86927_RAMDATA_REG,
+-				 aw86927_waveform, ARRAY_SIZE(aw86927_waveform));
++				 wave, wave_len);
+ 	if (err)
+ 		return err;
+ 
+@@ -749,14 +783,23 @@
+ 	switch (chip_id) {
+ 	case AW86927_CHIPID:
+ 		haptics->model = AW86927;
++		dev_info(haptics->dev, "Detected AW86927 (chip_id=0x%04x)\n", chip_id);
+ 		break;
+ 	case AW86938_CHIPID:
+ 		haptics->model = AW86938;
++		dev_info(haptics->dev, "Detected AW86938 (chip_id=0x%04x)\n", chip_id);
+ 		break;
+-	default:
+-		dev_err(haptics->dev, "Unexpected CHIPID value 0x%x\n", chip_id);
++	default: {
++		unsigned int r00 = 0, r64 = 0;
++
++		regmap_read(haptics->regmap, 0x00, &r00);
++		regmap_read(haptics->regmap, 0x64, &r64);
++		dev_err(haptics->dev,
++			"Unexpected CHIPID value 0x%04x (reg00=0x%02x reg64=0x%02x)\n",
++			chip_id, r00, r64);
+ 		return -ENODEV;
+ 	}
++	}
+ 
+ 	return 0;
+ }
+@@ -828,7 +871,22 @@
+ 
+ 	INIT_WORK(&haptics->play_work, aw86927_haptics_play_work);
+ 
+-	haptics->input_dev->name = "aw86927-haptics";
++	{
++		const char *label = NULL;
++		u32 boost_uv = 0;
++
++		if (!device_property_read_u32(haptics->dev, "awinic,boost-max-microvolt", &boost_uv))
++			haptics->boost_mv = boost_uv / 1000;
++		device_property_read_u32(haptics->dev, "awinic,f0-hz", &haptics->f0_hz);
++		if (!device_property_read_string(haptics->dev, "label", &label) && label && *label)
++			haptics->input_dev->name = devm_kstrdup(haptics->dev, label, GFP_KERNEL);
++		else
++			haptics->input_dev->name = "aw86927-haptics";
++		if (!haptics->input_dev->name)
++			return -ENOMEM;
++		haptics->input_dev->phys = devm_kasprintf(haptics->dev, GFP_KERNEL, "%s/input0",
++							  dev_name(haptics->dev));
++	}
+ 	haptics->input_dev->close = aw86927_close;
+ 
+ 	input_set_drvdata(haptics->input_dev, haptics);

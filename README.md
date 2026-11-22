@@ -8,6 +8,16 @@
 
 ## 已确认的基线
 
+**2026-11-22，国行 TB320FC_PRC 已完成全部 9 大硬件子系统的统一内核（`hw-bringup-02` / `7.3.4-asphalt-prc`）实机自动化验证，并封装生成独立可校验的 `dev13.0` 完整开发镜像归档（`y700-tb320fc-prc-debian-dev13.0.tar`，1,248 个软件包，含 `dev12.15` 备用内核回退入口）。** 完整实机测量数据、校验值、ARM64 QEMU 验证回执与仍待机主亲手确认的主观验收项见 [完整 9 子系统实机验证报告](docs/HARDWARE-VERIFICATION.md)、[dev13.0 镜像说明](docs/DEV13.0-IMAGE.md)、[内置双麦克风突破](docs/MICROPHONE.md)、[双 170 Hz 线性马达](docs/HAPTICS.md) 与 [相机对焦与闪光灯](docs/CAMERA-FOCUS-FLASH.md)。
+
+- **显示 / GPU / 触控**：内屏 `1600×2560` 实机 `120 Hz ↔ 60 Hz ↔ 120 Hz` 切换、KTZ8866 背光步进回读、Adreno 730 Freedreno 4.6 加速（GMU HFI 零错误）、NT36523N 十点触控在刷新率切换后正常重连。
+- **Wi-Fi / 蓝牙**：WCN6855 `ath11k` 正常连通网关且已定位 2.4 GHz / 5 GHz 跨频 ARP 策略；`hci0` 蓝牙实机射频扫描发现 13–18 个附近真实设备。
+- **双扬声器与内置双麦克风（重大突破）**：在实机上通过 eFuse 确认芯片为 **`WCD9385`**（`0x34b0 = 0x0a`），根治了 ASoC `"sleep"` pinctrl 导致的硬复位、TX SoundWire `ADC_LP` 时钟分频时序，以及 PipeWire/WirePlumber 冷启动探测 UCM2 `HiFi` 时丢弃配置的问题。无需任何调试写入，生产 ALSA UCM2 与普通权限 PipeWire（`pw-record`）均完成扬声器+双麦克风全双工实测（左/右声道 `+60.5 ~ +68.2 dB` 信噪比，静置 5 秒后持续保持 `Attached` 且 `vreg_bob` 维持 `3.032 V` 未改动）。
+- **双线性震动马达**：左右双路 `AW86927`（`y700-haptic-left` / `y700-haptic-right`）均加载匹配 Y700 X 轴线性马达谐振频率的 170.2 Hz 波形（141 采样点，8000 mV 升压），通过内置双麦克风测得左/右独立 `+62.5/+65.9 dB` 与 `+68.5/+66.4 dB` 峰值且零故障中断。
+- **三摄模组 + 自动对焦 + 后置闪光灯**：`libcamera v0.7.2` 枚举并连续采集 `sc202cs`、`hi1339`、`s5k4h7` 三路 30 fps 帧流；`gt9768` 通过出厂标定 `360–605` 六点步进回读；PM8350C `white:flash` 以保守电流上限（300 mA 手电 / 1000 mA 闪光）点亮且 `flash_fault` 零故障。
+- **全套七通道传感器与电源/RTC**：SLPI SSC 七路原生通道（加速度计、陀螺仪、磁力计、环境光、距离、罗盘融合、BU52053NVX 霍尔）与 `iio-sensor-proxy` 全部交付实机读数；电池/双 USB-C UCSI 与 `/dev/rtc1` 硬件唤醒 RTC 均已验证。
+- **安全回退与镜像验收**：实机试验在严格只读 UFS 的 RAM 叠加层完成，已无损回到日用 `dev12.11`（两层 ext4 错误计数均为 0）；封装后的 `dev13.0` 归档已通过 `unpack.sh --verify`、全量解包校验及 ARM64 QEMU 启动与全部 10 组驱动 `modprobe`（`TAINT=0`）。因完整板级镜像含原厂运行时固件，1.4 GiB 镜像归档仅保留本地，GitHub 公开全部开源代码、补丁、设备树、构建/每机校准提取脚本与脱敏校验清单。
+
 国行 dev12.15 现有 **4.22 MiB 增量安装包**，直接配合已有 dev12.13 完整包使用。新装桌面在「设置 → 软件更新」中刷新 Debian 软件源并选择更新，内核可加载数字 USB 耳麦驱动。平板从 RAM 校验了新版全部 1,248 个软件包，并在日用内核上运行了 200% Xfce。内置日用系统也已单独装好这两项功能。[dev12.15 安装](docs/DEV12.15-IMAGE.md) · [验收记录](docs/DEV12.15-VERIFICATION.md) · [软件更新](docs/SOFTWARE-UPDATES.md) · [USB 音频](docs/USB-AUDIO.md)
 
 国行 dev12.14 全新安装复用 dev12.13 基包，另加 490 KiB 的增量包。新版预装浏览器相机方向修复。从这两个包重建的镜像已在 ARM64 虚拟机完成触屏首次设密、登录 Xfce 和启动 Chromium。平板日用系统已单独装好同版相机组件。[全新安装说明](docs/DEV12.14-IMAGE.md) · [验收记录](docs/DEV12.14-VERIFICATION.md) · [日用系统更新](docs/BROWSER-CAMERA-UPDATE.md)

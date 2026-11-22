@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Dual Awinic LRA haptics wiring for Lenovo Legion Y700 Gen 2 (TB320FC_PRC).
+ * Matches stock CN350 runtime DT:
+ *   - Left  (haptic_hv_l@5A): i2c@a8c000 (&i2c11), IRQ TLMM 38, RSTN TLMM 39
+ *   - Right (haptic_hv_r@5A): i2c@a98000 (&i2c14), IRQ TLMM 171, RSTN TLMM 142
+ *   - Stock f0_pre = 0x6a4 (170.0 Hz X-axis LRA)
+ *   - Conservative boost target 8000 mV (below stock 8500 mV default)
+ */
+
+&qup_i2c11_data_clk {
+	drive-strength = <2>;
+	bias-pull-up;
+};
+
+&tlmm {
+	haptic_l_irq_active: haptic-l-irq-active-state {
+		pins = "gpio38";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+		input-enable;
+	};
+
+	haptic_r_irq_active: haptic-r-irq-active-state {
+		pins = "gpio171";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+		input-enable;
+	};
+};
+
+&i2c11 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	haptic_l: vibrator@5a {
+		compatible = "awinic,aw86927";
+		reg = <0x5a>;
+		label = "y700-haptic-left";
+		interrupts-extended = <&tlmm 38 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 39 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&haptic_l_irq_active>;
+		awinic,boost-max-microvolt = <8000000>;
+		awinic,f0-hz = <170>;
+	};
+};
+
+&i2c14 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	haptic_r: vibrator@5a {
+		compatible = "awinic,aw86927";
+		reg = <0x5a>;
+		label = "y700-haptic-right";
+		interrupts-extended = <&tlmm 171 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 142 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&haptic_r_irq_active>;
+		awinic,boost-max-microvolt = <8000000>;
+		awinic,f0-hz = <170>;
+	};
+};

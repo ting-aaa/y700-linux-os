@@ -1,5 +1,34 @@
 # TB320FC internal microphones
 
+## Physical Bring-Up & Verification Breakthrough (`hw-bringup-02` / `dev13.0`, 2026-11-22)
+
+Internal dual analog microphone capture (`AMIC1` + `AMIC4` via `WCD9385` over SoundWire + AudioReach `TX_CODEC_DMA_TX_3`) is now **physically verified end-to-end on TB320FC_PRC** in full-duplex alongside both CS35L45 speakers, including through unprivileged PipeWire/WirePlumber (`pw-record`).
+
+### Root Causes Resolved on Physical Hardware
+
+1. **Silicon Variant Confirmed (`WCD9385`)**: Live eFuse read of `WCD938X_DIGITAL_EFUSE_REG_0` (`0x34b0 = 0x0a`) via `asphalt-wcd938x-checked-id.patch` definitively identified **`WCD9385`** silicon (`Detected WCD9385 from the codec eFuse`). Shared `vreg_bob` remained untouched at `3.032 V` throughout enumeration and active stereo recording.
+2. **ASoC `"sleep"` Pinctrl Hard-Reset Bug (Fixed in [config/kernel/asphalt-mic.dtsi](../config/kernel/asphalt-mic.dtsi))**: Early trials attached `pinctrl-names = "default", "sleep";` (driving `GPIO43` low in `"sleep"`) onto `audio-codec`. Linux ASoC automatically invokes `pinctrl_pm_select_sleep_state()` at the end of card probe (`sound/soc/soc-core.c`) and on every PCM close (`sound/soc/soc-pcm.c`), silently resetting `WCD9385` back to power-on defaults behind regmap's cache (`SLEEP_CTL=0x16`, `ANA_BIAS=0x00`, `LDORXTX=0x10`) and causing silent capture. Removing the `"sleep"` state (matching upstream `sm8450-hdk.dts`) keeps `sdw:3:0:0217:010d:00:3` continuously `Attached` before, during, and after idle.
+3. **TX SoundWire Clock Rate Ordering Bug (Fixed in [config/kernel/asphalt-wcd938x-tx-clk-rate.patch](../config/kernel/asphalt-wcd938x-tx-clk-rate.patch))**: In `sound/soc/codecs/wcd938x.c`, `ADC1_MIXER` (`dapm_up_seq=9`) evaluated `status_mask` before `ADC1` (`dapm_up_seq=11`) set `WCD_ADC1`, leaving `WCD938X_DIGITAL_SWR_TX_CLK_RATE` (`0x3405`) at `0x00` (`9.6 MHz`) instead of `0x11` (`4.8 MHz`) in `ADC_LP`. Updating the clock rate inside `wcd938x_codec_enable_adc()` after setting `status_mask` confirmed live hardware register `0x3405 = 0x11` during capture.
+4. **PipeWire/WirePlumber Cold-Boot UCM2 Probe Bug (Fixed in [packaging/microphone/HiFi-Mic.conf](../packaging/microphone/HiFi-Mic.conf) and [Mic.conf](../packaging/microphone/Mic.conf))**: PipeWire's `spa-acp` executes only `SectionVerb.EnableSequence` before probing `CapturePCM "hw:0,2"`. Having `MultiMedia3 Mixer TX_CODEC_DMA_TX_3 1` solely inside `SectionDevice."Mic"` caused cold-boot DPCM open failure (`no backend DAIs enabled`), dropping the entire `HiFi` profile to `Dummy Output`. Moving the `MultiMedia3` backend mixer toggle into `SectionVerb` (matching `HiFi.conf`'s speaker routing) restored automatic cold-boot discovery of both `Built-in speakers with CS35L45 protection DSP` and `Internal microphones` in WirePlumber (`prio=8200`).
+
+### Physical Acoustic Measurements (`hw-bringup-02`, Zero Debugfs Hacks)
+
+Using only production `alsaucm -c hw:0 set _verb HiFi set _enadev Speaker set _enadev Mic` and standard `arecord -D hw:0,2 -f S16_LE -r 48000 -c 2` (and independently via unprivileged PipeWire `pw-record` on `alsa_input.platform-sound.HiFi__Mic__source`):
+
+| Test Condition | `ch0` (`AMIC1`) Goertzel | `ch1` (`AMIC4`) Goertzel | SNR vs Quiet Baseline (`ch0` / `ch1`) | SoundWire TX Status |
+| --- | ---: | ---: | ---: | --- |
+| Quiet Baseline (`hw:0,2`) | `1k=0.0`, `1.5k=0.0` (RMS `7.8`) | `1k=0.0`, `1.5k=0.0` (RMS `7.7`) | — | `Attached` (`0x3405=0x11`, `0x3103=0xde`, `0x3001=0x80`) |
+| Left Speaker 1000 Hz Full-Duplex | `1k=110.5`, `1.5k=0.0` | `1k=128.7`, `1.5k=0.1` | `+60.9 dB` / `+62.2 dB` | `Attached` |
+| Right Speaker 1500 Hz Full-Duplex | `1k=0.0`, `1.5k=106.0` | `1k=0.0`, `1.5k=80.1` | `+60.5 dB` / `+58.1 dB` | `Attached` |
+| Repeat 1000 Hz After 5 s Idle | `1k=240.3` | `1k=226.1` | `+67.6 dB` / `+67.1 dB` | `Attached` (persisted across idle!) |
+| PipeWire `pw-record` 1000 Hz (unprivileged) | `1k=258.8` | `1k=241.4` | `+68.2 dB` / `+67.6 dB` | `Attached` |
+
+Left/right acoustic asymmetry matched physical geometry on both speaker playback (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`) and dual 170 Hz haptic motors (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`). Remaining owner acceptance: human speech clarity check and long-term suspend/resume capture persistence.
+
+---
+
+## Historical Pre-Bring-Up Analysis & Offline Verification
+
 A digital USB-C headset provides a separate capture path with its own converter. The optional four-module Debian package and ARM64 desktop checks are documented in [Digital USB audio](USB-AUDIO.md).
 
 The dev12.9 ARM64 desktop can select a two-channel microphone when the candidate ALSA profile sees the matching capture PCM and mixer controls. On the PC, an ordinary application recorded independent synthetic channels while the speaker monitor carried a third tone. Two kernel fixes also passed an original-versus-patched ARM64 test. Physical capture on the tablet is still open. [Stereo driver verification](#stereo-driver-and-audioreach-verification) · [Application and duplex verification](../tests/microphone/virtual/README.md)

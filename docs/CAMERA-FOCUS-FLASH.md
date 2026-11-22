@@ -90,7 +90,16 @@ The command prints metadata from the stock descriptor. Host code can call `Modul
 
 The original native trial returned `ENXIO` before receiving any EEPROM bytes. On 2026-11-21 a separate counted kernel enabled WL2864C LDO5 during main-sensor runtime power. The fixed read at `0x58` then returned all 11 bytes. The factory CRC and unsigned, ordered 10-bit endpoints validated on the tablet. The measurement retained the pass/fail result and did not export per-unit values. [Physical measurements and power sequencing](CAMERA-FOCUS-PROBE.md)
 
-## Next flash change
+## Physical Bring-Up Update (`hw-bringup-02` / `dev13.0`, 2026-11-22)
+
+The unified `hw-bringup-02` kernel and `dev13.0` image enable all three camera sensors, the calibrated rear `GT9768` AF VCM actuator, and the conservative `PM8350C` rear LED flash/torch node (`config/kernel/asphalt-flash-led.dtsi`):
+
+- **All 3 Camera Sensors (`libcamera v0.7.2` SoftISP)**: All three V4L2 subdevices (`sc202cs 2-0036` 2 MP macro, `hi1339 0-0020` 13 MP rear main, `s5k4h7 1-0010` 8 MP front) enumerated in `cam -l` and streamed 25 continuous frames each at ~30 fps (`7,641,600 B`, `52,416,000 B`, and `31,882,752 B` per frame respectively).
+- **Rear AF Actuator (`gt9768 0-000c`, `/dev/v4l-subdev30`)**: Probed with calibrated TXD EEPROM range `focus_absolute: min=360 max=605 step=1 default=360` and completed a full six-step sweep (`360 → 420 → 480 → 540 → 605 → 480`) with exact readback and zero I²C errors.
+- **Rear Flash LED (`/sys/class/leds/white:flash`, `c400000.spmi:pmic@2:led-controller@ee00`)**: Enabled with `led-sources = <2>, <3>` (1-based matching stock `qcom,id` 1 & 2) and conservative board limits (`led-max-microamp = 300000` = 300 mA total torch, `flash-max-microamp = 1000000` = 1000 mA total flash, `flash-max-timeout-us = 1280000`). Setting torch brightness `64` and `128` succeeded with empty `flash_fault` (zero open-circuit, short-circuit, or over-current faults), and even with the tablet lying face-down on a desk, `hi1339` captured a measurable green-channel mean rise (`0.00 → 0.37`, max `0 → 18`) while torch was active.
+- **Remaining Owner Acceptance**: Handheld optical sharpness / autofocus convergence on a lit subject and direct visual confirmation of rear flash LED illumination off the desk.
+
+## Next flash change (historical design checklist)
 
 1. Obtain the CN350 flash driver or board electrical limits and the matching HAL flash policy. Use those inputs to establish one ganged LED's allowed total torch and flash currents, timeout, and behavior at the board's thermal and battery limits. The DTB supplies the channel crosswalk and timeout, but does not establish those operating currents. Until resolved, leave the node disabled. No standalone DTS candidate was created.
 2. Once those limits have been established, add a single board LED child and link HI1339 with `flash-leds`. Run `dtbs_check` against the PMIC and sensor bindings, including a binding for the board sensor if required. Confirm a flash media entity and enumerate its controls before firing it in an attended trial. Validate torch, strobe and fault handling within the verified limits, then check whether libcamera and qcam expose a control. Establish shared flash ownership before advertising the flash on the macro camera.

@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Internal dual analog microphone (AMIC1 + AMIC4) wiring for
+ * Lenovo Legion Y700 Gen 2 (TB320FC_PRC) with WCD9385 over SoundWire.
+ *
+ * Physical silicon ID was read directly from WCD938X_DIGITAL_EFUSE_REG_0
+ * (0x34b0 = 0x0a -> WCD9385).
+ *
+ * Important: do NOT attach a "sleep" pinctrl state that drives GPIO43 low
+ * onto audio-codec; ASoC automatically calls pinctrl_pm_select_sleep_state()
+ * on card probe completion and PCM close, which would hold WCD9385 in
+ * hardware reset behind regmap's cache. Follow upstream sm8450-hdk.dts.
+ */
+
+/ {
+	wcd938x: audio-codec {
+		compatible = "qcom,wcd9385-codec";
+		#sound-dai-cells = <1>;
+		reset-gpios = <&tlmm 43 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wcd_reset_default>;
+		vdd-io-supply = <&pm8350_s10>;
+		vdd-rxtx-supply = <&pm8350_s10>;
+		vdd-buck-supply = <&pm8350_s10>;
+		vdd-mic-bias-supply = <&vreg_bob>;
+		qcom,micbias1-microvolt = <2700000>;
+		qcom,micbias2-microvolt = <2700000>;
+		qcom,micbias3-microvolt = <2700000>;
+		qcom,micbias4-microvolt = <2700000>;
+		qcom,rx-device = <&wcd_rx>;
+		qcom,tx-device = <&wcd_tx>;
+	};
+};
+
+&tlmm {
+	wcd_reset_default: wcd-reset-default-state {
+		pins = "gpio43";
+		function = "gpio";
+		drive-strength = <16>;
+		bias-disable;
+		output-high;
+	};
+};
+
+&tx_swr_active {
+	clk-pins {
+		drive-strength = <4>;
+	};
+	data-pins {
+		drive-strength = <4>;
+	};
+};
+
+&vamacro {
+	/* TX and RX macros use fsgen from VA macro. Factory VA DMICs remain unrouted. */
+	qcom,dmic-sample-rate = <600000>;
+	status = "okay";
+};
+
+&swr1 {
+	status = "okay";
+
+	wcd_rx: codec@0,4 {
+		compatible = "sdw20217010d00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
+
+&swr2 {
+	status = "okay";
+
+	wcd_tx: codec@0,3 {
+		compatible = "sdw20217010d00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <2 3 2 3>;
+	};
+};
+
+&sound {
+	audio-routing = "Speaker Left", "SPK1 SPK",
+			"Speaker Right", "SPK2 SPK",
+			"AMIC1", "Analog Mic1",
+			"AMIC1", "MIC BIAS1",
+			"AMIC4", "Analog Mic4",
+			"AMIC4", "MIC BIAS3",
+			"TX SWR_INPUT4", "ADC1_OUTPUT",
+			"TX SWR_INPUT8", "ADC3_OUTPUT";
+
+	internal-mic-capture-dai-link {
+		link-name = "Internal Mic Capture";
+
+		cpu {
+			sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+		};
+		codec {
+			sound-dai = <&wcd938x 1>, <&swr2 0>, <&txmacro 0>;
+		};
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+};
