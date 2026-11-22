@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Y700_TOUCH_SYNC_MANAGED_V1
-# Keep the X11 touchscreen mapped to the current DSI display transformation.
+# Y700_TOUCH_SYNC_MANAGED_V2
+# Keep the X11 touchscreen and orientation-aware stereo speakers mapped to
+# the current DSI display transformation.
 set -euo pipefail
 export LC_ALL=C
 touch='NT36523N Capacitive Touchscreen'
 output='DSI-1'
+audio_helper='/usr/libexec/y700-audio-orientation'
 mode=${1:---sync}
 case "$mode" in
     --sync|--watch) test "$#" -le 1 ;;
@@ -29,6 +31,22 @@ read_state() {
     test -n "$line"
 }
 
+current_rotation() {
+    local prefix word rot=normal
+    prefix=${line%% (*}
+    for word in $prefix; do
+        case "$word" in normal|left|right|inverted) rot=$word;; esac
+    done
+    printf '%s\n' "$rot"
+}
+
+sync_audio() {
+    local rot="$1"
+    if [[ -x "$audio_helper" ]]; then
+        "$audio_helper" apply "$rot" >/dev/null 2>&1 || :
+    fi
+}
+
 read_matrix() {
     local properties
     properties=$(xinput list-props "$id") || return 1
@@ -40,13 +58,7 @@ read_matrix() {
 
 if [[ "$mode" == --rotate ]]; then
     read_state || { echo 'Expected one NT36523N touchscreen and an active DSI-1 display.' >&2; exit 1; }
-    # The capability list in parentheses also contains all rotation names.
-    # Inspect only the active-state prefix when remembering the old direction.
-    prefix=${line%% (*}
-    previous=normal
-    for word in $prefix; do
-        case "$word" in normal|left|right|inverted) previous=$word;; esac
-    done
+    previous=$(current_rotation)
     xrandr --output "$output" --rotate "$2"
     if ! xinput map-to-output "$id" "$output"; then
         echo 'Touch mapping failed; restoring the previous display direction.' >&2
@@ -54,13 +66,16 @@ if [[ "$mode" == --rotate ]]; then
         xinput map-to-output "$id" "$output" || :
         exit 1
     fi
-    echo "Display and touch mapped together: $2"
+    sync_audio "$2"
+    echo "Display, touch and audio mapped together: $2"
     exit 0
 fi
 
 if [[ "$mode" == --sync ]]; then
     read_state || { echo 'Expected one NT36523N touchscreen and an active DSI-1 display.' >&2; exit 1; }
-    exec xinput map-to-output "$id" "$output"
+    xinput map-to-output "$id" "$output"
+    sync_audio "$(current_rotation)"
+    exit 0
 fi
 
 # Only one watcher per login user. No root service, calibration change or
@@ -72,11 +87,13 @@ exec 9>"$runtime/y700-touch-sync.lock"
 flock -n 9 || exit 0
 last=''
 mapped=''
+last_rot=''
 while :; do
     if read_state && read_matrix; then
         # XInput maps the panel into the whole root window. Changing an
         # adjacent output can resize the root without moving DSI-1.
         current="$id $screen $line"
+        rot=$(current_rotation)
         if [[ $current != "$last" || $matrix != "$mapped" ]]; then
             last=''
             if xinput map-to-output "$id" "$output" && read_matrix; then
@@ -84,9 +101,13 @@ while :; do
                 mapped=$matrix
             fi
         fi
+        if [[ "$rot" != "$last_rot" ]]; then
+            sync_audio "$rot"
+            last_rot=$rot
+        fi
     else
         # Device/display re-creation during a session is retried safely.
         last=''
     fi
-    sleep 2
+    sleep 1
 done

@@ -61,7 +61,19 @@ All measurements below were captured directly on the physical `TB320FC_PRC` tabl
 
 ---
 
-## 3. Clean Return & ARM64 QEMU Verification Receipts
+## 3. Permanent Daily `dev13.0` Installation & Owner Hands-On Acceptance (2026-11-22)
+
+Following the volatile trial and ARM64 QEMU gates, the sealed `dev13.0` image was deployed permanently onto the reference `TB320FC_PRC` tablet as the default daily OS (`y700-file-13-0.conf`, expanded 32 GiB persistent `root.ext4`, user home/credentials migrated, earlier `dev12.11` preserved untouched on backing storage). During live cold-boot verification and hands-on owner testing, three additional real-world improvements were implemented and verified on the physical tablet:
+
+1. **USB Maintenance Boot-Race Fix** ([src/usb/asphalt-usb-maintenance](../src/usb/asphalt-usb-maintenance), [packaging/root/usr/libexec/y700-usb-maintenance](../packaging/root/usr/libexec/y700-usb-maintenance)): Replaced `udevadm settle --timeout=10` (which could time out while the 15 newly enabled peripheral drivers probed concurrently at cold boot, delaying `ssh.service`) with a short non-fatal `udevadm settle --timeout=2 || true` followed by direct polling of `/sys/class/net/$iface/address`.
+2. **Human Voice Microphone Gain Calibration** ([packaging/microphone/Mic.conf](../packaging/microphone/Mic.conf)): Raised the native `WCD9385` analog PGA (`ADC1/3 Volume` `6 → 18`, `+27 dB`) and `lpass-tx-macro` decimator gain (`TX_DEC2/5 Volume` `84 → 102`, `+18 dB`) in `ADC_NORMAL` mode to compensate for the absence of Android's QDSP6/ACDB post-gain stage. Live unprivileged PipeWire voice capture (`pw-record` → `pw-play`) moved from `-70 dBFS` RMS / `-55 dBFS` peak to **`-19.4 / -19.0 dBFS` RMS** and **`-2.4 / -0.1 dBFS` peak** across both channels (channel balance within `0.4 dB`), and the owner confirmed clear, natural voice playback.
+3. **Orientation-Aware Stereo Speaker Routing** ([packaging/root/usr/libexec/y700-audio-orientation](../packaging/root/usr/libexec/y700-audio-orientation), [src/session/y700-display](../src/session/y700-display)): Verified that swapping `SPK1`/`SPK2` `DSP_RX1 Source` ↔ `DSP_RX2 Source` (`ASP_RX1` ↔ `ASP_RX2`) reverses physical Left/Right channels cleanly inside the `CS35L45` protection DSP with zero audio glitch (acoustic `ch0/ch1` ratio cleanly inverted `0.85 ↔ 1.29`) and persists across `pw-play` and idle cycles. Wired automatic orientation tracking into `y700-display` (`--rotate`, `--sync`, `--watch`) and a WirePlumber-ordered user service (`y700-audio-orientation.service`).
+
+**Owner Hands-On Confirmation**: The owner tested and confirmed normal hands-on operation on permanent daily `dev13.0` across dual 170 Hz haptic motors, rear flash LED, stereo speakers (including orientation-aware L/R switching), dual internal microphones (live human voice record/playback), all 3 cameras + AF, display/touch, and sensors. Long-term multi-day battery/suspend soak testing remains ongoing in daily use.
+
+---
+
+## 4. Clean Return & ARM64 QEMU Verification Receipts
 
 1. **Volatile Trial Clean Return (`hw-bringup-02` → daily `dev12.11`)**:
    - Returned cleanly to untouched daily `dev12.11` (`boot_id=3055fb7e-b04c-4e3b-b96c-3997020ba1d3`, `y700.hw_trial=none`), removed temporary staging directory `/run/initramfs/backing/y700-hw-bringup`, verified `/dev/loop0` (`rw`, `errors_count=0`), `/dev/sda17` (`rw`, `errors_count=0`), and all `1,248` installed packages intact.
@@ -74,7 +86,7 @@ All measurements below were captured directly on the physical `TB320FC_PRC` tabl
 
 ---
 
-## 4. Reproducing Builds & Verification
+## 5. Reproducing Builds & Verification
 
 ```bash
 # 1. Build unified full-hardware kernel + DTB + 15 loadable modules (as root on Linux/WSL)

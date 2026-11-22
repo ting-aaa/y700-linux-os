@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Y700_AUDIO_ORIENTATION_V2
+# Route Lenovo Y700 Gen 2 CS35L45 stereo speakers to match X11 DSI-1 rotation.
+set -euo pipefail
+export LC_ALL=C
+
+CARD="${Y700_AUDIO_CARD:-LenovoY700}"
+OUTPUT="${Y700_DISPLAY_OUTPUT:-DSI-1}"
+
+state_file() {
+    if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "$XDG_RUNTIME_DIR" ]]; then
+        printf '%s/y700-audio-orientation\n' "$XDG_RUNTIME_DIR"
+    else
+        printf '/run/y700-audio-orientation\n'
+    fi
+}
+
+detect_xrandr_rotation() {
+    local disp="${DISPLAY:-:0}"
+    command -v xrandr >/dev/null 2>&1 || return 1
+    local line prefix word rot="normal"
+    line=$(DISPLAY="$disp" xrandr --current 2>/dev/null | awk -v name="$OUTPUT" '$1 == name && $2 == "connected" && $0 ~ /[0-9]+x[0-9]+[+][0-9]+[+][0-9]+/ {print; exit}')
+    [[ -n "$line" ]] || return 1
+    prefix=${line%% (*}
+    for word in $prefix; do
+        case "$word" in normal|left|right|inverted) rot="$word";; esac
+    done
+    printf '%s\n' "$rot"
+}
+
+route_for() {
+    local rot="$1" rx1 rx2
+    case "$rot" in
+        left|normal)
+            rx1="ASP_RX1"; rx2="ASP_RX2"
+            ;;
+        right|inverted)
+            rx1="ASP_RX2"; rx2="ASP_RX1"
+            ;;
+        *)
+            echo "y700-audio-orientation: invalid rotation '$rot'" >&2
+            return 2
+            ;;
+    esac
+    if ! amixer -c "$CARD" cget "name='SPK1 DSP_RX1 Source'" >/dev/null 2>&1; then
+        return 0
+    fi
+    amixer -q -c "$CARD" cset "name='SPK1 DSP_RX1 Source'" "$rx1"
+    amixer -q -c "$CARD" cset "name='SPK1 DSP_RX2 Source'" "$rx2"
+    amixer -q -c "$CARD" cset "name='SPK2 DSP_RX1 Source'" "$rx1"
+    amixer -q -c "$CARD" cset "name='SPK2 DSP_RX2 Source'" "$rx2"
+}
+
+record_rot() {
+    local f
+    f=$(state_file)
+    printf '%s\n' "$1" > "${f}.tmp"
+    mv "${f}.tmp" "$f"
+}
+
+read_recorded() {
+    local f v
+    f=$(state_file)
+    v=$(cat "$f" 2>/dev/null || true)
+    case "$v" in
+        normal|left|right|inverted) printf '%s\n' "$v" ;;
+        *) printf 'left\n' ;;
+    esac
+}
+
+cmd="${1:-status}"
+case "$cmd" in
+    apply)
+        [[ $# -eq 2 ]] || { echo "Usage: $0 apply <normal|left|right|inverted>" >&2; exit 2; }
+        f=$(state_file)
+        exec 9>"${f}.lock"
+        flock 9
+        route_for "$2"
+        record_rot "$2"
+        ;;
+    sync)
+        rot=$(detect_xrandr_rotation || read_recorded)
+        f=$(state_file)
+        exec 9>"${f}.lock"
+        flock 9
+        route_for "$rot"
+        record_rot "$rot"
+        ;;
+    restore)
+        settle="${2:-5}"
+        for ((i = 0; i <= settle; i++)); do
+            f=$(state_file)
+            exec 9>"${f}.lock"
+            flock 9
+            rot=$(detect_xrandr_rotation 2>/dev/null || read_recorded)
+            route_for "$rot"
+            record_rot "$rot"
+            exec 9>&-
+            if (( i < settle )); then sleep 1; fi
+        done
+        ;;
+    status)
+        echo "recorded=$(read_recorded)"
+        echo "xrandr=$(detect_xrandr_rotation 2>/dev/null || echo unavailable)"
+        for c in "SPK1 DSP_RX1 Source" "SPK1 DSP_RX2 Source" "SPK2 DSP_RX1 Source" "SPK2 DSP_RX2 Source"; do
+            val=$(amixer -c "$CARD" cget "name='$c'" 2>/dev/null | sed -n 's/^ *: values=//p' || true)
+            echo "$c = $val"
+        done
+        ;;
+    *)
+        echo "Usage: $0 <apply <rot>|sync|restore [secs]|status>" >&2
+        exit 2
+        ;;
+esac

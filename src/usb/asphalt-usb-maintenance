@@ -37,8 +37,15 @@ if [[ -z $(cat "$g/UDC") ]]; then
     [[ -L "$g/configs/c.1/ncm" ]] || ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm"
     echo "$udc" > "$g/UDC"
 fi
-udevadm settle --timeout=10
-iface=$(tr -d '\000\n' < "$g/functions/ncm.usb0/ifname")
+udevadm settle --timeout=2 || true
+iface=""
+for ((i=0; i<30; i++)); do
+    iface=$(tr -d '\000\n' < "$g/functions/ncm.usb0/ifname" 2>/dev/null || true)
+    if [[ "$iface" =~ ^[a-zA-Z0-9_.:-]+$ ]] && [[ -r "/sys/class/net/$iface/address" ]]; then
+        break
+    fi
+    sleep 0.5
+done
 [[ "$iface" =~ ^[a-zA-Z0-9_.:-]+$ ]]
 test "$(cat "/sys/class/net/$iface/address")" = 02:b8:6b:c1:2c:3c
 ip address replace 172.16.43.1/24 dev "$iface"

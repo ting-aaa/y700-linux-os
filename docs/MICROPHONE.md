@@ -23,7 +23,11 @@ Using only production `alsaucm -c hw:0 set _verb HiFi set _enadev Speaker set _e
 | Repeat 1000 Hz After 5 s Idle | `1k=240.3` | `1k=226.1` | `+67.6 dB` / `+67.1 dB` | `Attached` (persisted across idle!) |
 | PipeWire `pw-record` 1000 Hz (unprivileged) | `1k=258.8` | `1k=241.4` | `+68.2 dB` / `+67.6 dB` | `Attached` |
 
-Left/right acoustic asymmetry matched physical geometry on both speaker playback (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`) and dual 170 Hz haptic motors (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`). Remaining owner acceptance: human speech clarity check and long-term suspend/resume capture persistence.
+Left/right acoustic asymmetry matched physical geometry on both speaker playback (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`) and dual 170 Hz haptic motors (`Left -> ch1 > ch0`, `Right -> ch0 > ch1`).
+
+### Owner Human Voice Calibration & Acceptance (`dev13.0`, 2026-11-22)
+
+Initial factory-default gains (`ADC1/3 Volume = 6` / `+9 dB`, `TX_DEC2/5 Volume = 84` / `0 dB`, `ADC_LP`) captured normal human speech at `-70 dBFS` RMS / `-55 dBFS` peak because Android relies on QDSP6/ACDB post-gain (even stock CN350 `mic1_test`/`mic2_test` adds `+30 dB` via `TX_DEC = 114`). Updating [packaging/microphone/Mic.conf](../packaging/microphone/Mic.conf) to `TX0/2 MODE = ADC_NORMAL`, `ADC1/3 Volume = 18` (`+27 dB`), and `TX_DEC2/5 Volume = 102` (`+18 dB`) delivered clean unprivileged PipeWire voice recording (`ch0: -19.4 dBFS RMS / -2.4 dBFS peak`, `ch1: -19.0 dBFS RMS / -0.1 dBFS peak`, `0.4 dB` L/R match) with fast `<0.25 s` startup settling, and the owner confirmed clear live voice playback through the built-in speakers. Remaining long-term check: repeated deep-suspend capture soak testing in daily use.
 
 ---
 
